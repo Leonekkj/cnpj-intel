@@ -8,6 +8,7 @@ import aiohttp
 import re
 import json
 import logging
+import os
 import time
 from datetime import datetime
 from typing import Optional
@@ -219,19 +220,26 @@ async def rodar_agente():
 
 def carregar_cnpjs_seed() -> list:
     """
-    Carrega lista inicial de CNPJs para o agente processar.
-    Em produção: substitua por consulta à base de dados aberta da Receita Federal
-    (download gratuito em: https://dadosabertos.rfb.gov.br/CNPJ/)
+    Carrega lista de CNPJs para o agente processar.
+    Procura o arquivo em vários locais possíveis.
     """
-    try:
-        with open("cnpjs_seed.txt", "r") as f:
-            return [linha.strip() for linha in f if linha.strip()]
-    except FileNotFoundError:
-        # CNPJs de exemplo para testar
-        return [
-            "11222333000181", "22333444000192", "33444555000103",
-            "44555666000114", "55666777000125", "66777888000136",
-        ]
+    locais = [
+        "cnpjs_seed.txt",          # raiz do projeto (Railway)
+        "../cnpjs_seed.txt",       # um nível acima
+        "/app/cnpjs_seed.txt",     # Railway volume mount
+    ]
+    for caminho in locais:
+        if os.path.exists(caminho):
+            with open(caminho, "r") as f:
+                cnpjs = [linha.strip() for linha in f if linha.strip()]
+            log.info(f"Carregados {len(cnpjs):,} CNPJs de '{caminho}'")
+            return cnpjs
+
+    log.warning("cnpjs_seed.txt não encontrado — usando CNPJs de exemplo")
+    return [
+        "11222333000181", "22333444000192", "33444555000103",
+        "44555666000114", "55666777000125", "66777888000136",
+    ]
 
 
 if __name__ == "__main__":
