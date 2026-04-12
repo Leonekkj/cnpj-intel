@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CNPJ Intel — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0f14;--surface:#161a23;--card:#1e2330;--border:#2a3045;--accent:#1D9E75;--accent2:#5DCAA5;--text:#e8eaf0;--muted:#7a8399;--info:#378ADD;--warn:#EF9F27;--danger:#E24B4A;--purple:#7F77DD}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.mono{font-family:'DM Mono',monospace}
+.layout{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:1.5rem 1rem;display:flex;flex-direction:column;gap:1.5rem;position:sticky;top:0;height:100vh;overflow-y:auto}
+.main{padding:2rem;overflow-x:hidden}
+.logo{font-size:20px;font-weight:700;letter-spacing:-0.3px}
+.logo span{color:var(--accent)}
+.nav-section{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;margin-top:4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:13px;color:var(--muted);cursor:pointer;transition:all 0.15s;text-decoration:none}
+.nav-item:hover,.nav-item.active{background:rgba(29,158,117,0.1);color:var(--accent2)}
+.nav-item svg{width:15px;height:15px;flex-shrink:0}
+.agent-box{margin-top:auto;background:rgba(29,158,117,0.07);border:1px solid rgba(29,158,117,0.15);border-radius:10px;padding:12px}
+.agent-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:blink 1.5s infinite;display:inline-block;margin-right:6px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+.agent-label{font-size:12px;color:var(--accent2);font-weight:500}
+.agent-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem}
+.metric{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.1rem}
+.metric-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px}
+.metric-val{font-size:26px;font-weight:700;font-family:'DM Mono',monospace}
+.metric-val.green{color:var(--accent2)}.metric-val.blue{color:var(--info)}.metric-val.amber{color:var(--warn)}.metric-val.pink{color:#e88ab0}
+.metric-sub{font-size:11px;color:var(--muted);margin-top:3px}
+/* Busca Avançada */
+.search-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.25rem;margin-bottom:1.5rem}
+.search-panel-title{font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:1rem;display:flex;align-items:center;gap:8px}
+.search-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}
+.search-grid-wide{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px}
+.field-group{display:flex;flex-direction:column;gap:4px}
+.field-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px}
+input[type=text],input[type=date],select{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:'Syne',sans-serif;width:100%;transition:border-color 0.2s}
+input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-color:var(--accent)}
+input::placeholder{color:var(--muted)}
+.toggles{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.toggle-btn{font-size:12px;padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:5px}
+.toggle-btn.on{border-color:var(--accent);color:var(--accent2);background:rgba(29,158,117,0.08)}
+.toggle-btn.on-blue{border-color:var(--info);color:#7bbef0;background:rgba(55,138,221,0.08)}
+.toggle-btn.on-purple{border-color:var(--purple);color:#aaa5e8;background:rgba(127,119,221,0.08)}
+.toggle-btn.on-amber{border-color:var(--warn);color:#f0b96e;background:rgba(239,159,39,0.08)}
+.search-actions{display:flex;gap:8px;align-items:center}
+.btn-search{background:var(--accent);color:#000;padding:9px 24px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif;transition:all 0.2s}
+.btn-search:hover{background:var(--accent2)}
+.btn-clear{background:transparent;color:var(--muted);padding:9px 16px;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;font-family:'Syne',sans-serif;transition:all 0.2s}
+.btn-clear:hover{color:var(--text);border-color:var(--muted)}
+.result-count{font-size:12px;color:var(--muted);margin-left:auto}
+/* Nichos rápidos */
+.nicho-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem}
+.nicho-chip{font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;transition:all 0.15s}
+.nicho-chip:hover{border-color:var(--accent);color:var(--accent2)}
+.nicho-chip.active{background:rgba(29,158,117,0.1);border-color:var(--accent);color:var(--accent2)}
+/* Tabela */
+.table-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.table-header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.table-title{font-size:14px;font-weight:500}
+.table-count{font-size:12px;color:var(--muted)}
+.btn-export{padding:7px 16px;background:var(--accent);color:#000;border:none;border-radius:7px;font-size:12px;font-family:'Syne',sans-serif;font-weight:500;cursor:pointer}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;font-weight:500}
+td{padding:10px 14px;border-bottom:1px solid rgba(42,48,69,0.5);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.co-name{font-weight:500;font-size:13px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.co-cnae{font-size:11px;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;font-family:'DM Mono',monospace}
+.b-mei{background:rgba(55,138,221,0.12);color:#7bbef0;border:1px solid rgba(55,138,221,0.15)}
+.b-me{background:rgba(212,83,126,0.12);color:#e88ab0;border:1px solid rgba(212,83,126,0.15)}
+.b-epp{background:rgba(127,119,221,0.12);color:#aaa5e8;border:1px solid rgba(127,119,221,0.15)}
+.b-ep{background:rgba(239,159,39,0.12);color:#f0b96e;border:1px solid rgba(239,159,39,0.15)}
+.b-de{background:rgba(90,100,120,0.2);color:var(--muted);border:1px solid var(--border)}
+.tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;margin-right:3px;cursor:pointer}
+.tag-email{background:rgba(55,138,221,0.1);color:#7bbef0;border:1px solid rgba(55,138,221,0.12)}
+.tag-insta{background:rgba(212,83,126,0.1);color:#e88ab0;border:1px solid rgba(212,83,126,0.12)}
+.tag-site{background:rgba(29,158,117,0.1);color:var(--accent2);border:1px solid rgba(29,158,117,0.12)}
+.btn-ver{font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s}
+.btn-ver:hover{border-color:var(--accent);color:var(--accent2)}
+.abertura-tag{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace}
+/* Pagination */
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
+.page-btns{display:flex;gap:4px}
+.page-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px}
+.page-btn.active{background:var(--accent);color:#000;border-color:var(--accent)}
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:100;align-items:center;justify-content:center;padding:2rem}
+.modal-bg.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:2rem;max-width:580px;width:100%;max-height:90vh;overflow-y:auto}
+.modal-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.5rem}
+.modal-title{font-size:17px;font-weight:700}
+.modal-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.modal-close{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.modal-field .lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:4px}
+.modal-field .val{font-size:14px;font-weight:500;word-break:break-all}
+.modal-actions{display:flex;gap:8px;margin-top:1.5rem;flex-wrap:wrap}
+.modal-btn{flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:12px;font-family:'Syne',sans-serif;cursor:pointer;min-width:100px}
+.modal-btn:hover{border-color:var(--accent);color:var(--accent2)}
+/* Seção busca avançada oculta */
+.adv-section{display:none}
+.adv-section.open{display:block}
+/* Tabs */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:1.5rem}
+.tab{padding:10px 20px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.2s}
+.tab.active{color:var(--accent2);border-bottom-color:var(--accent)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.sidebar{display:none}.metrics{grid-template-columns:repeat(2,1fr)}.search-grid,.search-grid-wide{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">CNPJ<span>Intel</span></div>
+    <div>
+      <div class="nav-section">Navegação</div>
+      <a class="nav-item active" onclick="showTab('dashboard')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard
+      </a>
+      <a class="nav-item" onclick="showTab('busca')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Busca avançada
+      </a>
+      <a class="nav-item" onclick="exportarCSV()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar CSV
+      </a>
+    </div>
+    <div class="agent-box">
+      <div><span class="agent-dot"></span><span class="agent-label">Agente ativo</span></div>
+      <div class="agent-sub" id="agent-sub">coletando dados...</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- Métricas -->
+    <div class="metrics">
+      <div class="metric"><div class="metric-lbl">Total CNPJs</div><div class="metric-val green" id="m-total">—</div><div class="metric-sub">empresas ativas</div></div>
+      <div class="metric"><div class="metric-lbl">Com telefone</div><div class="metric-val blue" id="m-tel">—</div><div class="metric-sub">contatos diretos</div></div>
+      <div class="metric"><div class="metric-lbl">Com e-mail</div><div class="metric-val amber" id="m-email">—</div><div class="metric-sub">para prospecção</div></div>
+      <div class="metric"><div class="metric-lbl">Com Instagram</div><div class="metric-val pink" id="m-insta">—</div><div class="metric-sub">redes sociais</div></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" id="tab-dashboard" onclick="showTab('dashboard')">Empresas</div>
+      <div class="tab" id="tab-busca" onclick="showTab('busca')">Busca avançada</div>
+    </div>
+
+    <!-- Tab: Empresas (busca simples) -->
+    <div class="tab-content active" id="content-dashboard">
+      <!-- Nichos rápidos -->
+      <div class="nicho-chips" id="nicho-chips">
+        <span style="font-size:11px;color:var(--muted);padding:4px 0;margin-right:4px">Nichos:</span>
+      </div>
+
+      <!-- Filtros rápidos -->
+      <div class="search-panel">
+        <div class="search-grid-wide">
+          <div class="field-group">
+            <div class="field-label">Buscar</div>
+            <input type="text" id="q" placeholder="Empresa, CNPJ, cidade..." oninput="debounce(buscar,400)()">
+          </div>
+          <div class="field-group">
+            <div class="field-label">Estado</div>
+            <select id="uf" onchange="buscar()">
+              <option value="">Todos</option>
+              <option>SP</option><option>RJ</option><option>MG</option><option>RS</option>
+              <option>PR</option><option>SC</option><option>BA</option><option>CE</option>
+              <option>GO</option><option>PE</option><option>PA</option><option>DF</option>
+              <option>MT</option><option>MS</option><option>AM</option><option>ES</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Porte</div>
+            <select id="porte" onchange="buscar()">
+              <option value="">Todos</option>
+              <option>MEI</option><option>ME</option><option>EPP</option><option>EP</option><option>DEMAIS</option>
+            </select>
+          </div>
+        </div>
+        <div class="toggles">
+          <button class="toggle-btn" id="t-tel"   onclick="toggleFiltro('tel')"  >📞 Com telefone</button>
+          <button class="toggle-btn" id="t-email" onclick="toggleFiltro('email')">✉️ Com e-mail</button>
+          <button class="toggle-btn" id="t-insta" onclick="toggleFiltro('insta')">📸 Com Instagram</button>
+          <button class="toggle-btn" id="t-site"  onclick="toggleFiltro('site')" >🌐 Com site</button>
+        </div>
+        <div class="search-actions">
+          <button class="btn-clear" onclick="limparFiltros()">Limpar</button>
+          <span class="result-count" id="result-count">—</span>
+        </div>
+      </div>
+
+      <!-- Tabela -->
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">Empresas enriquecidas</span>
+          <button class="btn-export" onclick="exportarCSV()">Exportar CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Empresa / Setor</th><th>CNPJ</th><th>Porte</th><th>Cidade / UF</th>
+              <th>Abertura</th><th>Sócio</th><th>Telefone</th><th>Contatos</th><th></th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <span id="page-info">—</span>
+          <div class="page-btns" id="page-btns"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Busca avançada -->
+    <div class="tab-content" id="content-busca">
+      <div class="search-panel">
+        <div class="search-panel-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Filtros avançados de prospecção
+        </div>
+        <div class="search-grid">
+          <div class="field-group">
+            <div class="field-label">Palavra-chave / Empresa</div>
+            <input type="text" id="adv-q" placeholder="Nome, CNPJ, cidade...">
+          </div>
+          <div class="field-group">
+            <div class="field-label">Nicho / Setor (CNAE)</div>
+            <input type="text" id="adv-cnae" placeholder="Ex: restaurante, software, saúde...">
+          </div>
+          <div class="field-group">
+            <div class="field-label">Estado</div>
+            <select id="adv-uf">
+              <option value="">Todos os estados</option>
+              <option>SP</option><option>RJ</option><option>MG</option><option>RS</option>
+              <option>PR</option><option>SC</option><option>BA</option><option>CE</option>
+              <option>GO</option><option>PE</option><option>PA</option><option>DF</option>
+              <option>MT</option><option>MS</option><option>AM</option><option>ES</option>
+            </select>
+          </div>
+        </div>
+        <div class="search-grid">
+          <div class="field-group">
+            <div class="field-label">Porte da empresa</div>
+            <select id="adv-porte">
+              <option value="">Todos os portes</option>
+              <option value="MEI">MEI — Microempreendedor Individual</option>
+              <option value="ME">ME — Microempresa</option>
+              <option value="EPP">EPP — Empresa de Pequeno Porte</option>
+              <option value="EP">EP — Empresa de Médio Porte</option>
+              <option value="DEMAIS">DEMAIS — Grande empresa</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Aberta a partir de</div>
+            <input type="date" id="adv-de">
+          </div>
+          <div class="field-group">
+            <div class="field-label">Aberta até</div>
+            <input type="date" id="adv-ate">
+          </div>
+        </div>
+        <div class="toggles" style="margin-bottom:1rem">
+          <button class="toggle-btn" id="adv-t-tel"   onclick="toggleAdvFiltro('tel')"  >📞 Com telefone</button>
+          <button class="toggle-btn" id="adv-t-email" onclick="toggleAdvFiltro('email')">✉️ Com e-mail</button>
+          <button class="toggle-btn" id="adv-t-insta" onclick="toggleAdvFiltro('insta')">📸 Com Instagram</button>
+          <button class="toggle-btn" id="adv-t-site"  onclick="toggleAdvFiltro('site')" >🌐 Com site</button>
+        </div>
+
+        <!-- Nichos pré-definidos -->
+        <div style="margin-bottom:1rem">
+          <div class="field-label" style="margin-bottom:8px">Nichos pré-definidos para prospecção</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="nicho-chip" onclick="setNicho('restaurante')">🍽️ Restaurantes</button>
+            <button class="nicho-chip" onclick="setNicho('software')">💻 Software</button>
+            <button class="nicho-chip" onclick="setNicho('odontol')">🦷 Odontologia</button>
+            <button class="nicho-chip" onclick="setNicho('farmácia')">💊 Farmácias</button>
+            <button class="nicho-chip" onclick="setNicho('beleza')">💈 Beleza</button>
+            <button class="nicho-chip" onclick="setNicho('constru')">🏗️ Construção</button>
+            <button class="nicho-chip" onclick="setNicho('educa')">📚 Educação</button>
+            <button class="nicho-chip" onclick="setNicho('contábil')">📊 Contabilidade</button>
+            <button class="nicho-chip" onclick="setNicho('advocacia')">⚖️ Advocacia</button>
+            <button class="nicho-chip" onclick="setNicho('academia')">🏋️ Academias</button>
+            <button class="nicho-chip" onclick="setNicho('supermercado')">🛒 Supermercados</button>
+            <button class="nicho-chip" onclick="setNicho('imobiliária')">🏠 Imobiliárias</button>
+          </div>
+        </div>
+
+        <div class="search-actions">
+          <button class="btn-search" onclick="buscarAvancado()">Buscar →</button>
+          <button class="btn-clear" onclick="limparAvancado()">Limpar filtros</button>
+          <span class="result-count" id="adv-result-count">—</span>
+        </div>
+      </div>
+
+      <!-- Tabela avançada -->
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">Resultados da busca</span>
+          <button class="btn-export" onclick="exportarCSVAvancado()">Exportar lista</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Empresa / Nicho</th><th>CNPJ</th><th>Porte</th><th>Cidade / UF</th>
+              <th>Abertura</th><th>Sócio</th><th>Telefone</th><th>Contatos</th><th></th>
+            </tr></thead>
+            <tbody id="adv-tbody"></tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <span id="adv-page-info">Execute uma busca</span>
+          <div class="page-btns" id="adv-page-btns"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Modal -->
+<div class="modal-bg" id="modal" onclick="if(event.target===this)fecharModal()">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+const API = window.location.hostname==="localhost" ? "http://localhost:8000" : "";
+const params = new URLSearchParams(window.location.search);
+const TOKEN = params.get("token") || localStorage.getItem("cnpj_token") || "demo123";
+if(params.get("token")) localStorage.setItem("cnpj_token", TOKEN);
+const H = {"Authorization":"Bearer "+TOKEN};
+
+let pagina=1, advPagina=1;
+let todosOsDados=[], advDados=[];
+let filtros={tel:false,email:false,insta:false,site:false};
+let advFiltros={tel:false,email:false,insta:false,site:false};
+let nichoAtivo="";
+
+// ── Tabs ──
+function showTab(t){
+  document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
+  document.getElementById('content-'+t).classList.add('active');
+  document.getElementById('tab-'+t).classList.add('active');
+}
+
+// ── Stats ──
+async function carregarStats(){
+  try{
+    const r=await fetch(API+"/api/stats",{headers:H});
+    const d=await r.json();
+    document.getElementById("m-total").textContent=(d.total||0).toLocaleString("pt-BR");
+    document.getElementById("m-tel").textContent=(d.com_telefone||0).toLocaleString("pt-BR");
+    document.getElementById("m-email").textContent=(d.com_email||0).toLocaleString("pt-BR");
+    document.getElementById("m-insta").textContent=(d.com_instagram||0).toLocaleString("pt-BR");
+
+    // Popular nichos
+    if(d.top_cnaes){
+      const chips=document.getElementById("nicho-chips");
+      d.top_cnaes.slice(0,8).forEach(c=>{
+        const btn=document.createElement("button");
+        btn.className="nicho-chip";
+        btn.textContent=c.cnae.substring(0,30)+(c.cnae.length>30?"...":"");
+        btn.title=c.cnae+" ("+c.n+")";
+        btn.onclick=()=>{ document.getElementById("adv-cnae").value=c.cnae.split(" ")[0]; buscarAvancado(); showTab('busca'); };
+        chips.appendChild(btn);
+      });
+    }
+  }catch(e){document.getElementById("m-total").textContent="offline"}
+}
+
+// ── Busca simples ──
+async function buscar(){
+  const p=new URLSearchParams({
+    q:document.getElementById("q").value,
+    uf:document.getElementById("uf").value,
+    porte:document.getElementById("porte").value,
+    com_telefone:filtros.tel, com_email:filtros.email,
+    com_instagram:filtros.insta, com_site:filtros.site,
+    pagina, por_pagina:20
+  });
+  try{
+    const r=await fetch(API+"/api/empresas?"+p,{headers:H});
+    const d=await r.json();
+    todosOsDados=d.dados||[];
+    renderTabela(d,"tbody","page-info","page-btns","result-count",pagina,(p)=>{pagina=p;buscar()});
+  }catch(e){
+    document.getElementById("tbody").innerHTML=`<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--muted)">Backend offline. Rode: uvicorn api:app --reload</td></tr>`;
+  }
+}
+
+// ── Busca avançada ──
+async function buscarAvancado(){
+  const p=new URLSearchParams({
+    q:document.getElementById("adv-q").value,
+    uf:document.getElementById("adv-uf").value,
+    porte:document.getElementById("adv-porte").value,
+    cnae:document.getElementById("adv-cnae").value,
+    abertura_de:document.getElementById("adv-de").value,
+    abertura_ate:document.getElementById("adv-ate").value,
+    com_telefone:advFiltros.tel, com_email:advFiltros.email,
+    com_instagram:advFiltros.insta, com_site:advFiltros.site,
+    pagina:advPagina, por_pagina:20
+  });
+  try{
+    const r=await fetch(API+"/api/empresas?"+p,{headers:H});
+    const d=await r.json();
+    advDados=d.dados||[];
+    renderTabela(d,"adv-tbody","adv-page-info","adv-page-btns","adv-result-count",advPagina,(p)=>{advPagina=p;buscarAvancado()});
+  }catch(e){}
+}
+
+function setNicho(kw){
+  document.getElementById("adv-cnae").value=kw;
+  document.querySelectorAll('.nicho-chip').forEach(c=>c.classList.remove('active'));
+  event.target.classList.add('active');
+  buscarAvancado();
+}
+
+// ── Render tabela ──
+function renderTabela(d,tbodyId,pageInfoId,pageBtnsId,countId,paginaAtual,onPageChange){
+  const tbody=document.getElementById(tbodyId);
+  const dados=d.dados||[];
+  if(!dados.length){
+    tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--muted)">Nenhum registro encontrado</td></tr>`;
+  } else {
+    tbody.innerHTML=dados.map((e,i)=>`
+      <tr>
+        <td><div class="co-name">${e.nome_fantasia||e.razao_social||"—"}</div><div class="co-cnae">${(e.cnae||"").substring(0,45)}</div></td>
+        <td class="mono" style="font-size:11px">${fmtCNPJ(e.cnpj)}</td>
+        <td>${porteBadge(e.porte)}</td>
+        <td style="font-size:12px">${e.municipio||"—"}<br><span style="color:var(--muted)">${e.uf||""}</span></td>
+        <td><span class="abertura-tag">${e.abertura||"—"}</span></td>
+        <td style="font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.socio_principal||"—"}</td>
+        <td class="mono" style="font-size:11px;color:${e.telefone?"var(--accent2)":"var(--muted)"}">${e.telefone||"—"}</td>
+        <td>
+          ${e.email?`<span class="tag tag-email" title="${e.email}">email</span>`:""}
+          ${e.instagram?`<span class="tag tag-insta" title="${e.instagram}">insta</span>`:""}
+          ${e.site?`<span class="tag tag-site" title="${e.site}">site</span>`:""}
+          ${!e.email&&!e.instagram&&!e.site?`<span style="color:var(--muted);font-size:11px">—</span>`:""}
+        </td>
+        <td><button class="btn-ver" onclick="abrirModal(${i},'${tbodyId}')">ver +</button></td>
+      </tr>
+    `).join("");
+  }
+  const total=d.total||0;
+  const paginas=Math.ceil(total/(d.por_pagina||20));
+  document.getElementById(countId).textContent=`${total.toLocaleString("pt-BR")} resultados`;
+  document.getElementById(pageInfoId).textContent=`Página ${paginaAtual} de ${Math.max(1,paginas)}`;
+  const pb=document.getElementById(pageBtnsId);
+  pb.innerHTML="";
+  for(let p=Math.max(1,paginaAtual-2);p<=Math.min(paginas,paginaAtual+2);p++){
+    const b=document.createElement("button");
+    b.className="page-btn"+(p===paginaAtual?" active":"");
+    b.textContent=p;
+    b.onclick=()=>onPageChange(p);
+    pb.appendChild(b);
+  }
+}
+
+// ── Modal ──
+function abrirModal(i, tbodyId){
+  const arr = tbodyId==="tbody" ? todosOsDados : advDados;
+  const e=arr[i]; if(!e) return;
+  document.getElementById("modal-content").innerHTML=`
+    <div class="modal-top">
+      <div><div class="modal-title">${e.razao_social||"—"}</div>
+      <div class="modal-sub">${fmtCNPJ(e.cnpj)} · Aberta em ${e.abertura||"—"} · <span style="color:var(--accent2)">${e.situacao||"ATIVA"}</span></div></div>
+      <button class="modal-close" onclick="fecharModal()">×</button>
+    </div>
+    <div class="modal-grid">
+      <div class="modal-field"><div class="lbl">Nome fantasia</div><div class="val">${e.nome_fantasia||"—"}</div></div>
+      <div class="modal-field"><div class="lbl">Porte</div><div class="val">${e.porte||"—"}</div></div>
+      <div class="modal-field"><div class="lbl">Sócio principal</div><div class="val">${e.socio_principal||"—"}</div></div>
+      <div class="modal-field"><div class="lbl">Cidade / UF</div><div class="val">${e.municipio||"—"} — ${e.uf||"—"}</div></div>
+      <div class="modal-field"><div class="lbl">Telefone / WhatsApp</div><div class="val" style="color:var(--accent2)">${e.telefone||"Não encontrado"}</div></div>
+      <div class="modal-field"><div class="lbl">E-mail</div><div class="val" style="color:#7bbef0;font-size:13px">${e.email||"Não encontrado"}</div></div>
+      <div class="modal-field"><div class="lbl">Instagram</div><div class="val" style="color:#e88ab0">${e.instagram||"Não encontrado"}</div></div>
+      <div class="modal-field"><div class="lbl">Site</div><div class="val" style="font-size:12px">${e.site||"—"}</div></div>
+      <div class="modal-field" style="grid-column:span 2"><div class="lbl">Setor / CNAE</div><div class="val" style="font-size:13px">${e.cnae||"—"}</div></div>
+      ${e.rating_google?`<div class="modal-field"><div class="lbl">Avaliação Google</div><div class="val">★ ${e.rating_google} (${e.avaliacoes||0} avaliações)</div></div>`:""}
+    </div>
+    <div class="modal-actions">
+      ${e.telefone?`<button class="modal-btn" onclick="window.open('https://wa.me/55${(e.telefone||"").replace(/\D/g,"")}','_blank')">💬 WhatsApp</button>`:""}
+      ${e.email?`<button class="modal-btn" onclick="window.open('mailto:${e.email}','_blank')">✉️ E-mail</button>`:""}
+      ${e.instagram?`<button class="modal-btn" onclick="window.open('https://instagram.com/${(e.instagram||"").replace("@","")}','_blank')">📸 Instagram</button>`:""}
+      ${e.site?`<button class="modal-btn" onclick="window.open('https://${e.site.replace(/https?:\/\//,"")}','_blank')">🌐 Site</button>`:""}
+    </div>
+  `;
+  document.getElementById("modal").className="modal-bg open";
+}
+function fecharModal(){document.getElementById("modal").className="modal-bg"}
+
+// ── Filtros toggles ──
+function toggleFiltro(t){
+  filtros[t]=!filtros[t];
+  const classes={tel:"on-blue",email:"on-amber",insta:"on",site:"on-purple"};
+  const el=document.getElementById("t-"+t);
+  el.className="toggle-btn"+(filtros[t]?" "+classes[t]:"");
+  pagina=1; buscar();
+}
+function toggleAdvFiltro(t){
+  advFiltros[t]=!advFiltros[t];
+  const classes={tel:"on-blue",email:"on-amber",insta:"on",site:"on-purple"};
+  const el=document.getElementById("adv-t-"+t);
+  el.className="toggle-btn"+(advFiltros[t]?" "+classes[t]:"");
+}
+
+function limparFiltros(){
+  document.getElementById("q").value="";
+  document.getElementById("uf").value="";
+  document.getElementById("porte").value="";
+  filtros={tel:false,email:false,insta:false,site:false};
+  ["tel","email","insta","site"].forEach(t=>document.getElementById("t-"+t).className="toggle-btn");
+  pagina=1; buscar();
+}
+function limparAvancado(){
+  ["adv-q","adv-cnae"].forEach(id=>document.getElementById(id).value="");
+  ["adv-uf","adv-porte"].forEach(id=>document.getElementById(id).value="");
+  ["adv-de","adv-ate"].forEach(id=>document.getElementById(id).value="");
+  advFiltros={tel:false,email:false,insta:false,site:false};
+  ["tel","email","insta","site"].forEach(t=>document.getElementById("adv-t-"+t).className="toggle-btn");
+  document.querySelectorAll('.nicho-chip').forEach(c=>c.classList.remove('active'));
+  advPagina=1;
+}
+
+// ── Export CSV ──
+function _exportCSV(dados, nome){
+  const headers=["CNPJ","Razão Social","Fantasia","Porte","CNAE","Município","UF","Sócio","Telefone","E-mail","Instagram","Site","Abertura"];
+  const rows=dados.map(e=>[
+    fmtCNPJ(e.cnpj),e.razao_social,e.nome_fantasia,e.porte,e.cnae,
+    e.municipio,e.uf,e.socio_principal,e.telefone,e.email,
+    e.instagram,e.site,e.abertura
+  ].map(v=>`"${(v||"").toString().replace(/"/g,'""')}"`).join(","));
+  const csv=[headers.join(","),...rows].join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url;
+  a.download=nome+"_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
+}
+function exportarCSV(){_exportCSV(todosOsDados,"cnpj_intel")}
+function exportarCSVAvancado(){_exportCSV(advDados,"cnpj_intel_busca")}
+
+// ── Helpers ──
+function porteBadge(p){const map={MEI:"b-mei",ME:"b-me",EPP:"b-epp",EP:"b-ep",DEMAIS:"b-de"};return`<span class="badge ${map[p]||"b-de"}">${p||"—"}</span>`}
+function fmtCNPJ(c){if(!c||c.length<14)return c||"—";return c.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,"$1.$2.$3/$4-$5")}
+function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}}
+
+// ── Init ──
+carregarStats();
+buscar();
+setInterval(carregarStats,15000);
+</script>
+</body>
+</html>

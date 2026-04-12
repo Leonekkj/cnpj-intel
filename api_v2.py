@@ -1,6 +1,5 @@
 """
 API REST — serve dados do banco + dashboard web.
-Rode com: uvicorn api:app --host 0.0.0.0 --port 8000
 """
 
 import os
@@ -13,7 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from database import Database
 
-app = FastAPI(title="CNPJ Intel API", version="1.0")
+app = FastAPI(title="CNPJ Intel API", version="2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,10 +24,6 @@ app.add_middleware(
 db = Database()
 db.criar_tabelas()
 
-# ─── Autenticação por token ───────────────────────────────────────
-# No Railway, defina a variável de ambiente:
-# TOKENS=token_cliente1,token_cliente2,token_cliente3
-# Para liberar acesso a um novo cliente, adicione o token dele aqui.
 TOKENS_VALIDOS = set(
     t.strip() for t in os.environ.get("TOKENS", "demo123,admin456").split(",") if t.strip()
 )
@@ -40,8 +35,6 @@ def verificar_token(credentials: HTTPAuthorizationCredentials = Depends(security
         raise HTTPException(status_code=401, detail="Token inválido")
     return credentials.credentials
 
-
-# ─── Endpoints públicos ───────────────────────────────────────────
 
 @app.get("/")
 def index():
@@ -55,31 +48,40 @@ def health():
     return {"status": "ok"}
 
 
-# ─── Endpoints protegidos ─────────────────────────────────────────
-
 @app.get("/api/empresas")
 def listar_empresas(
     q:             str  = Query(""),
     uf:            str  = Query(""),
     porte:         str  = Query(""),
+    cnae:          str  = Query("", description="Filtro por CNAE ou palavra-chave do setor"),
+    abertura_de:   str  = Query("", description="Data de abertura inicial YYYY-MM-DD"),
+    abertura_ate:  str  = Query("", description="Data de abertura final YYYY-MM-DD"),
     com_email:     bool = Query(False),
     com_instagram: bool = Query(False),
+    com_telefone:  bool = Query(False),
+    com_site:      bool = Query(False),
     pagina:        int  = Query(1, ge=1),
     por_pagina:    int  = Query(50, le=200),
     token:         str  = Depends(verificar_token),
 ):
     return db.buscar_empresas(
-        q=q, uf=uf, porte=porte,
-        com_email=com_email,
-        com_instagram=com_instagram,
-        pagina=pagina,
-        por_pagina=por_pagina,
+        q=q, uf=uf, porte=porte, cnae=cnae,
+        abertura_de=abertura_de, abertura_ate=abertura_ate,
+        com_email=com_email, com_instagram=com_instagram,
+        com_telefone=com_telefone, com_site=com_site,
+        pagina=pagina, por_pagina=por_pagina,
     )
 
 
 @app.get("/api/stats")
 def estatisticas(token: str = Depends(verificar_token)):
     return db.estatisticas()
+
+
+@app.get("/api/cnaes")
+def listar_cnaes(token: str = Depends(verificar_token)):
+    """Retorna os CNAEs mais frequentes para popular o filtro de nicho."""
+    return db.listar_cnaes()
 
 
 @app.get("/api/empresa/{cnpj}")
