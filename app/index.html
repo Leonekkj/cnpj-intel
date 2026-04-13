@@ -114,6 +114,9 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div class="nav-item" id="nav-export" onclick="exportarCSV()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar CSV
       </div>
+      <div class="nav-item" id="nav-admin" style="display:none" onclick="showTab('admin')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Clientes
+      </div>
     </div>
     <div class="agent-box">
       <div><span class="agent-dot"></span><span class="agent-label">Agente ativo</span></div>
@@ -152,6 +155,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div class="tabs">
       <div class="tab active" id="tab-dashboard" onclick="showTab('dashboard')">Empresas</div>
       <div class="tab" id="tab-busca" onclick="showTab('busca')">Busca avançada</div>
+      <div class="tab" id="tab-admin" style="display:none" onclick="showTab('admin')">👥 Clientes</div>
     </div>
 
     <!-- Aba: Empresas (SEM nichos) -->
@@ -363,6 +367,61 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         </div>
       </div>
     </div>
+
+    <!-- Aba: Admin (só aparece para token admin) -->
+    <div class="tab-content" id="content-admin">
+
+      <!-- Criar novo token -->
+      <div class="search-panel" style="margin-bottom:1.5rem">
+        <div style="font-size:14px;font-weight:600;margin-bottom:16px">Novo cliente</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end">
+          <div class="field-group">
+            <div class="field-label">Nome do cliente</div>
+            <input type="text" id="novo-nome" placeholder="Ex: joao_silva" oninput="gerarTokenSugestao()">
+          </div>
+          <div class="field-group">
+            <div class="field-label">Plano</div>
+            <select id="novo-plano">
+              <option value="free">Gratuito — 10 CNPJs/dia</option>
+              <option value="basico">Básico R$60 — 500 CNPJs/dia</option>
+              <option value="pro">Pro R$100 — Ilimitado</option>
+            </select>
+          </div>
+          <button class="btn-search" onclick="criarToken()" style="white-space:nowrap">Criar acesso →</button>
+        </div>
+        <div id="token-gerado" style="display:none;margin-top:16px;background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:16px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px">✅ Token criado! Envie este link para o cliente:</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <code id="link-cliente" style="flex:1;background:var(--bg);padding:8px 12px;border-radius:6px;font-size:12px;color:var(--accent2);border:1px solid var(--border);word-break:break-all"></code>
+            <button onclick="copiarLink()" style="padding:8px 14px;background:var(--accent);color:#000;border:none;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;font-weight:600">Copiar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lista de clientes -->
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">Clientes ativos</span>
+          <button class="btn-export" onclick="carregarTokens()">↻ Atualizar</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Token / Cliente</th>
+              <th>Plano</th>
+              <th>Uso hoje</th>
+              <th>Criado em</th>
+              <th>Status</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="tokens-tbody">
+              <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -393,6 +452,7 @@ async function carregarPlano() {
     planoInfo = d;
     atualizarPlanoUI(d);
   } catch(e) {}
+  return planoInfo;
 }
 
 function atualizarPlanoUI(d) {
@@ -455,7 +515,11 @@ function showTab(t) {
   document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
   document.getElementById('content-' + t).classList.add('active');
   document.getElementById('tab-' + t).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+  const navItem = document.getElementById('nav-' + t) || document.querySelector(`.nav-item[onclick*="'${t}'"]`);
+  if (navItem) navItem.classList.add('active');
   if(t === 'busca' && advDados.length === 0) buscarAvancado();
+  if(t === 'admin') carregarTokens();
 }
 
 async function carregarStats() {
@@ -696,11 +760,122 @@ function fmtCNPJ(c) {
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
+// ─── Admin ───────────────────────────────────────────────────────
+let _urlBase = window.location.origin;
+
+function gerarTokenSugestao() {
+  // Só gera sugestão visual, o token real é criado no servidor
+}
+
+async function criarToken() {
+  const nome  = document.getElementById("novo-nome").value.trim();
+  const plano = document.getElementById("novo-plano").value;
+  if (!nome) { alert("Digite um nome para o cliente."); return; }
+
+  // Token = nome_slug + número aleatório
+  const slug  = nome.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+  const token = slug + "_" + Math.random().toString(36).slice(2, 8);
+
+  try {
+    const r = await fetch(
+      `${API}/api/admin/tokens?token=${encodeURIComponent(token)}&plano=${plano}`,
+      { method: "POST", headers: H }
+    );
+    if (!r.ok) { const e = await r.json(); alert("Erro: " + e.detail); return; }
+
+    const link = `${_urlBase}?token=${token}`;
+    document.getElementById("link-cliente").textContent = link;
+    document.getElementById("token-gerado").style.display = "block";
+    document.getElementById("novo-nome").value = "";
+    carregarTokens();
+  } catch(e) {
+    alert("Erro ao criar token: " + e.message);
+  }
+}
+
+function copiarLink() {
+  const txt = document.getElementById("link-cliente").textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = event.target;
+    btn.textContent = "Copiado!";
+    setTimeout(() => btn.textContent = "Copiar", 2000);
+  });
+}
+
+async function carregarTokens() {
+  try {
+    const r = await fetch(API + "/api/admin/tokens", { headers: H });
+    if (!r.ok) return;
+    const lista = await r.json();
+    const tbody = document.getElementById("tokens-tbody");
+
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">Nenhum cliente ainda</td></tr>`;
+      return;
+    }
+
+    const planoLabel = { free: "Gratuito", basico: "Básico R$60", pro: "Pro R$100" };
+    const planoCor   = { free: "var(--warn)", basico: "var(--info)", pro: "var(--accent2)" };
+
+    tbody.innerHTML = lista.map(t => {
+      const limite   = t.limite_dia ?? "∞";
+      const usado    = t.cnpjs_hoje || 0;
+      const pct      = t.limite_dia ? Math.round((usado / t.limite_dia) * 100) : 0;
+      const barCor   = pct >= 90 ? "var(--danger)" : pct >= 70 ? "var(--warn)" : "var(--accent)";
+      const ativo    = t.ativo || t.ativo === 1 || t.ativo === true;
+      const criadoEm = t.criado_em ? t.criado_em.slice(0,10) : "—";
+      const link     = `${_urlBase}?token=${t.token}`;
+
+      return `<tr>
+        <td>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text)">${t.token}</div>
+          <div style="font-size:10px;margin-top:3px">
+            <a href="${link}" target="_blank" style="color:var(--muted);text-decoration:none;font-size:10px">🔗 link de acesso</a>
+            &nbsp;·&nbsp;
+            <span style="cursor:pointer;color:var(--muted)" onclick="navigator.clipboard.writeText('${link}').then(()=>alert('Link copiado!'))">copiar</span>
+          </div>
+        </td>
+        <td><span style="font-size:11px;font-weight:600;color:${planoCor[t.plano] || 'var(--muted)'}">${planoLabel[t.plano] || t.plano}</span></td>
+        <td>
+          <div style="font-size:11px;font-family:'DM Mono',monospace;margin-bottom:4px">${usado} / ${limite}</div>
+          ${t.limite_dia ? `<div style="height:3px;background:var(--border);border-radius:4px;width:80px"><div style="height:100%;width:${pct}%;background:${barCor};border-radius:4px"></div></div>` : '<div style="font-size:10px;color:var(--accent2)">ilimitado</div>'}
+        </td>
+        <td style="font-size:11px;color:var(--muted)">${criadoEm}</td>
+        <td><span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${ativo ? 'rgba(29,158,117,0.15)' : 'rgba(226,75,74,0.15)'};color:${ativo ? 'var(--accent2)' : 'var(--danger)'}">${ativo ? 'Ativo' : 'Inativo'}</span></td>
+        <td>${ativo ? `<button onclick="desativarToken('${t.token}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--danger);background:transparent;color:var(--danger);cursor:pointer">Desativar</button>` : '—'}</td>
+      </tr>`;
+    }).join("");
+
+  } catch(e) {
+    console.error("Erro ao carregar tokens:", e);
+  }
+}
+
+async function desativarToken(token) {
+  if (!confirm(`Desativar o acesso do token "${token}"?\nO cliente perderá o acesso imediatamente.`)) return;
+  try {
+    const r = await fetch(`${API}/api/admin/tokens/${encodeURIComponent(token)}`, { method: "DELETE", headers: H });
+    if (r.ok) carregarTokens();
+    else { const e = await r.json(); alert("Erro: " + e.detail); }
+  } catch(e) {
+    alert("Erro: " + e.message);
+  }
+}
+
+// Mostra aba admin só para token admin
+function verificarAdmin() {
+  if (!planoInfo) return;
+  if (planoInfo.plano === "admin") {
+    document.getElementById("nav-admin").style.display = "flex";
+    document.getElementById("tab-admin").style.display = "block";
+  }
+}
+
 carregarStats();
-carregarPlano();
+carregarPlano().then(verificarAdmin);
 buscar();
 setInterval(carregarStats, 15000);
-setInterval(carregarPlano, 60000); // Atualiza quota a cada minuto
+setInterval(carregarPlano, 60000);
 </script>
 </body>
 </html>
