@@ -24,13 +24,16 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [AGENTE] %(message)s")
 log = logging.getLogger(__name__)
 
-GOOGLE_API_KEY  = os.environ.get("GOOGLE_API_KEY", "")
-DELAY           = 0.5   # delay por CNPJ dentro do semáforo (respeita rate limit DuckDuckGo)
+GOOGLE_API_KEY     = os.environ.get("GOOGLE_API_KEY", "")
+REENRICH_SEM_CONTATO = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1", "true", "yes")
+
+# Com Google Places API podemos usar mais concorrência (API estável vs scraping frágil)
+DELAY           = 0.2 if GOOGLE_API_KEY else 0.5
 LOTE            = 5000
 PAUSA_CICLO     = 10
 TIMEOUT_CNPJ    = 25
 SALVAR_A_CADA   = 50
-CONCORRENCIA    = 5     # CNPJs processados em paralelo simultaneamente
+CONCORRENCIA    = 20 if GOOGLE_API_KEY else 5   # Google suporta mais paralelismo
 
 # Headers realistas para evitar bloqueio nos scrapers
 HEADERS_BROWSER = {
@@ -251,10 +254,11 @@ async def extrair_contatos_do_site(session, site_url: str) -> dict:
 
 # ─── Pipeline principal ───────────────────────────────────────────────────────
 
-async def _processar(session, cnpj, db):
+async def _processar(session, cnpj, db, forcar=False):
     cnpj = re.sub(r"\D", "", cnpj)
     try:
-        if db.cnpj_existe_recente(cnpj, dias=30):
+        # Em modo REENRICH ou forçado, ignora a verificação de recência
+        if not forcar and db.cnpj_existe_recente(cnpj, dias=30):
             return None
 
         dados = await buscar_brasilapi(session, cnpj)
@@ -326,9 +330,9 @@ async def _processar(session, cnpj, db):
         return None
 
 
-async def enriquecer(session, cnpj, db):
+async def enriquecer(session, cnpj, db, forcar=False):
     try:
-        return await asyncio.wait_for(_processar(session, cnpj, db), timeout=TIMEOUT_CNPJ)
+        return await asyncio.wait_for(_processar(session, cnpj, db, forcar=forcar), timeout=TIMEOUT_CNPJ)
     except asyncio.TimeoutError:
         return None
     except Exception:
@@ -343,10 +347,19 @@ async def rodar_agente():
     db.criar_tabela_progresso()
 
     if GOOGLE_API_KEY:
-        log.info("✅ Google Places API ativa — máxima qualidade de enriquecimento")
+        log.info(f"✅ Google Places API ativa — concorrência={CONCORRENCIA}, delay={DELAY}s")
     else:
-        log.info("⚠️  GOOGLE_API_KEY não configurada — usando DuckDuckGo como fallback")
+        log.info(f"⚠️  GOOGLE_API_KEY não configurada — DuckDuckGo fallback | concorrência={CONCORRENCIA}")
 
+    if REENRICH_SEM_CONTATO:
+        log.info("🔁 Modo REENRICH_SEM_CONTATO ativo — re-processando registros sem email/instagram/site")
+        await rodar_reenrich(db)
+    else:
+        await rodar_seed(db)
+
+
+async def rodar_seed(db):
+    """Loop padrão: processa CNPJs do cnpjs_seed.txt em ordem."""
     cnpjs = carregar_cnpjs_seed()
     total = len(cnpjs)
 
@@ -361,14 +374,13 @@ async def rodar_agente():
         log.info(f"🆕 Iniciando do zero. {total:,} CNPJs na fila.")
 
     semaphore = asyncio.Semaphore(CONCORRENCIA)
+    SUB_LOTE  = CONCORRENCIA * 10
 
     async def enriquecer_paralelo(session, cnpj, db):
         async with semaphore:
             resultado = await enriquecer(session, cnpj, db)
             await asyncio.sleep(DELAY)
             return resultado
-
-    SUB_LOTE = CONCORRENCIA * 10  # sub-lotes de 50 CNPJs por gather
 
     async with aiohttp.ClientSession() as session:
         while True:
@@ -407,6 +419,63 @@ async def rodar_agente():
 
             except Exception as e:
                 log.error(f"Erro crítico: {e} — reiniciando em 30s")
+                await asyncio.sleep(30)
+
+
+async def rodar_reenrich(db):
+    """
+    Re-enriquece registros já salvos no banco que não têm email, instagram nem site.
+    Ideal para usar com Google Places API para extrair o máximo de contatos dos 130k.
+    """
+    total_sem_contato = db.contar_sem_contato()
+    log.info(f"📊 {total_sem_contato:,} empresas sem contato algum — iniciando re-enriquecimento")
+
+    semaphore = asyncio.Semaphore(CONCORRENCIA)
+    SUB_LOTE  = CONCORRENCIA * 10
+    offset_db = 0
+    total_salvos = 0
+
+    async def enriquecer_forçado(session, cnpj, db):
+        async with semaphore:
+            resultado = await enriquecer(session, cnpj, db, forcar=True)
+            await asyncio.sleep(DELAY)
+            return resultado
+
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                lote = db.buscar_cnpjs_sem_contato(limite=LOTE, offset=offset_db)
+                if not lote:
+                    log.info(f"✅ REENRICH completo! {total_salvos:,} registros atualizados. Aguardando 5min...")
+                    await asyncio.sleep(300)
+                    # Recomeça — pode ter novos sem contato
+                    offset_db = 0
+                    total_sem_contato = db.contar_sem_contato()
+                    log.info(f"🔄 Novo ciclo REENRICH: {total_sem_contato:,} ainda sem contato")
+                    continue
+
+                log.info(f"REENRICH: processando {len(lote)} CNPJs (offset={offset_db:,}) | {total_salvos:,} salvos até agora")
+                salvos_lote = 0
+
+                for sub_inicio in range(0, len(lote), SUB_LOTE):
+                    sub = lote[sub_inicio:sub_inicio + SUB_LOTE]
+                    try:
+                        resultados = await asyncio.gather(
+                            *[enriquecer_forçado(session, cnpj, db) for cnpj in sub],
+                            return_exceptions=True
+                        )
+                        salvos_lote += sum(1 for r in resultados if r and not isinstance(r, Exception))
+                    except Exception as e:
+                        log.debug(f"Erro sub-lote reenrich: {e}")
+
+                total_salvos += salvos_lote
+                # Avança o offset apenas pelos que não foram salvos (os salvos saem da query)
+                offset_db += max(0, len(lote) - salvos_lote)
+                log.info(f"Lote REENRICH: {salvos_lote} atualizados. Total: {total_salvos:,}")
+                await asyncio.sleep(PAUSA_CICLO)
+
+            except Exception as e:
+                log.error(f"Erro crítico REENRICH: {e} — reiniciando em 30s")
                 await asyncio.sleep(30)
 
 

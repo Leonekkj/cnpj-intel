@@ -359,6 +359,35 @@ class Database:
             """)
             return [{"cnae": r[0], "n": r[1]} for r in cur.fetchall()]
 
+    def buscar_cnpjs_sem_contato(self, limite: int = 5000, offset: int = 0) -> list:
+        """
+        Retorna CNPJs de empresas que não têm email, instagram nem site.
+        Usado pelo modo REENRICH para re-enriquecer registros incompletos.
+        """
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"""
+                SELECT cnpj FROM empresas
+                WHERE (email IS NULL OR email = '')
+                  AND (instagram IS NULL OR instagram = '')
+                  AND (site IS NULL OR site = '')
+                ORDER BY atualizado_em ASC
+                LIMIT {PH} OFFSET {PH}
+            """, (limite, offset))
+            return [row[0] for row in cur.fetchall()]
+
+    def contar_sem_contato(self) -> int:
+        """Conta CNPJs sem nenhum contato (para estimar o trabalho do REENRICH)."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT COUNT(*) FROM empresas
+                WHERE (email IS NULL OR email = '')
+                  AND (instagram IS NULL OR instagram = '')
+                  AND (site IS NULL OR site = '')
+            """)
+            return cur.fetchone()[0]
+
     def estatisticas(self) -> dict:
         with _conn() as conn:
             cur = conn.cursor()
