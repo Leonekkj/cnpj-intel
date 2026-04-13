@@ -66,8 +66,10 @@ class Database:
     def criar_tabela_progresso(self):
         with _conn() as conn:
             cur = conn.cursor()
+            # Dropa e recria para garantir estrutura correta
+            cur.execute("DROP TABLE IF EXISTS agente_progresso")
             cur.execute("""
-                CREATE TABLE IF NOT EXISTS agente_progresso (
+                CREATE TABLE agente_progresso (
                     id      INTEGER PRIMARY KEY,
                     posicao INTEGER NOT NULL DEFAULT 0,
                     updated TEXT
@@ -77,11 +79,10 @@ class Database:
                 cur.execute("""
                     INSERT INTO agente_progresso (id, posicao, updated)
                     VALUES (1, 0, NOW()::TEXT)
-                    ON CONFLICT (id) DO NOTHING
                 """)
             else:
                 cur.execute("""
-                    INSERT OR IGNORE INTO agente_progresso (id, posicao, updated)
+                    INSERT INTO agente_progresso (id, posicao, updated)
                     VALUES (1, 0, datetime('now'))
                 """)
             conn.commit()
