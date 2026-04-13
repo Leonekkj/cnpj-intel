@@ -150,10 +150,10 @@ class Database:
                     r["cnpjs_hoje"] = 0
             return rows
 
-    def desativar_token(self, token: str):
+    def excluir_token(self, token: str):
         with _conn() as conn:
             cur = conn.cursor()
-            cur.execute(f"UPDATE tokens SET ativo = FALSE WHERE token = {PH}", (token,))
+            cur.execute(f"DELETE FROM tokens WHERE token = {PH}", (token,))
             conn.commit()
 
     def criar_tabelas(self):
