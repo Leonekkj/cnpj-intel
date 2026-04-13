@@ -69,19 +69,19 @@ class Database:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS agente_progresso (
                     id      INTEGER PRIMARY KEY,
-                    offset  INTEGER NOT NULL DEFAULT 0,
+                    posicao INTEGER NOT NULL DEFAULT 0,
                     updated TEXT
                 )
             """)
             if USE_POSTGRES:
                 cur.execute("""
-                    INSERT INTO agente_progresso (id, offset, updated)
+                    INSERT INTO agente_progresso (id, posicao, updated)
                     VALUES (1, 0, NOW()::TEXT)
                     ON CONFLICT (id) DO NOTHING
                 """)
             else:
                 cur.execute("""
-                    INSERT OR IGNORE INTO agente_progresso (id, offset, updated)
+                    INSERT OR IGNORE INTO agente_progresso (id, posicao, updated)
                     VALUES (1, 0, datetime('now'))
                 """)
             conn.commit()
@@ -91,12 +91,12 @@ class Database:
             cur = conn.cursor()
             if USE_POSTGRES:
                 cur.execute(
-                    "UPDATE agente_progresso SET offset = %s, updated = NOW()::TEXT WHERE id = 1",
+                    "UPDATE agente_progresso SET posicao = %s, updated = NOW()::TEXT WHERE id = 1",
                     (offset,)
                 )
             else:
                 cur.execute(
-                    "UPDATE agente_progresso SET offset = ?, updated = datetime('now') WHERE id = 1",
+                    "UPDATE agente_progresso SET posicao = ?, updated = datetime('now') WHERE id = 1",
                     (offset,)
                 )
             conn.commit()
@@ -105,7 +105,7 @@ class Database:
         try:
             with _conn() as conn:
                 cur = conn.cursor()
-                cur.execute("SELECT offset FROM agente_progresso WHERE id = 1")
+                cur.execute("SELECT posicao FROM agente_progresso WHERE id = 1")
                 row = cur.fetchone()
                 if row:
                     return int(row[0])
@@ -231,7 +231,7 @@ class Database:
             por_porte = [{"porte": r[0], "n": r[1]} for r in cur.fetchall()]
             progresso = 0
             try:
-                cur.execute("SELECT offset FROM agente_progresso WHERE id = 1")
+                cur.execute("SELECT posicao FROM agente_progresso WHERE id = 1")
                 row = cur.fetchone()
                 if row:
                     progresso = int(row[0])
