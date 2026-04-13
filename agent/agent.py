@@ -18,9 +18,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [AGENTE] %(message)s
 log = logging.getLogger(__name__)
 
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
-DELAY          = 0.5
-LOTE           = 2000
-PAUSA_CICLO    = 30
+DELAY          = 0.1   # reduzido — CNPJs já processados são pulados rapidamente
+LOTE           = 5000  # lote maior para avançar mais rápido
+PAUSA_CICLO    = 10    # pausa menor entre ciclos
 TIMEOUT_CNPJ   = 15
 SALVAR_A_CADA  = 100
 
