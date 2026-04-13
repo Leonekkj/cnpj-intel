@@ -1,6 +1,12 @@
 """
 CNPJ Intel Agent — com persistência de progresso no PostgreSQL.
 Ao reiniciar, retoma de onde parou sem reprocessar CNPJs já salvos.
+
+Estratégia de enriquecimento (em ordem de prioridade):
+  1. Google Places API (melhor qualidade — requer GOOGLE_API_KEY no Railway)
+  2. DuckDuckGo search (fallback sem API key — acha Instagram e site)
+  3. Scraping do site oficial (homepage + página de contato)
+  4. BrasilAPI email/telefone da Receita Federal
 """
 
 import asyncio
@@ -9,6 +15,7 @@ import re
 import logging
 import os
 import sys
+from urllib.parse import quote, urljoin, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import Database
@@ -17,13 +24,43 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [AGENTE] %(message)s")
 log = logging.getLogger(__name__)
 
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
-DELAY          = 0.1   # reduzido — CNPJs já processados são pulados rapidamente
-LOTE           = 5000  # lote maior para avançar mais rápido
-PAUSA_CICLO    = 10    # pausa menor entre ciclos
-TIMEOUT_CNPJ   = 15
-SALVAR_A_CADA  = 100
+GOOGLE_API_KEY  = os.environ.get("GOOGLE_API_KEY", "")
+DELAY           = 0.3   # delay entre CNPJs (inclui DuckDuckGo — respeita rate limit)
+LOTE            = 5000
+PAUSA_CICLO     = 10
+TIMEOUT_CNPJ    = 20
+SALVAR_A_CADA   = 100
 
+# Headers realistas para evitar bloqueio nos scrapers
+HEADERS_BROWSER = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+}
+
+# Handles de Instagram que não são perfis de negócio
+INSTA_IGNORAR = {
+    "p", "tv", "reel", "reels", "stories", "explore",
+    "accounts", "sharer", "about", "help", "legal",
+    "privacy", "share", "direct", "login",
+}
+
+# Domínios de e-mail que indicam ruído (não são do negócio)
+EMAIL_RUIDO = [
+    "sentry", "example", "noreply", "wix.com", "pixel",
+    "schema", "w3.org", "wordpress", "jquery", "google",
+    "facebook", "instagram", "shopify", "hotmart",
+]
+
+# Slugs de páginas de contato para tentar após homepage
+PAGINAS_CONTATO = ["/contato", "/contact", "/fale-conosco", "/sobre", "/about"]
+
+
+# ─── BrasilAPI ────────────────────────────────────────────────────────────────
 
 async def buscar_brasilapi(session, cnpj):
     url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
@@ -32,12 +69,14 @@ async def buscar_brasilapi(session, cnpj):
             if r.status == 200:
                 return await r.json()
             elif r.status == 429:
-                log.warning("Rate limit — aguardando 60s...")
+                log.warning("BrasilAPI rate limit — aguardando 60s...")
                 await asyncio.sleep(60)
     except Exception:
         pass
     return None
 
+
+# ─── Google Places (requer GOOGLE_API_KEY) ────────────────────────────────────
 
 async def buscar_google_places(session, nome, cidade):
     if not GOOGLE_API_KEY:
@@ -67,33 +106,149 @@ async def buscar_google_places(session, nome, cidade):
     return {}
 
 
-async def extrair_contatos_do_site(session, url):
-    if not url:
-        return {}
-    if not url.startswith("http"):
-        url = "https://" + url
-    resultado = {"email_site": "", "instagram_site": ""}
+# ─── DuckDuckGo (fallback sem API key) ───────────────────────────────────────
+
+def _extrair_instagram_do_html(html: str) -> str:
+    """Extrai o primeiro @handle do Instagram a partir de HTML."""
+    handles = re.findall(r'instagram\.com/([A-Za-z0-9_.]{2,30})(?:[/"?\s]|$)', html)
+    handles = [h for h in handles if h.lower() not in INSTA_IGNORAR]
+    return ("@" + handles[0]) if handles else ""
+
+
+async def buscar_duckduckgo(session, query: str) -> str:
+    """
+    Busca no DuckDuckGo Lite e retorna o HTML dos resultados.
+    Retorna string vazia em caso de falha ou bloqueio.
+    """
+    url = f"https://html.duckduckgo.com/html/?q={quote(query)}"
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        async with session.get(url, headers=headers,
-                               timeout=aiohttp.ClientTimeout(total=5),
-                               allow_redirects=True) as r:
+        async with session.get(
+            url, headers=HEADERS_BROWSER,
+            timeout=aiohttp.ClientTimeout(total=8),
+            allow_redirects=True,
+        ) as r:
             if r.status == 200:
-                html = await r.text(errors="ignore")
-                emails = re.findall(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", html)
-                emails = [e for e in emails if not any(x in e for x in
-                          ["sentry", "example", "noreply", "wix.com", "pixel", "schema"])]
-                if emails:
-                    resultado["email_site"] = emails[0]
-                insta = re.findall(r'instagram\.com/([A-Za-z0-9_.]{2,30})', html)
-                insta = [i for i in insta if i not in
-                         ("p","tv","reel","stories","explore","accounts","sharer")]
-                if insta:
-                    resultado["instagram_site"] = "@" + insta[0]
+                return await r.text(errors="ignore")
     except Exception:
         pass
+    return ""
+
+
+async def buscar_instagram_ddg(session, nome: str, cidade: str) -> str:
+    """
+    Busca o perfil de Instagram da empresa no DuckDuckGo.
+    Exemplo de query: site:instagram.com "Pizzaria do João" Belo Horizonte
+    """
+    # Usa nome fantasia se disponível (mais reconhecível), senão razão social
+    nome_busca = nome.strip()[:50]  # limita tamanho
+    query = f'site:instagram.com "{nome_busca}" {cidade}'
+    html = await buscar_duckduckgo(session, query)
+    if not html:
+        return ""
+    handle = _extrair_instagram_do_html(html)
+    if handle:
+        log.debug(f"Instagram via DDG: {handle} para '{nome_busca}'")
+    return handle
+
+
+async def buscar_site_ddg(session, nome: str, cidade: str) -> str:
+    """
+    Tenta encontrar o site oficial da empresa via DuckDuckGo
+    quando o Google Places não está disponível.
+    Retorna a primeira URL relevante encontrada.
+    """
+    query = f'"{nome}" {cidade} site oficial contato'
+    html = await buscar_duckduckgo(session, query)
+    if not html:
+        return ""
+
+    # Extrai URLs dos resultados do DuckDuckGo (padrão do HTML lite)
+    urls = re.findall(r'class="result__url"[^>]*>\s*([^\s<]+)', html)
+    if not urls:
+        # Fallback: qualquer URL nos resultados
+        urls = re.findall(r'href="(https?://[^"&]{10,})"', html)
+
+    # Filtra URLs irrelevantes
+    dominios_ignorar = {
+        "duckduckgo", "google", "facebook", "instagram", "youtube",
+        "linkedin", "twitter", "tiktok", "bing", "yahoo",
+        "receitafederal", "gov.br", "jusbrasil", "escavador",
+        "cnpj.info", "cnpja", "cnpjbiz",
+    }
+    for url in urls:
+        url = url.strip()
+        if not url.startswith("http"):
+            url = "https://" + url
+        dominio = urlparse(url).netloc.lower()
+        if not any(ign in dominio for ign in dominios_ignorar):
+            log.debug(f"Site via DDG: {url} para '{nome}'")
+            return url
+    return ""
+
+
+# ─── Scraping do site ─────────────────────────────────────────────────────────
+
+def _extrair_emails(html: str) -> list:
+    """Extrai e-mails do HTML, filtrando ruído."""
+    # Padrão normal
+    emails = re.findall(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", html)
+    # Também pega mailto: links
+    mailtos = re.findall(r'mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})', html)
+    todos = list(dict.fromkeys(mailtos + emails))  # prioriza mailto, remove duplicatas
+    return [e for e in todos if not any(x in e.lower() for x in EMAIL_RUIDO)]
+
+
+async def _scrape_pagina(session, url: str) -> tuple[str, str]:
+    """Scrapa uma página e retorna (email, instagram) encontrados."""
+    try:
+        async with session.get(
+            url, headers=HEADERS_BROWSER,
+            timeout=aiohttp.ClientTimeout(total=6),
+            allow_redirects=True,
+        ) as r:
+            if r.status == 200:
+                html = await r.text(errors="ignore")
+                emails = _extrair_emails(html)
+                email = emails[0] if emails else ""
+                instagram = _extrair_instagram_do_html(html)
+                return email, instagram
+    except Exception:
+        pass
+    return "", ""
+
+
+async def extrair_contatos_do_site(session, site_url: str) -> dict:
+    """
+    Scrapa o site em até 2 páginas (homepage + página de contato)
+    para encontrar e-mail e Instagram.
+    Para assim que encontrar ambos ou esgotar as páginas.
+    """
+    resultado = {"email_site": "", "instagram_site": ""}
+    if not site_url:
+        return resultado
+
+    if not site_url.startswith("http"):
+        site_url = "https://" + site_url
+
+    paginas = [site_url] + [
+        urljoin(site_url, slug) for slug in PAGINAS_CONTATO
+    ]
+
+    for url in paginas:
+        email, instagram = await _scrape_pagina(session, url)
+        if email and not resultado["email_site"]:
+            resultado["email_site"] = email
+        if instagram and not resultado["instagram_site"]:
+            resultado["instagram_site"] = instagram
+
+        # Para quando tiver os dois
+        if resultado["email_site"] and resultado["instagram_site"]:
+            break
+
     return resultado
 
+
+# ─── Pipeline principal ───────────────────────────────────────────────────────
 
 async def _processar(session, cnpj, db):
     cnpj = re.sub(r"\D", "", cnpj)
@@ -113,10 +268,24 @@ async def _processar(session, cnpj, db):
         cidade   = dados.get("municipio", "")
         socios   = dados.get("qsa", [])
         socio    = socios[0].get("nome_socio", "") if socios else ""
+        nome_busca = fantasia or nome  # nome fantasia é mais reconhecível
 
-        google   = await buscar_google_places(session, fantasia or nome, cidade)
-        site     = google.get("site_google", "")
+        # 1. Tenta Google Places (melhor qualidade, precisa de GOOGLE_API_KEY)
+        google = await buscar_google_places(session, nome_busca, cidade)
+        site   = google.get("site_google", "")
+
+        # 2. Se não tem site (Google Places off ou sem resultado), tenta DuckDuckGo
+        if not site:
+            site = await buscar_site_ddg(session, nome_busca, cidade)
+
+        # 3. Scraping do site (homepage + contato)
         contatos = await extrair_contatos_do_site(session, site)
+
+        # 4. Se ainda não tem Instagram, busca diretamente no DuckDuckGo
+        if not contatos["instagram_site"]:
+            contatos["instagram_site"] = await buscar_instagram_ddg(
+                session, nome_busca, cidade
+            )
 
         ddd = dados.get("ddd_telefone_1", "")
         num = dados.get("telefone_1", "")
@@ -143,9 +312,12 @@ async def _processar(session, cnpj, db):
         }
 
         db.salvar_empresa(perfil)
-        log.info(f"✓ {nome[:40]} | {dados.get('uf','')} | "
-                 f"tel:{bool(perfil['telefone'])} "
-                 f"email:{bool(perfil['email'])}")
+        log.info(
+            f"✓ {nome_busca[:35]:<35} | {dados.get('uf','')} | "
+            f"tel:{bool(perfil['telefone'])} "
+            f"email:{bool(perfil['email'])} "
+            f"insta:{bool(perfil['instagram'])}"
+        )
         return perfil
 
     except Exception as e:
@@ -162,15 +334,21 @@ async def enriquecer(session, cnpj, db):
         return None
 
 
+# ─── Loop principal ───────────────────────────────────────────────────────────
+
 async def rodar_agente():
     db = Database()
     db.criar_tabelas()
     db.criar_tabela_progresso()
 
+    if GOOGLE_API_KEY:
+        log.info("✅ Google Places API ativa — máxima qualidade de enriquecimento")
+    else:
+        log.info("⚠️  GOOGLE_API_KEY não configurada — usando DuckDuckGo como fallback")
+
     cnpjs = carregar_cnpjs_seed()
     total = len(cnpjs)
 
-    # Retoma de onde parou
     offset = db.carregar_progresso()
     if offset > 0 and offset < total:
         log.info(f"🔄 Retomando do CNPJ {offset:,} de {total:,}")
