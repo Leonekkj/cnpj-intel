@@ -361,8 +361,8 @@ class Database:
 
     def buscar_cnpjs_sem_contato(self, limite: int = 5000, offset: int = 0) -> list:
         """
-        Retorna CNPJs de empresas que não têm email, instagram nem site.
-        Usado pelo modo REENRICH para re-enriquecer registros incompletos.
+        Retorna CNPJs de empresas sem email E sem instagram.
+        Site não é critério — pode ter site mas scraping não achou contato.
         """
         with _conn() as conn:
             cur = conn.cursor()
@@ -370,21 +370,19 @@ class Database:
                 SELECT cnpj FROM empresas
                 WHERE (email IS NULL OR email = '')
                   AND (instagram IS NULL OR instagram = '')
-                  AND (site IS NULL OR site = '')
                 ORDER BY atualizado_em ASC
                 LIMIT {PH} OFFSET {PH}
             """, (limite, offset))
             return [row[0] for row in cur.fetchall()]
 
     def contar_sem_contato(self) -> int:
-        """Conta CNPJs sem nenhum contato (para estimar o trabalho do REENRICH)."""
+        """Conta CNPJs sem email E sem instagram."""
         with _conn() as conn:
             cur = conn.cursor()
             cur.execute("""
                 SELECT COUNT(*) FROM empresas
                 WHERE (email IS NULL OR email = '')
                   AND (instagram IS NULL OR instagram = '')
-                  AND (site IS NULL OR site = '')
             """)
             return cur.fetchone()[0]
 
