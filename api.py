@@ -172,11 +172,8 @@ def listar_empresas(
         pagina=pagina, por_pagina=por_pagina,
     )
 
-    # Contabiliza os CNPJs retornados
-    retornados = len(resultado.get("dados", []))
-    if retornados > 0 and not info.get("is_admin") and info["plano"] != "pro":
-        db.consumir_quota(info["token"], retornados)
-
+    # Quota NÃO é consumida na listagem — só é consumida ao abrir o detalhe
+    # Isso garante que scroll, paginação e filtros não zeram a cota do usuário
     resultado["plano"]    = info["nome_plano"]
     resultado["restante"] = info.get("restante")
     return resultado
@@ -273,10 +270,10 @@ def listar_tokens(_: str = Depends(require_admin)):
 
 
 @app.delete("/api/admin/tokens/{token}")
-def desativar_token(token: str, _: str = Depends(require_admin)):
-    """Desativa um token de acesso."""
-    db.desativar_token(token)
-    return {"status": "desativado", "token": token}
+def excluir_token(token: str, _: str = Depends(require_admin)):
+    """Exclui permanentemente um token de acesso."""
+    db.excluir_token(token)
+    return {"status": "excluido", "token": token}
 
 
 @app.post("/api/admin/agente")

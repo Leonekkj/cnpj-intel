@@ -609,13 +609,47 @@ function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, 
   document.getElementById(pageInfoId).textContent = `Página ${paginaAtual} de ${Math.max(1,pages)}`;
   const pb = document.getElementById(pageBtnsId);
   pb.innerHTML = "";
-  for(let pg = Math.max(1, paginaAtual-2); pg <= Math.min(pages, paginaAtual+2); pg++) {
+
+  // ← Anterior (sempre visível se não está na pág 1)
+  const btnPrev = document.createElement("button");
+  btnPrev.className = "page-btn";
+  btnPrev.textContent = "← Ant";
+  btnPrev.disabled = paginaAtual <= 1;
+  btnPrev.style.opacity = paginaAtual <= 1 ? "0.3" : "1";
+  btnPrev.onclick = () => { if(paginaAtual > 1) onPage(paginaAtual - 1); };
+  pb.appendChild(btnPrev);
+
+  // Páginas numeradas com elipse
+  const startPg = Math.max(1, paginaAtual - 2);
+  const endPg   = Math.min(pages, paginaAtual + 2);
+  if(startPg > 1) {
+    const b1 = document.createElement("button");
+    b1.className = "page-btn"; b1.textContent = "1";
+    b1.onclick = () => onPage(1); pb.appendChild(b1);
+    if(startPg > 2) { const dots = document.createElement("span"); dots.textContent = "…"; dots.style.padding = "0 4px"; pb.appendChild(dots); }
+  }
+  for(let pg = startPg; pg <= endPg; pg++) {
     const b = document.createElement("button");
     b.className = "page-btn" + (pg === paginaAtual ? " active" : "");
     b.textContent = pg;
     b.onclick = () => onPage(pg);
     pb.appendChild(b);
   }
+  if(endPg < pages) {
+    if(endPg < pages - 1) { const dots = document.createElement("span"); dots.textContent = "…"; dots.style.padding = "0 4px"; pb.appendChild(dots); }
+    const bLast = document.createElement("button");
+    bLast.className = "page-btn"; bLast.textContent = pages;
+    bLast.onclick = () => onPage(pages); pb.appendChild(bLast);
+  }
+
+  // Próxima → (sempre visível se não está na última pág)
+  const btnNext = document.createElement("button");
+  btnNext.className = "page-btn";
+  btnNext.textContent = "Próx →";
+  btnNext.disabled = paginaAtual >= pages;
+  btnNext.style.opacity = paginaAtual >= pages ? "0.3" : "1";
+  btnNext.onclick = () => { if(paginaAtual < pages) onPage(paginaAtual + 1); };
+  pb.appendChild(btnNext);
 }
 
 function abrirModal(i, tbodyId) {
