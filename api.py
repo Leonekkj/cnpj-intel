@@ -28,6 +28,11 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+if not ADMIN_TOKEN:
+    import warnings
+    warnings.warn("⚠️  ADMIN_TOKEN não configurado!")
+
 db = Database()
 db.criar_tabelas()
 db.criar_tabela_tokens()
@@ -38,11 +43,6 @@ _tokens_legados = os.environ.get("TOKENS", "")
 for _t in [t.strip() for t in _tokens_legados.split(",") if t.strip()]:
     if _t != ADMIN_TOKEN:
         db.criar_token(_t, "pro")  # tokens antigos viram pro por padrão
-
-ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
-if not ADMIN_TOKEN:
-    import warnings
-    warnings.warn("⚠️  ADMIN_TOKEN não configurado!")
 
 security = HTTPBearer(auto_error=False)
 
