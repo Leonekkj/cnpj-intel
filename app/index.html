@@ -164,11 +164,11 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <div class="search-grid">
           <div class="field-group">
             <div class="field-label">Buscar</div>
-            <input type="text" id="q" placeholder="Empresa, CNPJ, cidade..." oninput="debounce(buscar,400)()">
+            <input type="text" id="q" placeholder="Empresa, CNPJ, cidade..." oninput="debounce(resetarBusca,400)()">
           </div>
           <div class="field-group">
             <div class="field-label">Estado</div>
-            <select id="uf" onchange="buscar()">
+            <select id="uf" onchange="resetarBusca()">
               <option value="">Todos</option>
               <option>AC</option><option>AL</option><option>AM</option><option>AP</option>
               <option>BA</option><option>CE</option><option>DF</option><option>ES</option>
@@ -181,7 +181,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           </div>
           <div class="field-group">
             <div class="field-label">Porte</div>
-            <select id="porte" onchange="buscar()">
+            <select id="porte" onchange="resetarBusca()">
               <option value="">Todos</option>
               <option value="MEI">MEI</option>
               <option value="MICRO EMPRESA">Micro empresa</option>
@@ -489,7 +489,7 @@ function atualizarPlanoUI(d) {
 }
 
 function abrirUpgrade() {
-  abrirModal(`
+  _openModal(`
     <h3 style="margin-bottom:16px">Fazer upgrade</h3>
     <p style="color:var(--muted);font-size:13px;margin-bottom:20px">
       Escolha o plano que melhor se encaixa na sua necessidade:
@@ -579,6 +579,9 @@ async function buscarAvancado() {
   } catch(e) {}
 }
 
+function resetarBusca() { pagina = 1; buscar(); }
+function resetarAvancado() { advPagina = 1; buscarAvancado(); }
+
 function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, onPage) {
   const tbody = document.getElementById(tbodyId);
   const lista = d.dados || [];
@@ -607,8 +610,25 @@ function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, 
   const pages = Math.ceil(total / (d.por_pagina || 20));
   document.getElementById(countId).textContent = `${total.toLocaleString("pt-BR")} resultados`;
   document.getElementById(pageInfoId).textContent = `Página ${paginaAtual} de ${Math.max(1,pages)}`;
+
+  // Auto-corrige: se está numa página que não existe mais, volta para 1
+  if (pages > 0 && paginaAtual > pages) { onPage(1); return; }
+
   const pb = document.getElementById(pageBtnsId);
   pb.innerHTML = "";
+  if (pages === 0) return;
+
+  // Sempre mostra página 1 quando está longe dela
+  if (paginaAtual > 3) {
+    const b1 = document.createElement("button");
+    b1.className = "page-btn"; b1.textContent = "1";
+    b1.onclick = () => onPage(1); pb.appendChild(b1);
+    if (paginaAtual > 4) {
+      const dots = document.createElement("span");
+      dots.textContent = "…"; dots.style.cssText = "padding:4px 6px;color:var(--muted)";
+      pb.appendChild(dots);
+    }
+  }
   for(let pg = Math.max(1, paginaAtual-2); pg <= Math.min(pages, paginaAtual+2); pg++) {
     const b = document.createElement("button");
     b.className = "page-btn" + (pg === paginaAtual ? " active" : "");
@@ -621,7 +641,7 @@ function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, 
 function abrirModal(i, tbodyId) {
   const arr = tbodyId === "tbody" ? dados : advDados;
   const e = arr[i]; if(!e) return;
-  document.getElementById("modal-content").innerHTML = `
+  _openModal(`
     <div class="modal-top">
       <div>
         <div class="modal-title">${e.razao_social||"—"}</div>
@@ -645,8 +665,7 @@ function abrirModal(i, tbodyId) {
       ${e.email ? `<button class="modal-btn" onclick="window.open('mailto:${e.email}','_blank')">✉️ E-mail</button>` : ""}
       ${e.instagram ? `<button class="modal-btn" onclick="window.open('https://instagram.com/${(e.instagram||"").replace("@","")}','_blank')">📸 Instagram</button>` : ""}
       ${e.site ? `<button class="modal-btn" onclick="window.open('https://${(e.site||"").replace(/https?:\/\//,"")}','_blank')">🌐 Site</button>` : ""}
-    </div>`;
-  document.getElementById("modal").className = "modal-bg open";
+    </div>`);
 }
 function fecharModal() { document.getElementById("modal").className = "modal-bg"; }
 
@@ -742,7 +761,7 @@ function exportarCSVAdv() {
     .catch(e => alert("Erro ao exportar: " + e.message));
 }
 
-function abrirModal(html) {
+function _openModal(html) {
   document.getElementById("modal-content").innerHTML = html;
   document.getElementById("modal").className = "modal-bg open";
 }
@@ -842,7 +861,7 @@ async function carregarTokens() {
         </td>
         <td style="font-size:11px;color:var(--muted)">${criadoEm}</td>
         <td><span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${ativo ? 'rgba(29,158,117,0.15)' : 'rgba(226,75,74,0.15)'};color:${ativo ? 'var(--accent2)' : 'var(--danger)'}">${ativo ? 'Ativo' : 'Inativo'}</span></td>
-        <td>${ativo ? `<button onclick="desativarToken('${t.token}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--danger);background:transparent;color:var(--danger);cursor:pointer">Desativar</button>` : '—'}</td>
+        <td><button onclick="excluirToken('${t.token}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--danger);background:transparent;color:var(--danger);cursor:pointer">Excluir</button></td>
       </tr>`;
     }).join("");
 
@@ -851,8 +870,8 @@ async function carregarTokens() {
   }
 }
 
-async function desativarToken(token) {
-  if (!confirm(`Desativar o acesso do token "${token}"?\nO cliente perderá o acesso imediatamente.`)) return;
+async function excluirToken(token) {
+  if (!confirm(`Excluir permanentemente o cliente "${token}"?\nEsta ação não pode ser desfeita.`)) return;
   try {
     const r = await fetch(`${API}/api/admin/tokens/${encodeURIComponent(token)}`, { method: "DELETE", headers: H });
     if (r.ok) carregarTokens();

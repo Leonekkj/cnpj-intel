@@ -273,10 +273,10 @@ def listar_tokens(_: str = Depends(require_admin)):
 
 
 @app.delete("/api/admin/tokens/{token}")
-def desativar_token(token: str, _: str = Depends(require_admin)):
-    """Desativa um token de acesso."""
-    db.desativar_token(token)
-    return {"status": "desativado", "token": token}
+def excluir_token(token: str, _: str = Depends(require_admin)):
+    """Exclui permanentemente um token de acesso."""
+    db.excluir_token(token)
+    return {"status": "excluido", "token": token}
 
 
 @app.post("/api/admin/agente")

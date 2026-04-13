@@ -25,11 +25,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [AGENTE] %(message)s
 log = logging.getLogger(__name__)
 
 GOOGLE_API_KEY  = os.environ.get("GOOGLE_API_KEY", "")
-DELAY           = 0.3   # delay entre CNPJs (inclui DuckDuckGo — respeita rate limit)
+DELAY           = 0.5   # delay por CNPJ dentro do semáforo (respeita rate limit DuckDuckGo)
 LOTE            = 5000
 PAUSA_CICLO     = 10
-TIMEOUT_CNPJ    = 20
-SALVAR_A_CADA   = 100
+TIMEOUT_CNPJ    = 25
+SALVAR_A_CADA   = 50
+CONCORRENCIA    = 5     # CNPJs processados em paralelo simultaneamente
 
 # Headers realistas para evitar bloqueio nos scrapers
 HEADERS_BROWSER = {
@@ -359,6 +360,16 @@ async def rodar_agente():
     else:
         log.info(f"🆕 Iniciando do zero. {total:,} CNPJs na fila.")
 
+    semaphore = asyncio.Semaphore(CONCORRENCIA)
+
+    async def enriquecer_paralelo(session, cnpj, db):
+        async with semaphore:
+            resultado = await enriquecer(session, cnpj, db)
+            await asyncio.sleep(DELAY)
+            return resultado
+
+    SUB_LOTE = CONCORRENCIA * 10  # sub-lotes de 50 CNPJs por gather
+
     async with aiohttp.ClientSession() as session:
         while True:
             try:
@@ -373,22 +384,21 @@ async def rodar_agente():
                     await asyncio.sleep(60)
                     continue
 
-                log.info(f"Ciclo: {inicio:,} → {fim:,} de {total:,} ({100*inicio//total}%)")
+                log.info(f"Ciclo: {inicio:,} → {fim:,} de {total:,} ({100*inicio//total}%) | concorrência={CONCORRENCIA}")
                 salvos = 0
 
-                for i, cnpj in enumerate(lote):
+                for sub_inicio in range(0, len(lote), SUB_LOTE):
+                    sub = lote[sub_inicio:sub_inicio + SUB_LOTE]
                     try:
-                        r = await enriquecer(session, cnpj, db)
-                        if r:
-                            salvos += 1
-                        await asyncio.sleep(DELAY)
-
-                        if (i + 1) % SALVAR_A_CADA == 0:
-                            db.salvar_progresso(inicio + i + 1)
-
+                        resultados = await asyncio.gather(
+                            *[enriquecer_paralelo(session, cnpj, db) for cnpj in sub],
+                            return_exceptions=True
+                        )
+                        salvos += sum(1 for r in resultados if r and not isinstance(r, Exception))
                     except Exception as e:
-                        log.debug(f"Erro no loop: {e}")
-                        continue
+                        log.debug(f"Erro no sub-lote: {e}")
+
+                    db.salvar_progresso(inicio + sub_inicio + len(sub))
 
                 offset = fim
                 db.salvar_progresso(offset)
