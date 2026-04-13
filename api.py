@@ -174,6 +174,14 @@ def listar_empresas(
 
     # Quota NÃO é consumida na listagem — só é consumida ao abrir o detalhe
     # Isso garante que scroll, paginação e filtros não zeram a cota do usuário
+
+    # Plano free: remove contatos da listagem (só revelados no detalhe via ver+)
+    if info["plano"] == "free":
+        campos_ocultos = ("telefone", "email", "instagram", "site")
+        for emp in resultado.get("dados", []):
+            for campo in campos_ocultos:
+                emp[campo] = ""
+
     resultado["plano"]    = info["nome_plano"]
     resultado["restante"] = info.get("restante")
     return resultado

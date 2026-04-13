@@ -489,7 +489,7 @@ function atualizarPlanoUI(d) {
 }
 
 function abrirUpgrade() {
-  abrirModal(`
+  _abrirModalHtml(`
     <h3 style="margin-bottom:16px">Fazer upgrade</h3>
     <p style="color:var(--muted);font-size:13px;margin-bottom:20px">
       Escolha o plano que melhor se encaixa na sua necessidade:
@@ -593,12 +593,18 @@ function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, 
         <td style="font-size:12px">${e.municipio||"—"}<br><span style="color:var(--muted)">${e.uf||""}</span></td>
         <td style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">${e.abertura||"—"}</td>
         <td style="font-size:12px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.socio_principal||"—"}</td>
-        <td class="mono" style="font-size:11px;color:${e.telefone?"var(--accent2)":"var(--muted)"}">${e.telefone||"—"}</td>
+        <td class="mono" style="font-size:11px;color:${e.telefone?"var(--accent2)":"var(--muted)"}">
+          ${planoInfo.plano==="free" && e.telefone ? `<span style="color:var(--muted)">🔒 ver+</span>` : (e.telefone||"—")}
+        </td>
         <td>
+          ${planoInfo.plano==="free" ? (
+            (e.email||e.instagram||e.site) ? `<span style="color:var(--muted);font-size:11px">🔒 ver+</span>` : `<span style="color:var(--muted);font-size:11px">—</span>`
+          ) : `
           ${e.email ? `<span class="tag tag-email" title="${e.email}">email</span>` : ""}
           ${e.instagram ? `<span class="tag tag-insta" title="${e.instagram}">insta</span>` : ""}
           ${e.site ? `<span class="tag tag-site" title="${e.site}">site</span>` : ""}
           ${!e.email && !e.instagram && !e.site ? `<span style="color:var(--muted);font-size:11px">—</span>` : ""}
+          `}
         </td>
         <td><button class="btn-ver" onclick="abrirModal(${i},'${tbodyId}')">ver +</button></td>
       </tr>`).join("");
@@ -652,9 +658,44 @@ function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, 
   pb.appendChild(btnNext);
 }
 
-function abrirModal(i, tbodyId) {
+async function abrirModal(i, tbodyId) {
   const arr = tbodyId === "tbody" ? dados : advDados;
-  const e = arr[i]; if(!e) return;
+  const base = arr[i]; if(!base) return;
+
+  // Mostra modal de loading imediatamente
+  document.getElementById("modal-content").innerHTML = `
+    <div class="modal-top">
+      <div>
+        <div class="modal-title">${base.razao_social||"—"}</div>
+        <div class="modal-sub">${fmtCNPJ(base.cnpj)}</div>
+      </div>
+      <button class="modal-close" onclick="fecharModal()">×</button>
+    </div>
+    <div style="text-align:center;padding:2rem;color:var(--muted)">Carregando detalhes...</div>`;
+  document.getElementById("modal").className = "modal-bg open";
+
+  // Chama API para consumir quota e obter dados completos
+  let e = base;
+  try {
+    const r = await fetch(API + "/api/empresa/" + base.cnpj, {headers: H});
+    if (r.status === 429) {
+      document.getElementById("modal-content").innerHTML = `
+        <div class="modal-top"><div><div class="modal-title">Limite diário atingido</div></div>
+          <button class="modal-close" onclick="fecharModal()">×</button></div>
+        <div style="padding:1.5rem;color:var(--muted);text-align:center">
+          <div style="font-size:2rem;margin-bottom:12px">🔒</div>
+          <p>Você atingiu o limite de <strong>${planoInfo.limite_dia} CNPJs/dia</strong> do plano Free.</p>
+          <button class="modal-btn" style="margin-top:16px" onclick="fecharModal();abrirUpgrade()">Ver planos</button>
+        </div>`;
+      return;
+    }
+    if (r.ok) {
+      e = await r.json();
+      // Atualiza quota na barra lateral
+      carregarPlano();
+    }
+  } catch(err) { /* usa dados locais como fallback */ }
+
   document.getElementById("modal-content").innerHTML = `
     <div class="modal-top">
       <div>
@@ -680,7 +721,6 @@ function abrirModal(i, tbodyId) {
       ${e.instagram ? `<button class="modal-btn" onclick="window.open('https://instagram.com/${(e.instagram||"").replace("@","")}','_blank')">📸 Instagram</button>` : ""}
       ${e.site ? `<button class="modal-btn" onclick="window.open('https://${(e.site||"").replace(/https?:\/\//,"")}','_blank')">🌐 Site</button>` : ""}
     </div>`;
-  document.getElementById("modal").className = "modal-bg open";
 }
 function fecharModal() { document.getElementById("modal").className = "modal-bg"; }
 
@@ -776,7 +816,7 @@ function exportarCSVAdv() {
     .catch(e => alert("Erro ao exportar: " + e.message));
 }
 
-function abrirModal(html) {
+function _abrirModalHtml(html) {
   document.getElementById("modal-content").innerHTML = html;
   document.getElementById("modal").className = "modal-bg open";
 }
