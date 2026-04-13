@@ -1,5 +1,6 @@
 """
-CNPJ Intel Agent — coleta e enriquece dados de empresas automaticamente.
+CNPJ Intel Agent — com persistência de progresso no PostgreSQL.
+Ao reiniciar, retoma de onde parou sem reprocessar CNPJs já salvos.
 """
 
 import asyncio
@@ -9,39 +10,32 @@ import logging
 import os
 import sys
 
-# Adiciona o diretório pai ao path para encontrar database.py
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import Database
 from datetime import datetime
-from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [AGENTE] %(message)s")
 log = logging.getLogger(__name__)
 
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
-HUNTER_API_KEY = os.environ.get("HUNTER_API_KEY", "")
+DELAY          = 0.5
+LOTE           = 2000
+PAUSA_CICLO    = 30
+TIMEOUT_CNPJ   = 15
+SALVAR_A_CADA  = 100
 
-DELAY_ENTRE_REQUESTS = 0.5   # segundos entre CNPJs
-MAX_CNPJS_POR_CICLO  = 2000  # CNPJs por ciclo
-PAUSA_ENTRE_CICLOS   = 60    # segundos entre ciclos (1 minuto)
-TIMEOUT_REQUEST      = 8     # timeout por request
 
-
-async def buscar_brasilapi(session: aiohttp.ClientSession, cnpj: str) -> Optional[dict]:
+async def buscar_brasilapi(session, cnpj):
     url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=TIMEOUT_REQUEST)) as r:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as r:
             if r.status == 200:
                 return await r.json()
             elif r.status == 429:
                 log.warning("Rate limit — aguardando 60s...")
                 await asyncio.sleep(60)
-            elif r.status == 404:
-                pass  # CNPJ não encontrado, normal
-    except asyncio.TimeoutError:
-        pass  # timeout, pula esse CNPJ
-    except Exception as e:
-        log.debug(f"Erro CNPJ {cnpj}: {e}")
+    except Exception:
+        pass
     return None
 
 
@@ -56,7 +50,7 @@ async def buscar_google_places(session, nome, cidade):
             "fields": "formatted_phone_number,website,rating,user_ratings_total",
             "key": GOOGLE_API_KEY,
         }
-        async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=6)) as r:
+        async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=5)) as r:
             if r.status == 200:
                 data = await r.json()
                 candidates = data.get("candidates", [])
@@ -81,15 +75,19 @@ async def extrair_contatos_do_site(session, url):
     resultado = {"email_site": "", "instagram_site": ""}
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
-        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=6), allow_redirects=True) as r:
+        async with session.get(url, headers=headers,
+                               timeout=aiohttp.ClientTimeout(total=5),
+                               allow_redirects=True) as r:
             if r.status == 200:
                 html = await r.text(errors="ignore")
                 emails = re.findall(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", html)
-                emails = [e for e in emails if not any(x in e for x in ["sentry", "example", "noreply", "wix.com"])]
+                emails = [e for e in emails if not any(x in e for x in
+                          ["sentry", "example", "noreply", "wix.com", "pixel", "schema"])]
                 if emails:
                     resultado["email_site"] = emails[0]
                 insta = re.findall(r'instagram\.com/([A-Za-z0-9_.]{2,30})', html)
-                insta = [i for i in insta if i not in ("p", "tv", "reel", "stories", "explore", "accounts")]
+                insta = [i for i in insta if i not in
+                         ("p","tv","reel","stories","explore","accounts","sharer")]
                 if insta:
                     resultado["instagram_site"] = "@" + insta[0]
     except Exception:
@@ -97,7 +95,7 @@ async def extrair_contatos_do_site(session, url):
     return resultado
 
 
-async def enriquecer_empresa(session, cnpj, db):
+async def _processar(session, cnpj, db):
     cnpj = re.sub(r"\D", "", cnpj)
     try:
         if db.cnpj_existe_recente(cnpj, dias=30):
@@ -116,9 +114,13 @@ async def enriquecer_empresa(session, cnpj, db):
         socios   = dados.get("qsa", [])
         socio    = socios[0].get("nome_socio", "") if socios else ""
 
-        google = await buscar_google_places(session, fantasia or nome, cidade)
-        site   = google.get("site_google", "")
+        google   = await buscar_google_places(session, fantasia or nome, cidade)
+        site     = google.get("site_google", "")
         contatos = await extrair_contatos_do_site(session, site)
+
+        ddd = dados.get("ddd_telefone_1", "")
+        num = dados.get("telefone_1", "")
+        tel_receita = f"({ddd}) {num}" if ddd and num else ""
 
         perfil = {
             "cnpj":            cnpj,
@@ -131,58 +133,93 @@ async def enriquecer_empresa(session, cnpj, db):
             "municipio":       cidade,
             "uf":              dados.get("uf", ""),
             "socio_principal": socio,
-            "telefone":        google.get("telefone_google", dados.get("ddd_telefone_1", "")),
-            "email":           contatos.get("email_site", ""),
+            "telefone":        google.get("telefone_google", "") or tel_receita,
+            "email":           contatos.get("email_site", "") or dados.get("email", "") or "",
             "instagram":       contatos.get("instagram_site", ""),
             "site":            site,
-            "rating_google":   google.get("rating_google", ""),
-            "avaliacoes":      google.get("avaliacoes", ""),
+            "rating_google":   str(google.get("rating_google", "")),
+            "avaliacoes":      str(google.get("avaliacoes", "")),
             "atualizado_em":   datetime.utcnow().isoformat(),
         }
 
         db.salvar_empresa(perfil)
-        log.info(f"✓ {nome[:40]} | {dados.get('uf','')} | tel:{bool(perfil['telefone'])} email:{bool(perfil['email'])}")
+        log.info(f"✓ {nome[:40]} | {dados.get('uf','')} | "
+                 f"tel:{bool(perfil['telefone'])} "
+                 f"email:{bool(perfil['email'])}")
         return perfil
 
     except Exception as e:
-        log.debug(f"Erro ao enriquecer {cnpj}: {e}")
+        log.debug(f"Erro {cnpj}: {e}")
+        return None
+
+
+async def enriquecer(session, cnpj, db):
+    try:
+        return await asyncio.wait_for(_processar(session, cnpj, db), timeout=TIMEOUT_CNPJ)
+    except asyncio.TimeoutError:
+        return None
+    except Exception:
         return None
 
 
 async def rodar_agente():
     db = Database()
     db.criar_tabelas()
+    db.criar_tabela_progresso()
 
     cnpjs = carregar_cnpjs_seed()
     total = len(cnpjs)
-    log.info(f"Agente iniciado. {total:,} CNPJs na fila.")
 
-    processados_total = 0
+    # Retoma de onde parou
+    offset = db.carregar_progresso()
+    if offset > 0 and offset < total:
+        log.info(f"🔄 Retomando do CNPJ {offset:,} de {total:,}")
+    elif offset >= total:
+        log.info("✅ Todos processados. Reiniciando do zero.")
+        offset = 0
+        db.salvar_progresso(0)
+    else:
+        log.info(f"🆕 Iniciando do zero. {total:,} CNPJs na fila.")
 
     async with aiohttp.ClientSession() as session:
         while True:
-            inicio = processados_total
-            fim    = min(processados_total + MAX_CNPJS_POR_CICLO, total)
-            lote   = cnpjs[inicio:fim]
+            try:
+                inicio = offset
+                fim    = min(offset + LOTE, total)
+                lote   = cnpjs[inicio:fim]
 
-            if not lote:
-                log.info("Todos os CNPJs processados! Reiniciando do zero...")
-                processados_total = 0
-                await asyncio.sleep(PAUSA_ENTRE_CICLOS)
-                continue
+                if not lote:
+                    log.info("✅ Todos processados! Reiniciando em 60s...")
+                    db.salvar_progresso(0)
+                    offset = 0
+                    await asyncio.sleep(60)
+                    continue
 
-            log.info(f"Ciclo: CNPJs {inicio:,} a {fim:,} de {total:,}")
-            salvos = 0
+                log.info(f"Ciclo: {inicio:,} → {fim:,} de {total:,} ({100*inicio//total}%)")
+                salvos = 0
 
-            for cnpj in lote:
-                resultado = await enriquecer_empresa(session, cnpj, db)
-                if resultado:
-                    salvos += 1
-                await asyncio.sleep(DELAY_ENTRE_REQUESTS)
+                for i, cnpj in enumerate(lote):
+                    try:
+                        r = await enriquecer(session, cnpj, db)
+                        if r:
+                            salvos += 1
+                        await asyncio.sleep(DELAY)
 
-            processados_total = fim
-            log.info(f"Ciclo completo. {salvos} novos salvos. Total processado: {processados_total:,}/{total:,}")
-            await asyncio.sleep(PAUSA_ENTRE_CICLOS)
+                        if (i + 1) % SALVAR_A_CADA == 0:
+                            db.salvar_progresso(inicio + i + 1)
+
+                    except Exception as e:
+                        log.debug(f"Erro no loop: {e}")
+                        continue
+
+                offset = fim
+                db.salvar_progresso(offset)
+                log.info(f"Ciclo completo. {salvos} salvos. Posição: {offset:,}/{total:,}")
+                await asyncio.sleep(PAUSA_CICLO)
+
+            except Exception as e:
+                log.error(f"Erro crítico: {e} — reiniciando em 30s")
+                await asyncio.sleep(30)
 
 
 def carregar_cnpjs_seed():

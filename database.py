@@ -1,5 +1,6 @@
 """
-Banco de dados — suporta PostgreSQL (produção) e SQLite (local).
+Banco de dados — PostgreSQL (produção) ou SQLite (local).
+Inclui persistência de progresso do agente.
 """
 
 import os
@@ -17,7 +18,6 @@ USE_POSTGRES = DATABASE_URL.startswith("postgresql") or DATABASE_URL.startswith(
 
 if USE_POSTGRES:
     import psycopg2
-    import psycopg2.extras
     print("Conectando ao PostgreSQL...")
     def _conn():
         return psycopg2.connect(DATABASE_URL)
@@ -29,8 +29,12 @@ else:
         conn.row_factory = sqlite3.Row
         return conn
 
+PH = "%s" if USE_POSTGRES else "?"
+LIKE = "ILIKE" if USE_POSTGRES else "LIKE"
+
 
 class Database:
+
     def criar_tabelas(self):
         with _conn() as conn:
             cur = conn.cursor()
@@ -55,15 +59,62 @@ class Database:
                     atualizado_em   TEXT
                 )
             """)
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_uf      ON empresas(uf)")
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_porte   ON empresas(porte)")
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_email   ON empresas(email)")
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_cnae    ON empresas(cnae)")
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_abertura ON empresas(abertura)")
+            for idx in ["uf", "porte", "email", "cnae", "abertura"]:
+                cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{idx} ON empresas({idx})")
             conn.commit()
 
+    def criar_tabela_progresso(self):
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS agente_progresso (
+                    id      INTEGER PRIMARY KEY,
+                    offset  INTEGER NOT NULL DEFAULT 0,
+                    updated TEXT
+                )
+            """)
+            if USE_POSTGRES:
+                cur.execute("""
+                    INSERT INTO agente_progresso (id, offset, updated)
+                    VALUES (1, 0, NOW()::TEXT)
+                    ON CONFLICT (id) DO NOTHING
+                """)
+            else:
+                cur.execute("""
+                    INSERT OR IGNORE INTO agente_progresso (id, offset, updated)
+                    VALUES (1, 0, datetime('now'))
+                """)
+            conn.commit()
+
+    def salvar_progresso(self, offset: int):
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute(
+                    "UPDATE agente_progresso SET offset = %s, updated = NOW()::TEXT WHERE id = 1",
+                    (offset,)
+                )
+            else:
+                cur.execute(
+                    "UPDATE agente_progresso SET offset = ?, updated = datetime('now') WHERE id = 1",
+                    (offset,)
+                )
+            conn.commit()
+
+    def carregar_progresso(self) -> int:
+        try:
+            with _conn() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT offset FROM agente_progresso WHERE id = 1")
+                row = cur.fetchone()
+                if row:
+                    return int(row[0])
+        except Exception as e:
+            print(f"Erro ao carregar progresso: {e}")
+        return 0
+
     def salvar_empresa(self, perfil: dict):
-        sql = """
+        sql_pg = """
             INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
@@ -72,20 +123,16 @@ class Database:
             ON CONFLICT (cnpj) DO UPDATE SET
                 razao_social=EXCLUDED.razao_social,
                 nome_fantasia=EXCLUDED.nome_fantasia,
-                porte=EXCLUDED.porte,
-                cnae=EXCLUDED.cnae,
-                situacao=EXCLUDED.situacao,
-                municipio=EXCLUDED.municipio,
-                uf=EXCLUDED.uf,
-                socio_principal=EXCLUDED.socio_principal,
-                telefone=EXCLUDED.telefone,
-                email=EXCLUDED.email,
-                instagram=EXCLUDED.instagram,
-                site=EXCLUDED.site,
+                porte=EXCLUDED.porte, cnae=EXCLUDED.cnae,
+                situacao=EXCLUDED.situacao, municipio=EXCLUDED.municipio,
+                uf=EXCLUDED.uf, socio_principal=EXCLUDED.socio_principal,
+                telefone=EXCLUDED.telefone, email=EXCLUDED.email,
+                instagram=EXCLUDED.instagram, site=EXCLUDED.site,
                 rating_google=EXCLUDED.rating_google,
                 avaliacoes=EXCLUDED.avaliacoes,
                 atualizado_em=EXCLUDED.atualizado_em
-        """ if USE_POSTGRES else """
+        """
+        sql_sq = """
             INSERT OR REPLACE INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
@@ -102,17 +149,14 @@ class Database:
         )
         with _conn() as conn:
             cur = conn.cursor()
-            cur.execute(sql, valores)
+            cur.execute(sql_pg if USE_POSTGRES else sql_sq, valores)
             conn.commit()
 
     def cnpj_existe_recente(self, cnpj: str, dias: int = 30) -> bool:
         limite = (datetime.utcnow() - timedelta(days=dias)).isoformat()
         with _conn() as conn:
             cur = conn.cursor()
-            cur.execute(
-                "SELECT atualizado_em FROM empresas WHERE cnpj = %s" if USE_POSTGRES else
-                "SELECT atualizado_em FROM empresas WHERE cnpj = ?", (cnpj,)
-            )
+            cur.execute(f"SELECT atualizado_em FROM empresas WHERE cnpj = {PH}", (cnpj,))
             row = cur.fetchone()
             if row and row[0] and row[0] > limite:
                 return True
@@ -125,36 +169,34 @@ class Database:
                         pagina=1, por_pagina=50) -> dict:
         filtros = ["1=1"]
         params = []
-        ph = "%s" if USE_POSTGRES else "?"
-        like_op = "ILIKE" if USE_POSTGRES else "LIKE"
 
         if q:
-            filtros.append(f"(razao_social {like_op} {ph} OR nome_fantasia {like_op} {ph} OR cnpj LIKE {ph} OR municipio {like_op} {ph})")
+            filtros.append(f"(razao_social {LIKE} {PH} OR nome_fantasia {LIKE} {PH} OR cnpj LIKE {PH} OR municipio {LIKE} {PH})")
             like = f"%{q}%"
             params.extend([like, like, like, like])
         if uf:
-            filtros.append(f"uf = {ph}")
+            filtros.append(f"uf = {PH}")
             params.append(uf.upper())
         if porte:
-            filtros.append(f"porte = {ph}")
-            params.append(porte.upper())
+            filtros.append(f"porte {LIKE} {PH}")
+            params.append(f"%{porte}%")
         if cnae:
-            filtros.append(f"cnae {like_op} {ph}")
+            filtros.append(f"cnae {LIKE} {PH}")
             params.append(f"%{cnae}%")
         if abertura_de:
-            filtros.append(f"abertura >= {ph}")
+            filtros.append(f"abertura >= {PH}")
             params.append(abertura_de)
         if abertura_ate:
-            filtros.append(f"abertura <= {ph}")
+            filtros.append(f"abertura <= {PH}")
             params.append(abertura_ate)
         if com_email:
-            filtros.append("email != '' AND email IS NOT NULL")
+            filtros.append("email IS NOT NULL AND email != ''")
         if com_instagram:
-            filtros.append("instagram != '' AND instagram IS NOT NULL")
+            filtros.append("instagram IS NOT NULL AND instagram != ''")
         if com_telefone:
-            filtros.append("telefone != '' AND telefone IS NOT NULL")
+            filtros.append("telefone IS NOT NULL AND telefone != ''")
         if com_site:
-            filtros.append("site != '' AND site IS NOT NULL")
+            filtros.append("site IS NOT NULL AND site != ''")
 
         where = " AND ".join(filtros)
         offset = (pagina - 1) * por_pagina
@@ -164,7 +206,7 @@ class Database:
             cur.execute(f"SELECT COUNT(*) FROM empresas WHERE {where}", params)
             total = cur.fetchone()[0]
             cur.execute(
-                f"SELECT * FROM empresas WHERE {where} ORDER BY atualizado_em DESC LIMIT {ph} OFFSET {ph}",
+                f"SELECT * FROM empresas WHERE {where} ORDER BY atualizado_em DESC LIMIT {PH} OFFSET {PH}",
                 params + [por_pagina, offset]
             )
             cols = [d[0] for d in cur.description]
@@ -172,44 +214,35 @@ class Database:
 
         return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "dados": rows}
 
-    def listar_cnaes(self) -> list:
-        """Retorna os 50 CNAEs mais frequentes."""
-        with _conn() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT cnae, COUNT(*) as n
-                FROM empresas
-                WHERE cnae IS NOT NULL AND cnae != ''
-                GROUP BY cnae
-                ORDER BY n DESC
-                LIMIT 50
-            """)
-            return [{"cnae": r[0], "total": r[1]} for r in cur.fetchall()]
-
     def estatisticas(self) -> dict:
         with _conn() as conn:
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) FROM empresas")
             total = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM empresas WHERE telefone != '' AND telefone IS NOT NULL")
+            cur.execute("SELECT COUNT(*) FROM empresas WHERE telefone IS NOT NULL AND telefone != ''")
             com_tel = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM empresas WHERE email != '' AND email IS NOT NULL")
+            cur.execute("SELECT COUNT(*) FROM empresas WHERE email IS NOT NULL AND email != ''")
             com_email = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM empresas WHERE instagram != '' AND instagram IS NOT NULL")
+            cur.execute("SELECT COUNT(*) FROM empresas WHERE instagram IS NOT NULL AND instagram != ''")
             com_insta = cur.fetchone()[0]
             cur.execute("SELECT uf, COUNT(*) as n FROM empresas GROUP BY uf ORDER BY n DESC LIMIT 10")
             por_uf = [{"uf": r[0], "n": r[1]} for r in cur.fetchall()]
             cur.execute("SELECT porte, COUNT(*) as n FROM empresas GROUP BY porte ORDER BY n DESC")
             por_porte = [{"porte": r[0], "n": r[1]} for r in cur.fetchall()]
-            cur.execute("""
-                SELECT cnae, COUNT(*) as n FROM empresas
-                WHERE cnae IS NOT NULL AND cnae != ''
-                GROUP BY cnae ORDER BY n DESC LIMIT 10
-            """)
-            top_cnaes = [{"cnae": r[0], "n": r[1]} for r in cur.fetchall()]
+            progresso = 0
+            try:
+                cur.execute("SELECT offset FROM agente_progresso WHERE id = 1")
+                row = cur.fetchone()
+                if row:
+                    progresso = int(row[0])
+            except Exception:
+                pass
         return {
-            "total": total, "com_telefone": com_tel,
-            "com_email": com_email, "com_instagram": com_insta,
-            "por_uf": por_uf, "por_porte": por_porte,
-            "top_cnaes": top_cnaes,
+            "total": total,
+            "com_telefone": com_tel,
+            "com_email": com_email,
+            "com_instagram": com_insta,
+            "por_uf": por_uf,
+            "por_porte": por_porte,
+            "progresso_agente": progresso,
         }
