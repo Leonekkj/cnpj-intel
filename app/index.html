@@ -111,13 +111,33 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div class="nav-item" onclick="showTab('busca')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Busca avançada
       </div>
-      <div class="nav-item" onclick="exportarCSV()">
+      <div class="nav-item" id="nav-export" onclick="exportarCSV()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar CSV
       </div>
     </div>
     <div class="agent-box">
       <div><span class="agent-dot"></span><span class="agent-label">Agente ativo</span></div>
       <div class="agent-sub">coletando dados...</div>
+    </div>
+
+    <!-- Plano do usuário -->
+    <div id="plano-box" style="background:rgba(29,158,117,0.07);border:1px solid rgba(29,158,117,0.15);border-radius:10px;padding:12px;margin-top:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:11px;color:var(--muted)">Plano</span>
+        <span id="plano-badge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(29,158,117,0.2);color:var(--accent2)">—</span>
+      </div>
+      <div id="quota-wrap" style="display:none">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:10px;color:var(--muted)">CNPJs hoje</span>
+          <span id="quota-txt" style="font-size:10px;color:var(--text);font-family:'DM Mono',monospace">—</span>
+        </div>
+        <div style="height:4px;background:var(--border);border-radius:4px;overflow:hidden">
+          <div id="quota-bar" style="height:100%;background:var(--accent);border-radius:4px;width:0%;transition:width 0.4s"></div>
+        </div>
+      </div>
+      <div id="upgrade-cta" style="display:none;margin-top:8px;font-size:10px;color:var(--warn);text-align:center">
+        ⚡ <a href="#" style="color:var(--warn);text-decoration:underline" onclick="abrirUpgrade()">Fazer upgrade</a>
+      </div>
     </div>
   </aside>
 
@@ -354,7 +374,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 <script>
 const API = window.location.hostname === "localhost" ? "http://localhost:8000" : "";
 const p = new URLSearchParams(window.location.search);
-const TOKEN = p.get("token") || localStorage.getItem("cnpj_token") || "demo123";
+const TOKEN = p.get("token") || localStorage.getItem("cnpj_token") || "";
 if(p.get("token")) localStorage.setItem("cnpj_token", TOKEN);
 const H = {"Authorization": "Bearer " + TOKEN};
 
@@ -362,6 +382,73 @@ let pagina = 1, advPagina = 1;
 let dados = [], advDados = [];
 let filtros = {tel:false, email:false, insta:false, site:false};
 let advFiltros = {tel:false, email:false, insta:false, site:false};
+let planoInfo = null;
+
+// ─── Plano & quota ────────────────────────────────────────────────
+async function carregarPlano() {
+  try {
+    const r = await fetch(API + "/api/meu-plano", {headers: H});
+    if (!r.ok) return;
+    const d = await r.json();
+    planoInfo = d;
+    atualizarPlanoUI(d);
+  } catch(e) {}
+}
+
+function atualizarPlanoUI(d) {
+  const badge = document.getElementById("plano-badge");
+  const quotaWrap = document.getElementById("quota-wrap");
+  const quotaTxt = document.getElementById("quota-txt");
+  const quotaBar = document.getElementById("quota-bar");
+  const upgradeCta = document.getElementById("upgrade-cta");
+  const navExport = document.getElementById("nav-export");
+
+  // Badge do plano
+  const cores = {free:"#EF9F27", basico:"#378ADD", pro:"#1D9E75", admin:"#7F77DD"};
+  badge.textContent = d.nome_plano || d.plano;
+  badge.style.background = (cores[d.plano] || "#7a8399") + "22";
+  badge.style.color = cores[d.plano] || "#7a8399";
+
+  // Quota bar (só para planos com limite)
+  if (d.limite_dia !== null) {
+    quotaWrap.style.display = "block";
+    const usado = d.cnpjs_hoje || 0;
+    const pct = Math.min(100, Math.round((usado / d.limite_dia) * 100));
+    quotaTxt.textContent = `${usado} / ${d.limite_dia}`;
+    quotaBar.style.width = pct + "%";
+    quotaBar.style.background = pct >= 90 ? "var(--danger)" : pct >= 70 ? "var(--warn)" : "var(--accent)";
+  }
+
+  // Bloquear export no free
+  if (!d.export) {
+    navExport.style.opacity = "0.4";
+    navExport.style.cursor = "not-allowed";
+    navExport.title = "Disponível no plano Básico ou Pro";
+    upgradeCta.style.display = "block";
+  }
+}
+
+function abrirUpgrade() {
+  abrirModal(`
+    <h3 style="margin-bottom:16px">Fazer upgrade</h3>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:20px">
+      Escolha o plano que melhor se encaixa na sua necessidade:
+    </p>
+    <div style="display:grid;gap:12px">
+      <div style="border:1px solid var(--warn);border-radius:10px;padding:16px">
+        <div style="font-weight:700;color:var(--warn);margin-bottom:4px">Básico — R$60/mês</div>
+        <div style="font-size:12px;color:var(--muted)">✓ 500 CNPJs/dia &nbsp; ✓ Export CSV</div>
+      </div>
+      <div style="border:1px solid var(--accent);border-radius:10px;padding:16px">
+        <div style="font-weight:700;color:var(--accent2);margin-bottom:4px">Pro — R$100/mês</div>
+        <div style="font-size:12px;color:var(--muted)">✓ Ilimitado &nbsp; ✓ Export CSV &nbsp; ✓ Acesso à API</div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:16px;text-align:center">
+      Entre em contato para fazer upgrade do seu plano.
+    </p>
+  `);
+}
 
 function showTab(t) {
   document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
@@ -528,16 +615,73 @@ function limparAvancado() {
   advPagina = 1;
 }
 
-function _csv(arr, nome) {
-  const headers = ["CNPJ","Razão Social","Fantasia","Porte","CNAE","Município","UF","Sócio","Telefone","E-mail","Instagram","Site","Abertura"];
-  const rows = arr.map(e => [fmtCNPJ(e.cnpj),e.razao_social,e.nome_fantasia,e.porte,e.cnae,e.municipio,e.uf,e.socio_principal,e.telefone,e.email,e.instagram,e.site,e.abertura].map(v=>`"${(v||"").toString().replace(/"/g,'""')}"`).join(","));
-  const csv = [headers.join(","), ...rows].join("\n");
-  const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = nome + "_" + new Date().toISOString().slice(0,10) + ".csv"; a.click();
+function exportarCSV() {
+  if (planoInfo && !planoInfo.export) {
+    abrirUpgrade();
+    return;
+  }
+  // Usa o endpoint /api/export que aplica os limites do plano no servidor
+  const params = new URLSearchParams({
+    q: document.getElementById("q")?.value || "",
+    uf: document.getElementById("uf")?.value || "",
+    porte: document.getElementById("porte")?.value || "",
+    com_telefone: filtros.tel,
+    com_email: filtros.email,
+    com_instagram: filtros.insta,
+    com_site: filtros.site,
+  });
+  const url = API + "/api/export?" + params;
+  const a = document.createElement("a");
+  a.href = url;
+  // Passa o token como parâmetro já que download não suporta headers
+  a.href = url + "&_token=" + TOKEN;
+  fetch(url, {headers: H})
+    .then(r => {
+      if (!r.ok) return r.json().then(e => { throw new Error(e.detail || "Erro no export"); });
+      return r.blob();
+    })
+    .then(blob => {
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "cnpj_intel_" + new Date().toISOString().slice(0,10) + ".csv";
+      link.click();
+    })
+    .catch(e => alert("Erro ao exportar: " + e.message));
 }
-function exportarCSV() { _csv(dados, "cnpj_intel"); }
-function exportarCSVAdv() { _csv(advDados, "cnpj_busca"); }
+
+function exportarCSVAdv() {
+  if (planoInfo && !planoInfo.export) { abrirUpgrade(); return; }
+  // Export dos resultados da busca avançada (mesma lógica com filtros adv)
+  const params = new URLSearchParams({
+    q: document.getElementById("adv-q")?.value || "",
+    uf: document.getElementById("adv-uf")?.value || "",
+    porte: document.getElementById("adv-porte")?.value || "",
+    cnae: document.getElementById("adv-cnae")?.value || "",
+    abertura_de: document.getElementById("adv-de")?.value || "",
+    abertura_ate: document.getElementById("adv-ate")?.value || "",
+    com_telefone: advFiltros.tel,
+    com_email: advFiltros.email,
+    com_instagram: advFiltros.insta,
+    com_site: advFiltros.site,
+  });
+  fetch(API + "/api/export?" + params, {headers: H})
+    .then(r => {
+      if (!r.ok) return r.json().then(e => { throw new Error(e.detail || "Erro"); });
+      return r.blob();
+    })
+    .then(blob => {
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "cnpj_busca_" + new Date().toISOString().slice(0,10) + ".csv";
+      link.click();
+    })
+    .catch(e => alert("Erro ao exportar: " + e.message));
+}
+
+function abrirModal(html) {
+  document.getElementById("modal-content").innerHTML = html;
+  document.getElementById("modal").className = "modal-bg open";
+}
 
 function porteBadge(p) {
   if(!p) return `<span class="badge b-de">—</span>`;
@@ -553,8 +697,10 @@ function fmtCNPJ(c) {
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 carregarStats();
+carregarPlano();
 buscar();
 setInterval(carregarStats, 15000);
+setInterval(carregarPlano, 60000); // Atualiza quota a cada minuto
 </script>
 </body>
 </html>

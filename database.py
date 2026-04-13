@@ -4,7 +4,7 @@ Inclui persistência de progresso do agente.
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date as date_type
 
 DATABASE_URL = (
     os.environ.get("DATABASE_URL") or
@@ -34,6 +34,127 @@ LIKE = "ILIKE" if USE_POSTGRES else "LIKE"
 
 
 class Database:
+
+    # ─── Planos ────────────────────────────────────────────────────
+    PLANOS = {
+        "free":   {"limite_dia": 10,  "export": False, "api": False, "nome": "Gratuito"},
+        "basico": {"limite_dia": 500, "export": True,  "api": False, "nome": "Básico"},
+        "pro":    {"limite_dia": None,"export": True,  "api": True,  "nome": "Pro"},
+    }
+
+    def criar_tabela_tokens(self):
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS tokens (
+                    token      TEXT PRIMARY KEY,
+                    plano      TEXT NOT NULL DEFAULT 'free',
+                    cnpjs_hoje INTEGER NOT NULL DEFAULT 0,
+                    data_reset TEXT,
+                    ativo      BOOLEAN NOT NULL DEFAULT TRUE,
+                    criado_em  TEXT
+                )
+            """)
+            conn.commit()
+
+    def criar_token(self, token: str, plano: str = "free") -> dict:
+        """Cria um novo token com plano especificado."""
+        agora = datetime.utcnow().isoformat()
+        hoje  = str(date_type.today())
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("""
+                    INSERT INTO tokens (token, plano, cnpjs_hoje, data_reset, ativo, criado_em)
+                    VALUES (%s, %s, 0, %s, TRUE, %s)
+                    ON CONFLICT (token) DO UPDATE SET plano = EXCLUDED.plano, ativo = TRUE
+                """, (token, plano, hoje, agora))
+            else:
+                cur.execute("""
+                    INSERT OR REPLACE INTO tokens (token, plano, cnpjs_hoje, data_reset, ativo, criado_em)
+                    VALUES (?, ?, 0, ?, 1, ?)
+                """, (token, plano, hoje, agora))
+            conn.commit()
+        return {"token": token, "plano": plano}
+
+    def verificar_token_db(self, token: str) -> dict | None:
+        """
+        Verifica token no banco. Retorna dict com plano e uso, ou None se inválido.
+        Reseta o contador diário automaticamente quando a data muda.
+        Não incrementa — use consumir_quota() para isso.
+        """
+        hoje = str(date_type.today())
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT plano, cnpjs_hoje, data_reset, ativo FROM tokens WHERE token = {PH}", (token,))
+            row = cur.fetchone()
+            if not row:
+                return None
+
+            plano, cnpjs_hoje, data_reset, ativo = row[0], row[1], row[2], row[3]
+
+            if not ativo:
+                return None
+
+            # Reset diário automático
+            if data_reset != hoje:
+                cur.execute(
+                    f"UPDATE tokens SET cnpjs_hoje = 0, data_reset = {PH} WHERE token = {PH}",
+                    (hoje, token)
+                )
+                conn.commit()
+                cnpjs_hoje = 0
+
+            info_plano = self.PLANOS.get(plano, self.PLANOS["free"])
+            limite     = info_plano["limite_dia"]
+
+            return {
+                "token":       token,
+                "plano":       plano,
+                "nome_plano":  info_plano["nome"],
+                "cnpjs_hoje":  cnpjs_hoje,
+                "limite_dia":  limite,
+                "restante":    (limite - cnpjs_hoje) if limite is not None else None,
+                "export":      info_plano["export"],
+                "api":         info_plano["api"],
+                "limite_atingido": limite is not None and cnpjs_hoje >= limite,
+            }
+
+    def consumir_quota(self, token: str, quantidade: int = 1):
+        """Incrementa o contador diário do token."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"UPDATE tokens SET cnpjs_hoje = cnpjs_hoje + {PH} WHERE token = {PH}",
+                (quantidade, token)
+            )
+            conn.commit()
+
+    def listar_tokens(self) -> list:
+        """Lista todos os tokens (painel admin)."""
+        hoje = str(date_type.today())
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT token, plano, cnpjs_hoje, data_reset, ativo, criado_em
+                FROM tokens ORDER BY criado_em DESC
+            """)
+            cols = [d[0] for d in cur.description]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+            for r in rows:
+                info = self.PLANOS.get(r["plano"], self.PLANOS["free"])
+                r["nome_plano"] = info["nome"]
+                r["limite_dia"] = info["limite_dia"]
+                # Reset contador se for de outro dia
+                if r["data_reset"] != hoje:
+                    r["cnpjs_hoje"] = 0
+            return rows
+
+    def desativar_token(self, token: str):
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE tokens SET ativo = FALSE WHERE token = {PH}", (token,))
+            conn.commit()
 
     def criar_tabelas(self):
         with _conn() as conn:
