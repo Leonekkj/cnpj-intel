@@ -3,6 +3,7 @@ API REST — serve dados do banco + dashboard web.
 """
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -14,19 +15,25 @@ from database import Database
 
 app = FastAPI(title="CNPJ Intel API", version="2.0")
 
+ALLOWED_ORIGINS = [
+    o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()
+] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 db = Database()
 db.criar_tabelas()
 
-TOKENS_VALIDOS = set(
-    t.strip() for t in os.environ.get("TOKENS", "demo123,admin456").split(",") if t.strip()
-)
+_tokens_env = os.environ.get("TOKENS", "")
+if not _tokens_env:
+    import warnings
+    warnings.warn("⚠️  Variável de ambiente TOKENS não configurada! Use tokens seguros em produção.")
+TOKENS_VALIDOS = set(t.strip() for t in _tokens_env.split(",") if t.strip()) or {"demo123"}
 
 security = HTTPBearer(auto_error=False)
 
@@ -86,11 +93,11 @@ def listar_cnaes(token: str = Depends(verificar_token)):
 
 @app.get("/api/empresa/{cnpj}")
 def detalhe_empresa(cnpj: str, token: str = Depends(verificar_token)):
-    result = db.buscar_empresas(q=cnpj, por_pagina=1)
-    dados = result.get("dados", [])
-    if not dados:
+    cnpj_limpo = re.sub(r"\D", "", cnpj)
+    result = db.buscar_empresa_por_cnpj(cnpj_limpo)
+    if not result:
         raise HTTPException(status_code=404, detail="CNPJ não encontrado")
-    return dados[0]
+    return result
 
 
 @app.post("/api/admin/agente")

@@ -66,23 +66,23 @@ class Database:
     def criar_tabela_progresso(self):
         with _conn() as conn:
             cur = conn.cursor()
-            # Dropa e recria para garantir estrutura correta
-            cur.execute("DROP TABLE IF EXISTS agente_progresso")
             cur.execute("""
-                CREATE TABLE agente_progresso (
+                CREATE TABLE IF NOT EXISTS agente_progresso (
                     id      INTEGER PRIMARY KEY,
                     posicao INTEGER NOT NULL DEFAULT 0,
                     updated TEXT
                 )
             """)
+            # Só insere linha inicial se ainda não existir — preserva progresso salvo
             if USE_POSTGRES:
                 cur.execute("""
                     INSERT INTO agente_progresso (id, posicao, updated)
                     VALUES (1, 0, NOW()::TEXT)
+                    ON CONFLICT (id) DO NOTHING
                 """)
             else:
                 cur.execute("""
-                    INSERT INTO agente_progresso (id, posicao, updated)
+                    INSERT OR IGNORE INTO agente_progresso (id, posicao, updated)
                     VALUES (1, 0, datetime('now'))
                 """)
             conn.commit()
@@ -214,6 +214,29 @@ class Database:
             rows = [dict(zip(cols, row)) for row in cur.fetchall()]
 
         return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "dados": rows}
+
+    def buscar_empresa_por_cnpj(self, cnpj: str) -> dict | None:
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT * FROM empresas WHERE cnpj = {PH}", (cnpj,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            cols = [d[0] for d in cur.description]
+            return dict(zip(cols, row))
+
+    def listar_cnaes(self) -> list:
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT cnae, COUNT(*) as n
+                FROM empresas
+                WHERE cnae IS NOT NULL AND cnae != ''
+                GROUP BY cnae
+                ORDER BY n DESC
+                LIMIT 100
+            """)
+            return [{"cnae": r[0], "n": r[1]} for r in cur.fetchall()]
 
     def estatisticas(self) -> dict:
         with _conn() as conn:
