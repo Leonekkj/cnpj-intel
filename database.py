@@ -293,11 +293,13 @@ class Database:
                 )
             """)
             # Adiciona coluna categoria_padrao em bancos já existentes (idempotente)
-            try:
-                cur.execute("ALTER TABLE empresas ADD COLUMN categoria_padrao TEXT")
-                conn.commit()
-            except Exception:
-                pass  # coluna já existe
+            if USE_POSTGRES:
+                cur.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS categoria_padrao TEXT")
+            else:
+                try:
+                    cur.execute("ALTER TABLE empresas ADD COLUMN categoria_padrao TEXT")
+                except Exception:
+                    conn.rollback()  # SQLite não suporta IF NOT EXISTS — reseta transação
 
             for idx in ["uf", "porte", "email", "cnae", "abertura", "atualizado_em", "categoria_padrao"]:
                 cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{idx} ON empresas({idx})")
