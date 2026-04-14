@@ -124,31 +124,40 @@ def _extrair_instagram_do_html(html: str) -> str:
     return ("@" + handles[0]) if handles else ""
 
 
+# Semáforo global de DDG — mais de 3 conexões simultâneas disparam rate limit.
+# Inicializado em rodar_agente() dentro do event loop correto.
+_DDG_SEM: asyncio.Semaphore | None = None
+
+
 async def buscar_duckduckgo(session, query: str, tentativas: int = 1) -> str:
     """
     Busca no DuckDuckGo Lite com retry e backoff.
     Retorna string vazia se bloqueado após todas as tentativas.
+    Usa _DDG_SEM para garantir no máximo 3 requisições simultâneas ao DDG,
+    evitando rate limit quando há muitos workers em paralelo.
     """
+    sem = _DDG_SEM if _DDG_SEM is not None else asyncio.Semaphore(3)
     url = f"https://html.duckduckgo.com/html/?q={quote(query)}"
-    for tentativa in range(tentativas):
-        try:
-            if tentativa > 0:
-                await asyncio.sleep(2 + tentativa * 2)  # backoff: 4s, 6s...
-            async with session.get(
-                url, headers=HEADERS_BROWSER,
-                timeout=aiohttp.ClientTimeout(total=5),
-                allow_redirects=True,
-            ) as r:
-                if r.status == 200:
-                    html = await r.text(errors="ignore")
-                    # DDG retorna página de "no results" ou CAPTCHA quando bloqueado
-                    if "duckduckgo" in html and len(html) > 2000:
-                        return html
-                elif r.status == 429:
-                    log.debug(f"DDG rate limit — aguardando antes de retry")
-                    await asyncio.sleep(5)
-        except Exception:
-            pass
+    async with sem:
+        for tentativa in range(tentativas):
+            try:
+                if tentativa > 0:
+                    await asyncio.sleep(2 + tentativa * 2)  # backoff: 4s, 6s...
+                async with session.get(
+                    url, headers=HEADERS_BROWSER,
+                    timeout=aiohttp.ClientTimeout(total=5),
+                    allow_redirects=True,
+                ) as r:
+                    if r.status == 200:
+                        html = await r.text(errors="ignore")
+                        # DDG retorna página de "no results" ou CAPTCHA quando bloqueado
+                        if "duckduckgo" in html and len(html) > 2000:
+                            return html
+                    elif r.status == 429:
+                        log.debug("DDG rate limit — aguardando antes de retry")
+                        await asyncio.sleep(5)
+            except Exception:
+                pass
     return ""
 
 
@@ -445,6 +454,12 @@ async def enriquecer(session, cnpj, db, forcar=False):
 # ─── Loop principal ───────────────────────────────────────────────────────────
 
 async def rodar_agente():
+    global _DDG_SEM
+    # Inicializa o semáforo DDG dentro do event loop correto.
+    # Limita a 3 requisições simultâneas ao DuckDuckGo para evitar rate limit,
+    # independente de quantos workers estejam rodando em paralelo.
+    _DDG_SEM = asyncio.Semaphore(3)
+
     db = Database()
     db.criar_tabelas()
     db.criar_tabela_progresso()
