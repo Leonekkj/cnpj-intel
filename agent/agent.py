@@ -87,6 +87,29 @@ async def buscar_brasilapi(session, cnpj):
 
 # ─── Google Places (requer GOOGLE_API_KEY) ────────────────────────────────────
 
+# Domínios que aparecem como "site" no Google Maps mas são diretórios/listas,
+# não o site real da empresa. Devem ser ignorados.
+_DOMINIOS_FALSOS = {
+    "cadastroempresa", "empresasdobrasil", "cnpj.info", "cnpja", "cnpjbiz",
+    "cnpj.biz", "cnpj.ws", "qsa.me", "econodata", "minhareceita",
+    "receitaws", "casadosdados", "sintegra", "oportunidades.com",
+    "telelistas", "guiamais", "apontador", "yellowpages", "infobel",
+    "hotfrog", "yelp.com", "tripadvisor", "foursquare",
+    "mercadolivre", "shopee", "americanas", "magazineluiza",
+    "jusbrasil", "escavador", "dnb.com", "opencorporates",
+    "linkedin.com", "facebook.com", "instagram.com",
+    "google.com", "youtube.com", "twitter.com", "tiktok.com",
+}
+
+def _site_valido(url: str) -> bool:
+    """Retorna False se a URL for de um diretório/listagem, não do site real."""
+    if not url:
+        return False
+    from urllib.parse import urlparse
+    dominio = urlparse(url).netloc.lower().lstrip("www.")
+    return not any(falso in dominio for falso in _DOMINIOS_FALSOS)
+
+
 async def buscar_google_places(session, nome, cidade):
     if not GOOGLE_API_KEY:
         return {}
@@ -104,9 +127,12 @@ async def buscar_google_places(session, nome, cidade):
                 candidates = data.get("candidates", [])
                 if candidates:
                     p = candidates[0]
+                    site_raw = p.get("website", "")
+                    # Descarta sites de diretórios registrados no Google Maps
+                    site = site_raw if _site_valido(site_raw) else ""
                     return {
                         "telefone_google": p.get("formatted_phone_number", ""),
-                        "site_google":     p.get("website", ""),
+                        "site_google":     site,
                         "rating_google":   p.get("rating", ""),
                         "avaliacoes":      p.get("user_ratings_total", ""),
                     }
@@ -413,9 +439,9 @@ async def _processar(session, cnpj, db, forcar=False):
             "atualizado_em":   datetime.utcnow().isoformat(),
         }
 
-        # "achou" = encontrou telefone (Google) ou site — e-mail/instagram ignorados por ora
-        achou = bool(perfil["site"] or
-                     (perfil["telefone"] and not tel_receita))
+        # Critério mínimo: deve ter telefone (Google Places ou Receita Federal).
+        # Site é bonus. Sem telefone a empresa não aparece no dashboard.
+        achou = bool(perfil["telefone"])
 
         # No REENRICH, só salva (e atualiza atualizado_em) se achou algo novo.
         # Isso evita que o ORDER BY atualizado_em ASC fique descontrolado

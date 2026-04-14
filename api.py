@@ -321,6 +321,15 @@ def iniciar_agente(_: str = Depends(require_admin)):
     return {"status": "Agente iniciado"}
 
 
+@app.post("/api/admin/limpar-sites")
+def limpar_sites(_: str = Depends(require_admin)):
+    """Remove URLs de diretórios/listagens salvas erroneamente no campo 'site'."""
+    total = db.limpar_sites_falsos()
+    # Invalida cache de stats
+    _stats_cache["data"] = None
+    return {"status": "ok", "registros_limpos": total}
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))

@@ -464,6 +464,8 @@ class Database:
             com_email = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM empresas WHERE instagram IS NOT NULL AND instagram != ''")
             com_insta = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM empresas WHERE site IS NOT NULL AND site != ''")
+            com_site = cur.fetchone()[0]
             cur.execute("SELECT uf, COUNT(*) as n FROM empresas GROUP BY uf ORDER BY n DESC LIMIT 10")
             por_uf = [{"uf": r[0], "n": r[1]} for r in cur.fetchall()]
             cur.execute("SELECT porte, COUNT(*) as n FROM empresas GROUP BY porte ORDER BY n DESC")
@@ -481,7 +483,36 @@ class Database:
             "com_telefone": com_tel,
             "com_email": com_email,
             "com_instagram": com_insta,
+            "com_site": com_site,
             "por_uf": por_uf,
             "por_porte": por_porte,
             "progresso_agente": progresso,
-        } 
+        }
+
+    def limpar_sites_falsos(self):
+        """
+        Zera o campo 'site' de registros que contêm URLs de diretórios/listagens,
+        não do site real da empresa. Executar uma vez após deploy.
+        """
+        dominios_falsos = [
+            "cadastroempresa", "empresasdobrasil", "cnpj.info", "cnpja",
+            "cnpjbiz", "cnpj.biz", "cnpj.ws", "qsa.me", "econodata",
+            "minhareceita", "receitaws", "casadosdados", "sintegra",
+            "oportunidades.com", "telelistas", "guiamais", "apontador",
+            "yellowpages", "infobel", "hotfrog", "yelp.com", "tripadvisor",
+            "foursquare", "mercadolivre", "shopee", "americanas",
+            "magazineluiza", "jusbrasil", "escavador", "dnb.com",
+            "opencorporates", "linkedin.com", "facebook.com",
+            "instagram.com", "youtube.com",
+        ]
+        with _conn() as conn:
+            cur = conn.cursor()
+            total = 0
+            for dominio in dominios_falsos:
+                cur.execute(
+                    f"UPDATE empresas SET site = '' WHERE site ILIKE {PH}",
+                    (f"%{dominio}%",)
+                )
+                total += cur.rowcount
+            conn.commit()
+        return total
