@@ -149,7 +149,8 @@ def listar_empresas(
     q:             str  = Query(""),
     uf:            str  = Query(""),
     porte:         str  = Query(""),
-    cnae:          str  = Query("", description="Filtro por CNAE ou palavra-chave do setor"),
+    cnae:          str  = Query("", description="Filtro livre por descrição CNAE"),
+    categoria:     str  = Query("", description="Filtro por categoria padronizada (ex: Advocacia, Saúde)"),
     abertura_de:   str  = Query("", description="Data de abertura inicial YYYY-MM-DD"),
     abertura_ate:  str  = Query("", description="Data de abertura final YYYY-MM-DD"),
     com_email:     bool = Query(False),
@@ -182,7 +183,7 @@ def listar_empresas(
                         "plano": info["nome_plano"], "restante": 0}
 
     resultado = db.buscar_empresas(
-        q=q, uf=uf, porte=porte, cnae=cnae,
+        q=q, uf=uf, porte=porte, cnae=cnae, categoria=categoria,
         abertura_de=abertura_de, abertura_ate=abertura_ate,
         com_email=com_email, com_instagram=com_instagram,
         com_telefone=com_telefone, com_site=com_site,
@@ -251,6 +252,7 @@ def exportar_csv(
     uf:            str  = Query(""),
     porte:         str  = Query(""),
     cnae:          str  = Query(""),
+    categoria:     str  = Query(""),
     abertura_de:   str  = Query(""),
     abertura_ate:  str  = Query(""),
     com_email:     bool = Query(False),
@@ -262,7 +264,7 @@ def exportar_csv(
     """Exporta resultados como CSV. Requer plano Básico ou Pro."""
     limite_export = 500 if info["plano"] == "basico" else 5000
     resultado = db.buscar_empresas(
-        q=q, uf=uf, porte=porte, cnae=cnae,
+        q=q, uf=uf, porte=porte, cnae=cnae, categoria=categoria,
         abertura_de=abertura_de, abertura_ate=abertura_ate,
         com_email=com_email, com_instagram=com_instagram,
         com_telefone=com_telefone, com_site=com_site,

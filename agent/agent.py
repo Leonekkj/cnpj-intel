@@ -87,18 +87,31 @@ async def buscar_brasilapi(session, cnpj):
 
 # ─── Google Places (requer GOOGLE_API_KEY) ────────────────────────────────────
 
-# Domínios que aparecem como "site" no Google Maps mas são diretórios/listas,
-# não o site real da empresa. Devem ser ignorados.
+# Domínios que NÃO são o site real da empresa:
+# diretórios de CNPJ, redes sociais, buscadores, marketplaces, etc.
+# Usada por _site_valido() (Google Places) E por buscar_site_ddg().
 _DOMINIOS_FALSOS = {
-    "cadastroempresa", "empresasdobrasil", "cnpj.info", "cnpja", "cnpjbiz",
+    # Diretórios brasileiros de CNPJ
+    "cadastroempresa", "cnpjativos", "infocnpj", "buscacnpj", "consulta-cnpj",
+    "empresasdobrasil", "cnpj.info", "cnpja", "cnpjbiz",
     "cnpj.biz", "cnpj.ws", "qsa.me", "econodata", "minhareceita",
-    "receitaws", "casadosdados", "sintegra", "oportunidades.com",
-    "telelistas", "guiamais", "apontador", "yellowpages", "infobel",
-    "hotfrog", "yelp.com", "tripadvisor", "foursquare",
-    "mercadolivre", "shopee", "americanas", "magazineluiza",
-    "jusbrasil", "escavador", "dnb.com", "opencorporates",
+    "receitaws", "casadosdados", "sintegra", "portaldatransparencia",
+    "servicos.receita", "oportunidades.com",
+    # Diretórios internacionais
+    "dnb.com", "d-u-n-s", "opencorporates", "bloomberg.com",
+    "crunchbase", "zoominfo", "manta.com", "bizapedia",
+    "companieshouse", "corpwatch",
+    # Listas e guias
+    "telelistas", "guiamais", "apontador", "yellowpages", "paginas.amarelas",
+    "yelp.com", "tripadvisor", "foursquare", "infobel", "hotfrog",
+    # Governo / jurídico
+    "receitafederal", "gov.br", "jusbrasil", "escavador", "tjsp",
+    # Marketplaces
+    "mercadolivre", "shopee", "americanas", "magazineluiza", "ifood", "rappi",
+    # Redes sociais e buscadores
     "linkedin.com", "facebook.com", "instagram.com",
     "google.com", "youtube.com", "twitter.com", "tiktok.com",
+    "bing.com", "yahoo.com", "whatsapp.com",
 }
 
 def _site_valido(url: str) -> bool:
@@ -226,36 +239,15 @@ async def buscar_site_ddg(session, nome: str, cidade: str) -> str:
         # Fallback: qualquer URL nos resultados
         urls = re.findall(r'href="(https?://[^"&]{10,})"', html)
 
-    # Filtra URLs irrelevantes — redes sociais, buscadores e
-    # diretórios de empresas que aparecem antes do site real
-    dominios_ignorar = {
-        # Redes sociais e buscadores
-        "duckduckgo", "google", "facebook", "instagram", "youtube",
-        "linkedin", "twitter", "tiktok", "bing", "yahoo", "whatsapp",
-        # Governo / jurídico
-        "receitafederal", "gov.br", "jusbrasil", "escavador", "tjsp",
-        # Diretórios de CNPJ brasileiros
-        "cnpj.info", "cnpja", "cnpjbiz", "cnpj.biz", "cnpj.ws",
-        "empresasdobrasil", "qsa.me", "econodata", "minhareceita",
-        "receitaws", "casadosdados", "sintegra", "servicos.receita",
-        # Diretórios internacionais de empresas
-        "dnb.com", "d-u-n-s", "opencorporates", "bloomberg.com",
-        "crunchbase", "zoominfo", "manta.com", "bizapedia",
-        "companieshouse", "corpwatch",
-        # Listas e guias
-        "telelistas", "guiamais", "apontador", "yellowpages",
-        "yelp.com", "tripadvisor", "foursquare", "paginas.amarelas",
-        "infobel", "hotfrog",
-        # Marketplaces e e-commerce genéricos
-        "mercadolivre", "shopee", "americanas", "magazineluiza",
-        "ifood", "rappi",
-    }
+    # Reutiliza _DOMINIOS_FALSOS — lista unificada com Google Places e banco.
+    # Também descarta duckduckgo.com que aparece nos próprios resultados.
+    _ignorar_ddg = _DOMINIOS_FALSOS | {"duckduckgo"}
     for url in urls:
         url = url.strip()
         if not url.startswith("http"):
             url = "https://" + url
         dominio = urlparse(url).netloc.lower()
-        if not any(ign in dominio for ign in dominios_ignorar):
+        if not any(ign in dominio for ign in _ignorar_ddg):
             log.debug(f"Site via DDG: {url} para '{nome}'")
             return url
     return ""
