@@ -236,38 +236,51 @@ class Database:
         return 0
 
     def salvar_empresa(self, perfil: dict):
-        sql_pg = """
+        # Campos de contato: só atualiza se o novo valor NÃO for vazio.
+        # Isso evita que o REENRICH apague dados existentes quando a nova
+        # passagem não encontra o contato (ex: telefone que já estava salvo).
+        _coalesce_pg = "CASE WHEN EXCLUDED.{f} != '' THEN EXCLUDED.{f} ELSE empresas.{f} END"
+        _coalesce_sq = "CASE WHEN excluded.{f} != '' THEN excluded.{f} ELSE empresas.{f} END"
+
+        contatos = ("telefone", "email", "instagram", "site", "rating_google", "avaliacoes")
+
+        def _sets_pg():
+            fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
+                     "municipio","uf","socio_principal","atualizado_em"]
+            partes = [f"{f}=EXCLUDED.{f}" for f in fixos]
+            partes += [f"{f}={_coalesce_pg.format(f=f)}" for f in contatos]
+            return ", ".join(partes)
+
+        def _sets_sq():
+            fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
+                     "municipio","uf","socio_principal","atualizado_em"]
+            partes = [f"{f}=excluded.{f}" for f in fixos]
+            partes += [f"{f}={_coalesce_sq.format(f=f)}" for f in contatos]
+            return ", ".join(partes)
+
+        sql_pg = f"""
             INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
              instagram, site, rating_google, avaliacoes, atualizado_em)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (cnpj) DO UPDATE SET
-                razao_social=EXCLUDED.razao_social,
-                nome_fantasia=EXCLUDED.nome_fantasia,
-                porte=EXCLUDED.porte, cnae=EXCLUDED.cnae,
-                situacao=EXCLUDED.situacao, municipio=EXCLUDED.municipio,
-                uf=EXCLUDED.uf, socio_principal=EXCLUDED.socio_principal,
-                telefone=EXCLUDED.telefone, email=EXCLUDED.email,
-                instagram=EXCLUDED.instagram, site=EXCLUDED.site,
-                rating_google=EXCLUDED.rating_google,
-                avaliacoes=EXCLUDED.avaliacoes,
-                atualizado_em=EXCLUDED.atualizado_em
+            ON CONFLICT (cnpj) DO UPDATE SET {_sets_pg()}
         """
-        sql_sq = """
-            INSERT OR REPLACE INTO empresas
+        sql_sq = f"""
+            INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
              instagram, site, rating_google, avaliacoes, atualizado_em)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(cnpj) DO UPDATE SET {_sets_sq()}
         """
         valores = (
             perfil.get("cnpj"), perfil.get("razao_social"), perfil.get("nome_fantasia"),
             perfil.get("porte"), perfil.get("cnae"), perfil.get("situacao"),
             perfil.get("abertura"), perfil.get("municipio"), perfil.get("uf"),
-            perfil.get("socio_principal"), perfil.get("telefone"), perfil.get("email"),
-            perfil.get("instagram"), perfil.get("site"), perfil.get("rating_google"),
-            perfil.get("avaliacoes"), perfil.get("atualizado_em"),
+            perfil.get("socio_principal"), perfil.get("telefone",""), perfil.get("email",""),
+            perfil.get("instagram",""), perfil.get("site",""), perfil.get("rating_google",""),
+            perfil.get("avaliacoes",""), perfil.get("atualizado_em"),
         )
         with _conn() as conn:
             cur = conn.cursor()

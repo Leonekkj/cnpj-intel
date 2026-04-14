@@ -579,6 +579,22 @@ async function buscarAvancado() {
   } catch(e) {}
 }
 
+function _celTelefone(e) {
+  const isFree = planoInfo.plano === "free";
+  if (isFree) return '<span style="color:var(--muted);font-size:11px">🔒 ver+</span>';
+  if (e.telefone) return '<span style="color:var(--accent2)">' + e.telefone + '</span>';
+  return '<span style="color:var(--muted)">—</span>';
+}
+function _celContatos(e) {
+  const isFree = planoInfo.plano === "free";
+  if (isFree) return '<span style="color:var(--muted);font-size:11px">🔒 ver+</span>';
+  let tags = "";
+  if (e.email)     tags += '<span class="tag tag-email" title="' + e.email + '">email</span>';
+  if (e.instagram) tags += '<span class="tag tag-insta" title="' + e.instagram + '">insta</span>';
+  if (e.site)      tags += '<span class="tag tag-site"  title="' + e.site + '">site</span>';
+  return tags || '<span style="color:var(--muted);font-size:11px">—</span>';
+}
+
 function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, onPage) {
   const tbody = document.getElementById(tbodyId);
   const lista = d.dados || [];
@@ -593,19 +609,8 @@ function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, 
         <td style="font-size:12px">${e.municipio||"—"}<br><span style="color:var(--muted)">${e.uf||""}</span></td>
         <td style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">${e.abertura||"—"}</td>
         <td style="font-size:12px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.socio_principal||"—"}</td>
-        <td class="mono" style="font-size:11px;color:${e.telefone?"var(--accent2)":"var(--muted)"}">
-          ${planoInfo.plano==="free" && e.telefone ? `<span style="color:var(--muted)">🔒 ver+</span>` : (e.telefone||"—")}
-        </td>
-        <td>
-          ${planoInfo.plano==="free" ? (
-            (e.email||e.instagram||e.site) ? `<span style="color:var(--muted);font-size:11px">🔒 ver+</span>` : `<span style="color:var(--muted);font-size:11px">—</span>`
-          ) : `
-          ${e.email ? `<span class="tag tag-email" title="${e.email}">email</span>` : ""}
-          ${e.instagram ? `<span class="tag tag-insta" title="${e.instagram}">insta</span>` : ""}
-          ${e.site ? `<span class="tag tag-site" title="${e.site}">site</span>` : ""}
-          ${!e.email && !e.instagram && !e.site ? `<span style="color:var(--muted);font-size:11px">—</span>` : ""}
-          `}
-        </td>
+        <td class="mono" style="font-size:11px">${_celTelefone(e)}</td>
+        <td>${_celContatos(e)}</td>
         <td><button class="btn-ver" onclick="abrirModal(${i},'${tbodyId}')">ver +</button></td>
       </tr>`).join("");
   }
