@@ -30,14 +30,14 @@ REENRICH_SEM_CONTATO = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1
 # Com Google Places: REENRICH usa concorrência 10 (Google é rápido,
 # DDG só é chamado como fallback dentro de cada task).
 # Sem Google Places: REENRICH fica em 3 para não travar o DDG.
-CONCORRENCIA = 10 if (REENRICH_SEM_CONTATO and GOOGLE_API_KEY) else \
+CONCORRENCIA = 15 if (REENRICH_SEM_CONTATO and GOOGLE_API_KEY) else \
                (3  if REENRICH_SEM_CONTATO else \
                (15 if GOOGLE_API_KEY else 5))
 
 DELAY        = 0.3 if GOOGLE_API_KEY else (0.8 if REENRICH_SEM_CONTATO else 0.5)
 LOTE         = 3000 if REENRICH_SEM_CONTATO else 5000
 PAUSA_CICLO  = 5
-TIMEOUT_CNPJ = 20
+TIMEOUT_CNPJ = 30
 SALVAR_A_CADA = 50
 
 # Headers realistas para evitar bloqueio nos scrapers
@@ -124,7 +124,7 @@ def _extrair_instagram_do_html(html: str) -> str:
     return ("@" + handles[0]) if handles else ""
 
 
-async def buscar_duckduckgo(session, query: str, tentativas: int = 2) -> str:
+async def buscar_duckduckgo(session, query: str, tentativas: int = 1) -> str:
     """
     Busca no DuckDuckGo Lite com retry e backoff.
     Retorna string vazia se bloqueado após todas as tentativas.
@@ -136,7 +136,7 @@ async def buscar_duckduckgo(session, query: str, tentativas: int = 2) -> str:
                 await asyncio.sleep(2 + tentativa * 2)  # backoff: 4s, 6s...
             async with session.get(
                 url, headers=HEADERS_BROWSER,
-                timeout=aiohttp.ClientTimeout(total=10),
+                timeout=aiohttp.ClientTimeout(total=5),
                 allow_redirects=True,
             ) as r:
                 if r.status == 200:
@@ -357,16 +357,18 @@ async def _processar(session, cnpj, db, forcar=False):
             tel_receita = f"({ddd}) {num}" if ddd and num else ""
             nome_busca = fantasia or nome
 
-        # 1+4. Google Places e DDG Instagram são independentes → rodam em paralelo
+        # 1+2+4. Google Places, DDG Instagram e DDG site rodam todos em paralelo.
+        # Antes, buscar_site_ddg era chamado sequencialmente APÓS o gather, custando
+        # até 10s extras por CNPJ. Agora todos são disparados juntos.
         google_task = buscar_google_places(session, nome_busca, cidade)
         insta_task  = buscar_instagram_ddg(session, nome_busca, cidade)
-        google, insta_ddg_fallback = await asyncio.gather(google_task, insta_task)
+        site_task   = buscar_site_ddg(session, nome_busca, cidade)
+        google, insta_ddg_fallback, site_ddg = await asyncio.gather(
+            google_task, insta_task, site_task
+        )
 
-        site = google.get("site_google", "")
-
-        # 2. Se não tem site (Google Places off ou sem resultado), tenta DuckDuckGo
-        if not site:
-            site = await buscar_site_ddg(session, nome_busca, cidade)
+        # Google Places tem prioridade; DDG site é fallback
+        site = google.get("site_google", "") or site_ddg
 
         # 3. Scraping do site (homepage + páginas de contato, em paralelo)
         contatos = await extrair_contatos_do_site(session, site)
