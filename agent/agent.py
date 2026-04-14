@@ -27,18 +27,18 @@ log = logging.getLogger(__name__)
 GOOGLE_API_KEY     = os.environ.get("GOOGLE_API_KEY", "")
 REENRICH_SEM_CONTATO = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1", "true", "yes")
 
-# Concorrência separada: Google Places suporta paralelismo alto,
-# mas DuckDuckGo bloqueia com >3 req simultâneas.
-# No REENRICH usamos DDG intensamente → mantemos concorrência baixa.
-CONCORRENCIA_GOOGLE = 15   # para chamadas ao Google Places
-CONCORRENCIA_DDG    = 3    # DuckDuckGo bloqueia acima disso
-CONCORRENCIA        = CONCORRENCIA_DDG if REENRICH_SEM_CONTATO else (CONCORRENCIA_GOOGLE if GOOGLE_API_KEY else 5)
+# Com Google Places: REENRICH usa concorrência 10 (Google é rápido,
+# DDG só é chamado como fallback dentro de cada task).
+# Sem Google Places: REENRICH fica em 3 para não travar o DDG.
+CONCORRENCIA = 10 if (REENRICH_SEM_CONTATO and GOOGLE_API_KEY) else \
+               (3  if REENRICH_SEM_CONTATO else \
+               (15 if GOOGLE_API_KEY else 5))
 
-DELAY           = 1.0 if REENRICH_SEM_CONTATO else (0.3 if GOOGLE_API_KEY else 0.5)
-LOTE            = 2000 if REENRICH_SEM_CONTATO else 5000
-PAUSA_CICLO     = 10
-TIMEOUT_CNPJ    = 30
-SALVAR_A_CADA   = 50
+DELAY        = 0.3 if GOOGLE_API_KEY else (0.8 if REENRICH_SEM_CONTATO else 0.5)
+LOTE         = 3000 if REENRICH_SEM_CONTATO else 5000
+PAUSA_CICLO  = 5
+TIMEOUT_CNPJ = 20
+SALVAR_A_CADA = 50
 
 # Headers realistas para evitar bloqueio nos scrapers
 HEADERS_BROWSER = {
@@ -325,23 +325,37 @@ async def extrair_contatos_do_site(session, site_url: str) -> dict:
 async def _processar(session, cnpj, db, forcar=False):
     cnpj = re.sub(r"\D", "", cnpj)
     try:
-        # Em modo REENRICH ou forçado, ignora a verificação de recência
-        if not forcar and db.cnpj_existe_recente(cnpj, dias=30):
-            return None
+        # Em modo REENRICH (forcar=True): usa dados já salvos no banco
+        # para evitar chamadas desnecessárias à BrasilAPI (que tem rate limit).
+        if forcar:
+            registro = db.buscar_empresa_por_cnpj(cnpj)
+            if not registro:
+                return None
+            nome       = registro.get("razao_social", "")
+            fantasia   = registro.get("nome_fantasia", "")
+            cidade     = registro.get("municipio", "")
+            socio      = registro.get("socio_principal", "")
+            tel_receita = registro.get("telefone", "")
+            nome_busca = fantasia or nome
+        else:
+            if db.cnpj_existe_recente(cnpj, dias=30):
+                return None
 
-        dados = await buscar_brasilapi(session, cnpj)
-        if not dados:
-            return None
+            dados = await buscar_brasilapi(session, cnpj)
+            if not dados:
+                return None
+            if dados.get("descricao_situacao_cadastral", "").upper() != "ATIVA":
+                return None
 
-        if dados.get("descricao_situacao_cadastral", "").upper() != "ATIVA":
-            return None
-
-        nome     = dados.get("razao_social", "")
-        fantasia = dados.get("nome_fantasia", "")
-        cidade   = dados.get("municipio", "")
-        socios   = dados.get("qsa", [])
-        socio    = socios[0].get("nome_socio", "") if socios else ""
-        nome_busca = fantasia or nome  # nome fantasia é mais reconhecível
+            nome       = dados.get("razao_social", "")
+            fantasia   = dados.get("nome_fantasia", "")
+            cidade     = dados.get("municipio", "")
+            socios     = dados.get("qsa", [])
+            socio      = socios[0].get("nome_socio", "") if socios else ""
+            ddd        = dados.get("ddd_telefone_1", "")
+            num        = dados.get("telefone_1", "")
+            tel_receita = f"({ddd}) {num}" if ddd and num else ""
+            nome_busca = fantasia or nome
 
         # 1+4. Google Places e DDG Instagram são independentes → rodam em paralelo
         google_task = buscar_google_places(session, nome_busca, cidade)
@@ -361,23 +375,33 @@ async def _processar(session, cnpj, db, forcar=False):
         if not contatos["instagram_site"]:
             contatos["instagram_site"] = insta_ddg_fallback
 
-        ddd = dados.get("ddd_telefone_1", "")
-        num = dados.get("telefone_1", "")
-        tel_receita = f"({ddd}) {num}" if ddd and num else ""
+        # No REENRICH usamos dados do banco; no fluxo normal usamos dados da BrasilAPI
+        if forcar:
+            porte    = registro.get("porte", "")
+            cnae_str = registro.get("cnae", "")
+            abertura = registro.get("abertura", "")
+            uf       = registro.get("uf", "")
+            email_rf = registro.get("email", "")
+        else:
+            porte    = dados.get("porte", "")
+            cnae_str = dados.get("cnae_fiscal_descricao", "")
+            abertura = dados.get("data_inicio_atividade", "")
+            uf       = dados.get("uf", "")
+            email_rf = dados.get("email", "")
 
         perfil = {
             "cnpj":            cnpj,
             "razao_social":    nome,
             "nome_fantasia":   fantasia,
-            "porte":           dados.get("porte", ""),
-            "cnae":            dados.get("cnae_fiscal_descricao", ""),
+            "porte":           porte,
+            "cnae":            cnae_str,
             "situacao":        "ATIVA",
-            "abertura":        dados.get("data_inicio_atividade", ""),
+            "abertura":        abertura,
             "municipio":       cidade,
-            "uf":              dados.get("uf", ""),
+            "uf":              uf,
             "socio_principal": socio,
             "telefone":        google.get("telefone_google", "") or tel_receita,
-            "email":           contatos.get("email_site", "") or dados.get("email", "") or "",
+            "email":           contatos.get("email_site", "") or email_rf or "",
             "instagram":       contatos.get("instagram_site", ""),
             "site":            site,
             "rating_google":   str(google.get("rating_google", "")),
@@ -387,7 +411,7 @@ async def _processar(session, cnpj, db, forcar=False):
 
         db.salvar_empresa(perfil)
         log.info(
-            f"✓ {nome_busca[:35]:<35} | {dados.get('uf','')} | "
+            f"✓ {nome_busca[:35]:<35} | {uf} | "
             f"tel:{bool(perfil['telefone'])} "
             f"email:{bool(perfil['email'])} "
             f"insta:{bool(perfil['instagram'])}"
