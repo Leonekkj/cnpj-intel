@@ -409,14 +409,22 @@ async def _processar(session, cnpj, db, forcar=False):
             "atualizado_em":   datetime.utcnow().isoformat(),
         }
 
-        db.salvar_empresa(perfil)
+        achou = bool(perfil["email"] or perfil["instagram"] or perfil["site"] or
+                     (perfil["telefone"] and not tel_receita))  # telefone novo (não era do banco)
+
+        # No REENRICH, só salva (e atualiza atualizado_em) se achou algo novo.
+        # Isso evita que o ORDER BY atualizado_em ASC fique descontrolado
+        # e o offset pule empresas não processadas.
+        if not forcar or achou:
+            db.salvar_empresa(perfil)
+
         log.info(
-            f"✓ {nome_busca[:35]:<35} | {uf} | "
+            f"{'✓' if achou else '·'} {nome_busca[:35]:<35} | {uf} | "
             f"tel:{bool(perfil['telefone'])} "
             f"email:{bool(perfil['email'])} "
             f"insta:{bool(perfil['instagram'])}"
         )
-        return perfil
+        return perfil if achou else None
 
     except Exception as e:
         log.debug(f"Erro {cnpj}: {e}")
@@ -564,8 +572,11 @@ async def rodar_reenrich(db):
                         log.debug(f"Erro sub-lote reenrich: {e}")
 
                 total_salvos += salvos_lote
-                # Avança o offset apenas pelos que não foram salvos (os salvos saem da query)
-                offset_db += max(0, len(lote) - salvos_lote)
+                # Avança pelo tamanho total do lote — os que achamos contato saem
+                # da query (não têm mais email/insta vazio), os que não achamos
+                # ficam no banco com atualizado_em INALTERADO (não chamamos salvar_empresa
+                # pra eles), então são vistos novamente na próxima rodada mas com offset maior.
+                offset_db += len(lote)
                 log.info(f"Lote REENRICH: {salvos_lote} atualizados. Total: {total_salvos:,}")
                 await asyncio.sleep(PAUSA_CICLO)
 
