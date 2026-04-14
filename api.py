@@ -155,14 +155,15 @@ def listar_empresas(
     por_pagina:    int  = Query(50, le=200),
     info:          dict = Depends(get_token_info),
 ):
-    # Aplica limite do plano no por_pagina
-    limite = info.get("limite_dia")
-    restante = info.get("restante")
-    if limite is not None and restante is not None:
-        por_pagina = min(por_pagina, restante) if restante > 0 else 0
-        if por_pagina == 0:
-            return {"total": 0, "pagina": pagina, "por_pagina": 0, "dados": [],
-                    "plano": info["nome_plano"], "restante": 0}
+    # Free: limita por_pagina ao restante (ver+ consome quota)
+    # Básico/Pro: sem restrição na listagem — quota do básico conta no export
+    if info["plano"] == "free":
+        restante = info.get("restante", 0)
+        if info.get("limite_dia") is not None:
+            por_pagina = min(por_pagina, restante) if restante > 0 else 0
+            if por_pagina == 0:
+                return {"total": 0, "pagina": pagina, "por_pagina": 0, "dados": [],
+                        "plano": info["nome_plano"], "restante": 0}
 
     resultado = db.buscar_empresas(
         q=q, uf=uf, porte=porte, cnae=cnae,
@@ -205,8 +206,9 @@ def detalhe_empresa(cnpj: str, info: dict = Depends(get_token_info)):
     if not result:
         raise HTTPException(status_code=404, detail="CNPJ não encontrado")
 
-    # Contabiliza 1 CNPJ visualizado
-    if not info.get("is_admin") and info["plano"] != "pro":
+    # Quota: só o plano free consome ao abrir detalhe (ver+)
+    # Básico consome no export, Pro é ilimitado
+    if not info.get("is_admin") and info["plano"] == "free":
         db.consumir_quota(info["token"], 1)
 
     return result

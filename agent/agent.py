@@ -27,13 +27,18 @@ log = logging.getLogger(__name__)
 GOOGLE_API_KEY     = os.environ.get("GOOGLE_API_KEY", "")
 REENRICH_SEM_CONTATO = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1", "true", "yes")
 
-# Com Google Places API podemos usar mais concorrência (API estável vs scraping frágil)
-DELAY           = 0.2 if GOOGLE_API_KEY else 0.5
-LOTE            = 5000
+# Concorrência separada: Google Places suporta paralelismo alto,
+# mas DuckDuckGo bloqueia com >3 req simultâneas.
+# No REENRICH usamos DDG intensamente → mantemos concorrência baixa.
+CONCORRENCIA_GOOGLE = 15   # para chamadas ao Google Places
+CONCORRENCIA_DDG    = 3    # DuckDuckGo bloqueia acima disso
+CONCORRENCIA        = CONCORRENCIA_DDG if REENRICH_SEM_CONTATO else (CONCORRENCIA_GOOGLE if GOOGLE_API_KEY else 5)
+
+DELAY           = 1.0 if REENRICH_SEM_CONTATO else (0.3 if GOOGLE_API_KEY else 0.5)
+LOTE            = 2000 if REENRICH_SEM_CONTATO else 5000
 PAUSA_CICLO     = 10
-TIMEOUT_CNPJ    = 25
+TIMEOUT_CNPJ    = 30
 SALVAR_A_CADA   = 50
-CONCORRENCIA    = 20 if GOOGLE_API_KEY else 5   # Google suporta mais paralelismo
 
 # Headers realistas para evitar bloqueio nos scrapers
 HEADERS_BROWSER = {
@@ -119,34 +124,48 @@ def _extrair_instagram_do_html(html: str) -> str:
     return ("@" + handles[0]) if handles else ""
 
 
-async def buscar_duckduckgo(session, query: str) -> str:
+async def buscar_duckduckgo(session, query: str, tentativas: int = 2) -> str:
     """
-    Busca no DuckDuckGo Lite e retorna o HTML dos resultados.
-    Retorna string vazia em caso de falha ou bloqueio.
+    Busca no DuckDuckGo Lite com retry e backoff.
+    Retorna string vazia se bloqueado após todas as tentativas.
     """
     url = f"https://html.duckduckgo.com/html/?q={quote(query)}"
-    try:
-        async with session.get(
-            url, headers=HEADERS_BROWSER,
-            timeout=aiohttp.ClientTimeout(total=8),
-            allow_redirects=True,
-        ) as r:
-            if r.status == 200:
-                return await r.text(errors="ignore")
-    except Exception:
-        pass
+    for tentativa in range(tentativas):
+        try:
+            if tentativa > 0:
+                await asyncio.sleep(2 + tentativa * 2)  # backoff: 4s, 6s...
+            async with session.get(
+                url, headers=HEADERS_BROWSER,
+                timeout=aiohttp.ClientTimeout(total=10),
+                allow_redirects=True,
+            ) as r:
+                if r.status == 200:
+                    html = await r.text(errors="ignore")
+                    # DDG retorna página de "no results" ou CAPTCHA quando bloqueado
+                    if "duckduckgo" in html and len(html) > 2000:
+                        return html
+                elif r.status == 429:
+                    log.debug(f"DDG rate limit — aguardando antes de retry")
+                    await asyncio.sleep(5)
+        except Exception:
+            pass
     return ""
 
 
 async def buscar_instagram_ddg(session, nome: str, cidade: str) -> str:
     """
     Busca o perfil de Instagram da empresa no DuckDuckGo.
-    Exemplo de query: site:instagram.com "Pizzaria do João" Belo Horizonte
+    Tenta duas queries: com aspas (exata) e sem (ampla).
     """
-    # Usa nome fantasia se disponível (mais reconhecível), senão razão social
-    nome_busca = nome.strip()[:50]  # limita tamanho
-    query = f'site:instagram.com "{nome_busca}" {cidade}'
-    html = await buscar_duckduckgo(session, query)
+    nome_busca = nome.strip()[:50]
+
+    # Query 1: busca exata no Instagram
+    query1 = f'site:instagram.com "{nome_busca}" {cidade}'
+    html = await buscar_duckduckgo(session, query1)
+    if not html:
+        # Query 2: sem aspas, mais ampla
+        query2 = f'site:instagram.com {nome_busca} {cidade}'
+        html = await buscar_duckduckgo(session, query2)
     if not html:
         return ""
     handle = _extrair_instagram_do_html(html)
@@ -192,13 +211,37 @@ async def buscar_site_ddg(session, nome: str, cidade: str) -> str:
 
 # ─── Scraping do site ─────────────────────────────────────────────────────────
 
+def _desofuscar_email(html: str) -> list:
+    """
+    Tenta extrair emails ofuscados comuns em sites brasileiros:
+    - 'contato [at] empresa [dot] com'
+    - 'contato(at)empresa(dot)com'
+    - 'contato AT empresa DOT com'
+    - data-email="contato@empresa.com" (atributos HTML)
+    """
+    encontrados = []
+    # Padrão ofuscado com [at] ou (at)
+    pat_at = re.findall(
+        r'([a-zA-Z0-9._%+\-]+)\s*[\[(]at[\])]\s*([a-zA-Z0-9.\-]+)\s*[\[(]dot[\])]\s*([a-zA-Z]{2,})',
+        html, re.IGNORECASE
+    )
+    for u, d, t in pat_at:
+        encontrados.append(f"{u}@{d}.{t}")
+    # Atributos data-email / data-mail
+    pat_data = re.findall(r'data-(?:e?mail|email-address)["\s]*[=:]["\s]*([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})', html, re.IGNORECASE)
+    encontrados += pat_data
+    return encontrados
+
+
 def _extrair_emails(html: str) -> list:
-    """Extrai e-mails do HTML, filtrando ruído."""
+    """Extrai e-mails do HTML, incluindo formatos ofuscados."""
+    # mailto: links (maior prioridade)
+    mailtos = re.findall(r'mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})', html)
     # Padrão normal
     emails = re.findall(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", html)
-    # Também pega mailto: links
-    mailtos = re.findall(r'mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})', html)
-    todos = list(dict.fromkeys(mailtos + emails))  # prioriza mailto, remove duplicatas
+    # Ofuscados
+    ofuscados = _desofuscar_email(html)
+    todos = list(dict.fromkeys(mailtos + ofuscados + emails))  # prioriza mailto e ofuscados
     return [e for e in todos if not any(x in e.lower() for x in EMAIL_RUIDO)]
 
 
