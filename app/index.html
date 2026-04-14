@@ -592,9 +592,19 @@ function _celContatos(e) {
   const isFree = planoInfo.plano === "free";
   if (isFree) return '<span style="color:var(--muted);font-size:11px">🔒 ver+</span>';
   let tags = "";
-  if (e.email)     tags += '<span class="tag tag-email" title="' + e.email + '">email</span>';
-  if (e.instagram) tags += '<span class="tag tag-insta" title="' + e.instagram + '">insta</span>';
-  if (e.site)      tags += '<span class="tag tag-site"  title="' + e.site + '">site</span>';
+  if (e.email) {
+    const label = e.email.length > 22 ? e.email.substring(0, 20) + "…" : e.email;
+    tags += '<span class="tag tag-email" title="' + e.email + '">✉ ' + label + '</span>';
+  }
+  if (e.instagram) {
+    const handle = e.instagram.startsWith("@") ? e.instagram : "@" + e.instagram;
+    tags += '<span class="tag tag-insta" title="' + handle + '">📸 ' + handle + '</span>';
+  }
+  if (e.site && !tags) {
+    // Só mostra site se não tem email nem insta (evita linha longa)
+    const dominio = e.site.replace(/https?:\/\/(www\.)?/, "").split("/")[0];
+    tags += '<span class="tag tag-site" title="' + e.site + '">🌐 ' + dominio + '</span>';
+  }
   return tags || '<span style="color:var(--muted);font-size:11px">—</span>';
 }
 

@@ -191,12 +191,29 @@ async def buscar_site_ddg(session, nome: str, cidade: str) -> str:
         # Fallback: qualquer URL nos resultados
         urls = re.findall(r'href="(https?://[^"&]{10,})"', html)
 
-    # Filtra URLs irrelevantes
+    # Filtra URLs irrelevantes — redes sociais, buscadores e
+    # diretórios de empresas que aparecem antes do site real
     dominios_ignorar = {
+        # Redes sociais e buscadores
         "duckduckgo", "google", "facebook", "instagram", "youtube",
-        "linkedin", "twitter", "tiktok", "bing", "yahoo",
-        "receitafederal", "gov.br", "jusbrasil", "escavador",
-        "cnpj.info", "cnpja", "cnpjbiz",
+        "linkedin", "twitter", "tiktok", "bing", "yahoo", "whatsapp",
+        # Governo / jurídico
+        "receitafederal", "gov.br", "jusbrasil", "escavador", "tjsp",
+        # Diretórios de CNPJ brasileiros
+        "cnpj.info", "cnpja", "cnpjbiz", "cnpj.biz", "cnpj.ws",
+        "empresasdobrasil", "qsa.me", "econodata", "minhareceita",
+        "receitaws", "casadosdados", "sintegra", "servicos.receita",
+        # Diretórios internacionais de empresas
+        "dnb.com", "d-u-n-s", "opencorporates", "bloomberg.com",
+        "crunchbase", "zoominfo", "manta.com", "bizapedia",
+        "companieshouse", "corpwatch",
+        # Listas e guias
+        "telelistas", "guiamais", "apontador", "yellowpages",
+        "yelp.com", "tripadvisor", "foursquare", "paginas.amarelas",
+        "infobel", "hotfrog",
+        # Marketplaces e e-commerce genéricos
+        "mercadolivre", "shopee", "americanas", "magazineluiza",
+        "ifood", "rappi",
     }
     for url in urls:
         url = url.strip()
@@ -266,9 +283,9 @@ async def _scrape_pagina(session, url: str) -> tuple[str, str]:
 
 async def extrair_contatos_do_site(session, site_url: str) -> dict:
     """
-    Scrapa o site em até 2 páginas (homepage + página de contato)
-    para encontrar e-mail e Instagram.
-    Para assim que encontrar ambos ou esgotar as páginas.
+    Scrapa homepage + páginas de contato EM PARALELO.
+    Usa asyncio.gather — todas as páginas são buscadas simultaneamente,
+    e pega o primeiro resultado não-vazio de cada campo (prioridade = ordem das páginas).
     """
     resultado = {"email_site": "", "instagram_site": ""}
     if not site_url:
@@ -277,18 +294,26 @@ async def extrair_contatos_do_site(session, site_url: str) -> dict:
     if not site_url.startswith("http"):
         site_url = "https://" + site_url
 
-    paginas = [site_url] + [
-        urljoin(site_url, slug) for slug in PAGINAS_CONTATO
-    ]
+    paginas = [site_url] + [urljoin(site_url, slug) for slug in PAGINAS_CONTATO]
 
-    for url in paginas:
-        email, instagram = await _scrape_pagina(session, url)
+    # Dispara todas as páginas em paralelo
+    try:
+        resultados = await asyncio.gather(
+            *[_scrape_pagina(session, url) for url in paginas],
+            return_exceptions=True,
+        )
+    except Exception:
+        return resultado
+
+    # Mantém prioridade (homepage primeiro, depois /contato, /contact, etc.)
+    for r in resultados:
+        if isinstance(r, Exception):
+            continue
+        email, instagram = r
         if email and not resultado["email_site"]:
             resultado["email_site"] = email
         if instagram and not resultado["instagram_site"]:
             resultado["instagram_site"] = instagram
-
-        # Para quando tiver os dois
         if resultado["email_site"] and resultado["instagram_site"]:
             break
 
@@ -318,22 +343,23 @@ async def _processar(session, cnpj, db, forcar=False):
         socio    = socios[0].get("nome_socio", "") if socios else ""
         nome_busca = fantasia or nome  # nome fantasia é mais reconhecível
 
-        # 1. Tenta Google Places (melhor qualidade, precisa de GOOGLE_API_KEY)
-        google = await buscar_google_places(session, nome_busca, cidade)
-        site   = google.get("site_google", "")
+        # 1+4. Google Places e DDG Instagram são independentes → rodam em paralelo
+        google_task = buscar_google_places(session, nome_busca, cidade)
+        insta_task  = buscar_instagram_ddg(session, nome_busca, cidade)
+        google, insta_ddg_fallback = await asyncio.gather(google_task, insta_task)
+
+        site = google.get("site_google", "")
 
         # 2. Se não tem site (Google Places off ou sem resultado), tenta DuckDuckGo
         if not site:
             site = await buscar_site_ddg(session, nome_busca, cidade)
 
-        # 3. Scraping do site (homepage + contato)
+        # 3. Scraping do site (homepage + páginas de contato, em paralelo)
         contatos = await extrair_contatos_do_site(session, site)
 
-        # 4. Se ainda não tem Instagram, busca diretamente no DuckDuckGo
+        # 4. Fallback Instagram: já buscamos em paralelo acima, aproveita se necessário
         if not contatos["instagram_site"]:
-            contatos["instagram_site"] = await buscar_instagram_ddg(
-                session, nome_busca, cidade
-            )
+            contatos["instagram_site"] = insta_ddg_fallback
 
         ddd = dados.get("ddd_telefone_1", "")
         num = dados.get("telefone_1", "")
@@ -425,7 +451,8 @@ async def rodar_seed(db):
             await asyncio.sleep(DELAY)
             return resultado
 
-    async with aiohttp.ClientSession() as session:
+    connector = aiohttp.TCPConnector(limit=100, limit_per_host=20, ttl_dns_cache=300)
+    async with aiohttp.ClientSession(connector=connector) as session:
         while True:
             try:
                 inicio = offset
@@ -484,7 +511,8 @@ async def rodar_reenrich(db):
             await asyncio.sleep(DELAY)
             return resultado
 
-    async with aiohttp.ClientSession() as session:
+    connector = aiohttp.TCPConnector(limit=100, limit_per_host=20, ttl_dns_cache=300)
+    async with aiohttp.ClientSession(connector=connector) as session:
         while True:
             try:
                 lote = db.buscar_cnpjs_sem_contato(limite=LOTE, offset=offset_db)

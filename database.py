@@ -18,9 +18,22 @@ USE_POSTGRES = DATABASE_URL.startswith("postgresql") or DATABASE_URL.startswith(
 
 if USE_POSTGRES:
     import psycopg2
-    print("Conectando ao PostgreSQL...")
+    from psycopg2 import pool as _pg_pool
+    from contextlib import contextmanager
+    print("Conectando ao PostgreSQL com pool...")
+    # Pool de conexões reutilizáveis: elimina overhead de TLS+auth a cada query
+    _POOL = _pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=DATABASE_URL)
+
+    @contextmanager
     def _conn():
-        return psycopg2.connect(DATABASE_URL)
+        c = _POOL.getconn()
+        try:
+            yield c
+        finally:
+            try:
+                _POOL.putconn(c)
+            except Exception:
+                pass
 else:
     import sqlite3
     print("Usando SQLite local")
@@ -180,8 +193,16 @@ class Database:
                     atualizado_em   TEXT
                 )
             """)
-            for idx in ["uf", "porte", "email", "cnae", "abertura"]:
+            for idx in ["uf", "porte", "email", "cnae", "abertura", "atualizado_em"]:
                 cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{idx} ON empresas({idx})")
+
+            # Índices parciais para os filtros de "tem contato" — só PostgreSQL
+            if USE_POSTGRES:
+                for col in ("telefone", "email", "instagram", "site"):
+                    cur.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_tem_{col} "
+                        f"ON empresas({col}) WHERE {col} IS NOT NULL AND {col} != ''"
+                    )
             conn.commit()
 
     def criar_tabela_progresso(self):
@@ -367,6 +388,31 @@ class Database:
             cols = [d[0] for d in cur.description]
             return dict(zip(cols, row))
 
+    def limpar_sites_diretorio(self) -> int:
+        """
+        Zera o campo 'site' de registros cujo site é um diretório de empresas
+        (dnb.com, cnpj.biz, etc.) e não o site real da empresa.
+        Retorna o número de registros atualizados.
+        """
+        padroes = [
+            "%dnb.com%", "%cnpj.biz%", "%cnpj.ws%", "%cnpja.com%",
+            "%empresasdobrasil%", "%qsa.me%", "%econodata%", "%opencorporates%",
+            "%bloomberg.com/profile%", "%telelistas%", "%guiamais%",
+            "%apontador%", "%yellowpages%", "%bizapedia%", "%manta.com%",
+            "%escavador%", "%jusbrasil%", "%zoominfo%", "%crunchbase%",
+        ]
+        total = 0
+        with _conn() as conn:
+            cur = conn.cursor()
+            for p in padroes:
+                cur.execute(
+                    f"UPDATE empresas SET site='' WHERE site {LIKE} {PH}",
+                    (p,)
+                )
+                total += cur.rowcount
+            conn.commit()
+        return total
+
     def listar_cnaes(self) -> list:
         with _conn() as conn:
             cur = conn.cursor()
@@ -438,4 +484,4 @@ class Database:
             "por_uf": por_uf,
             "por_porte": por_porte,
             "progresso_agente": progresso,
-        }
+        } 
