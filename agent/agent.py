@@ -366,25 +366,18 @@ async def _processar(session, cnpj, db, forcar=False):
             tel_receita = f"({ddd}) {num}" if ddd and num else ""
             nome_busca = fantasia or nome
 
-        # 1+2+4. Google Places, DDG Instagram e DDG site rodam todos em paralelo.
-        # Antes, buscar_site_ddg era chamado sequencialmente APÓS o gather, custando
-        # até 10s extras por CNPJ. Agora todos são disparados juntos.
-        google_task = buscar_google_places(session, nome_busca, cidade)
-        insta_task  = buscar_instagram_ddg(session, nome_busca, cidade)
-        site_task   = buscar_site_ddg(session, nome_busca, cidade)
-        google, insta_ddg_fallback, site_ddg = await asyncio.gather(
-            google_task, insta_task, site_task
-        )
+        # 1. Google Places (telefone + site) — fonte principal
+        # Instagram e e-mail via scraping/DDG desativados temporariamente.
+        google = await buscar_google_places(session, nome_busca, cidade)
 
-        # Google Places tem prioridade; DDG site é fallback
-        site = google.get("site_google", "") or site_ddg
+        site = google.get("site_google", "")
 
-        # 3. Scraping do site (homepage + páginas de contato, em paralelo)
-        contatos = await extrair_contatos_do_site(session, site)
+        # 2. Se Google não achou site, tenta DDG (só site, sem Instagram)
+        if not site:
+            site = await buscar_site_ddg(session, nome_busca, cidade)
 
-        # 4. Fallback Instagram: já buscamos em paralelo acima, aproveita se necessário
-        if not contatos["instagram_site"]:
-            contatos["instagram_site"] = insta_ddg_fallback
+        # Instagram e e-mail zerados — serão coletados por outro meio futuramente
+        contatos = {"email_site": "", "instagram_site": ""}
 
         # No REENRICH usamos dados do banco; no fluxo normal usamos dados da BrasilAPI
         if forcar:
@@ -420,8 +413,9 @@ async def _processar(session, cnpj, db, forcar=False):
             "atualizado_em":   datetime.utcnow().isoformat(),
         }
 
-        achou = bool(perfil["email"] or perfil["instagram"] or perfil["site"] or
-                     (perfil["telefone"] and not tel_receita))  # telefone novo (não era do banco)
+        # "achou" = encontrou telefone (Google) ou site — e-mail/instagram ignorados por ora
+        achou = bool(perfil["site"] or
+                     (perfil["telefone"] and not tel_receita))
 
         # No REENRICH, só salva (e atualiza atualizado_em) se achou algo novo.
         # Isso evita que o ORDER BY atualizado_em ASC fique descontrolado
@@ -431,9 +425,7 @@ async def _processar(session, cnpj, db, forcar=False):
 
         log.info(
             f"{'✓' if achou else '·'} {nome_busca[:35]:<35} | {uf} | "
-            f"tel:{bool(perfil['telefone'])} "
-            f"email:{bool(perfil['email'])} "
-            f"insta:{bool(perfil['instagram'])}"
+            f"tel:{bool(perfil['telefone'])} site:{bool(perfil['site'])}"
         )
         return perfil if achou else None
 

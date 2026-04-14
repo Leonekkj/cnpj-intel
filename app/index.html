@@ -148,8 +148,8 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div class="metrics">
       <div class="metric"><div class="metric-lbl">Total CNPJs</div><div class="metric-val green" id="m-total">—</div><div class="metric-sub">empresas ativas</div></div>
       <div class="metric"><div class="metric-lbl">Com telefone</div><div class="metric-val blue" id="m-tel">—</div><div class="metric-sub">contatos diretos</div></div>
-      <div class="metric"><div class="metric-lbl">Com e-mail</div><div class="metric-val amber" id="m-email">—</div><div class="metric-sub">para prospecção</div></div>
-      <div class="metric"><div class="metric-lbl">Com Instagram</div><div class="metric-val pink" id="m-insta">—</div><div class="metric-sub">redes sociais</div></div>
+      <!-- e-mail e Instagram desativados temporariamente -->
+      <div class="metric"><div class="metric-lbl">Com site</div><div class="metric-val amber" id="m-site2">—</div><div class="metric-sub">presença online</div></div>
     </div>
 
     <div class="tabs">
@@ -192,9 +192,10 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         </div>
         <div class="toggles">
           <button class="toggle-btn" id="t-tel"   onclick="toggleFiltro('tel')"  >📞 Com telefone</button>
-          <button class="toggle-btn" id="t-email" onclick="toggleFiltro('email')">✉️ Com e-mail</button>
-          <button class="toggle-btn" id="t-insta" onclick="toggleFiltro('insta')">📸 Com Instagram</button>
           <button class="toggle-btn" id="t-site"  onclick="toggleFiltro('site')" >🌐 Com site</button>
+          <!-- e-mail e Instagram desativados temporariamente -->
+          <button class="toggle-btn" id="t-email" onclick="toggleFiltro('email')" style="display:none">✉️ Com e-mail</button>
+          <button class="toggle-btn" id="t-insta" onclick="toggleFiltro('insta')" style="display:none">📸 Com Instagram</button>
           <button class="toggle-btn on-gray" id="t-sem-contato" onclick="toggleSemContato()" title="Clique para incluir empresas sem nenhum contato" style="border-color:#555;color:#888;background:rgba(255,255,255,0.04)">✅ Com contato</button>
         </div>
         <div class="search-actions">
@@ -337,9 +338,10 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         </div>
         <div class="toggles">
           <button class="toggle-btn" id="adv-t-tel"   onclick="toggleAdv('tel')"  >📞 Com telefone</button>
-          <button class="toggle-btn" id="adv-t-email" onclick="toggleAdv('email')">✉️ Com e-mail</button>
-          <button class="toggle-btn" id="adv-t-insta" onclick="toggleAdv('insta')">📸 Com Instagram</button>
           <button class="toggle-btn" id="adv-t-site"  onclick="toggleAdv('site')" >🌐 Com site</button>
+          <!-- e-mail e Instagram desativados temporariamente -->
+          <button class="toggle-btn" id="adv-t-email" onclick="toggleAdv('email')" style="display:none">✉️ Com e-mail</button>
+          <button class="toggle-btn" id="adv-t-insta" onclick="toggleAdv('insta')" style="display:none">📸 Com Instagram</button>
         </div>
         <div class="search-actions">
           <button class="btn-search" onclick="buscarAvancado()">Buscar →</button>
@@ -529,8 +531,7 @@ async function carregarStats() {
     const d = await r.json();
     document.getElementById("m-total").textContent = (d.total||0).toLocaleString("pt-BR");
     document.getElementById("m-tel").textContent = (d.com_telefone||0).toLocaleString("pt-BR");
-    document.getElementById("m-email").textContent = (d.com_email||0).toLocaleString("pt-BR");
-    document.getElementById("m-insta").textContent = (d.com_instagram||0).toLocaleString("pt-BR");
+    document.getElementById("m-site2").textContent = (d.com_site||0).toLocaleString("pt-BR");
   } catch(e) {
     document.getElementById("m-total").textContent = "offline";
   }
@@ -592,16 +593,10 @@ function _celContatos(e) {
   const isFree = planoInfo.plano === "free";
   if (isFree) return '<span style="color:var(--muted);font-size:11px">🔒 ver+</span>';
   let tags = "";
-  if (e.email) {
-    const label = e.email.length > 22 ? e.email.substring(0, 20) + "…" : e.email;
-    tags += '<span class="tag tag-email" title="' + e.email + '">✉ ' + label + '</span>';
+  if (e.telefone) {
+    tags += '<span class="tag tag-tel" title="' + e.telefone + '">📞 ' + e.telefone + '</span>';
   }
-  if (e.instagram) {
-    const handle = e.instagram.startsWith("@") ? e.instagram : "@" + e.instagram;
-    tags += '<span class="tag tag-insta" title="' + handle + '">📸 ' + handle + '</span>';
-  }
-  if (e.site && !tags) {
-    // Só mostra site se não tem email nem insta (evita linha longa)
+  if (e.site) {
     const dominio = e.site.replace(/https?:\/\/(www\.)?/, "").split("/")[0];
     tags += '<span class="tag tag-site" title="' + e.site + '">🌐 ' + dominio + '</span>';
   }
@@ -728,16 +723,14 @@ async function abrirModal(i, tbodyId) {
       <div class="modal-field"><div class="lbl">Sócio principal</div><div class="val">${e.socio_principal||"—"}</div></div>
       <div class="modal-field"><div class="lbl">Cidade / UF</div><div class="val">${e.municipio||"—"} — ${e.uf||"—"}</div></div>
       <div class="modal-field"><div class="lbl">Telefone</div><div class="val" style="color:var(--accent2)">${e.telefone||"Não encontrado"}</div></div>
-      <div class="modal-field"><div class="lbl">E-mail</div><div class="val" style="color:#7bbef0;font-size:13px">${e.email||"Não encontrado"}</div></div>
-      <div class="modal-field"><div class="lbl">Instagram</div><div class="val" style="color:#e88ab0">${e.instagram||"Não encontrado"}</div></div>
       <div class="modal-field"><div class="lbl">Site</div><div class="val" style="font-size:12px">${e.site||"—"}</div></div>
+      <!-- E-mail e Instagram desativados temporariamente -->
       <div class="modal-field" style="grid-column:span 2"><div class="lbl">Setor / CNAE</div><div class="val" style="font-size:13px">${e.cnae||"—"}</div></div>
     </div>
     <div class="modal-actions">
       ${e.telefone ? `<button class="modal-btn" onclick="window.open('https://wa.me/55${(e.telefone||"").replace(/\D/g,"")}','_blank')">💬 WhatsApp</button>` : ""}
-      ${e.email ? `<button class="modal-btn" onclick="window.open('mailto:${e.email}','_blank')">✉️ E-mail</button>` : ""}
-      ${e.instagram ? `<button class="modal-btn" onclick="window.open('https://instagram.com/${(e.instagram||"").replace("@","")}','_blank')">📸 Instagram</button>` : ""}
       ${e.site ? `<button class="modal-btn" onclick="window.open('https://${(e.site||"").replace(/https?:\/\//,"")}','_blank')">🌐 Site</button>` : ""}
+      <!-- Botões e-mail e Instagram desativados temporariamente -->
     </div>`;
 }
 function fecharModal() { document.getElementById("modal").className = "modal-bg"; }
