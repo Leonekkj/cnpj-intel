@@ -355,12 +355,9 @@ class Database:
         if com_site:
             filtros.append("site IS NOT NULL AND site != ''")
         if com_contato:
-            filtros.append(
-                "(telefone IS NOT NULL AND telefone != '')"
-                " OR (email IS NOT NULL AND email != '')"
-                " OR (instagram IS NOT NULL AND instagram != '')"
-                " OR (site IS NOT NULL AND site != '')"
-            )
+            # Critério mínimo: telefone obrigatório.
+            # E-mail e Instagram serão adicionados futuramente.
+            filtros.append("telefone IS NOT NULL AND telefone != ''")
 
         where = " AND ".join(filtros)
         offset = (pagina - 1) * por_pagina

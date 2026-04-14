@@ -439,13 +439,17 @@ async def _processar(session, cnpj, db, forcar=False):
             "atualizado_em":   datetime.utcnow().isoformat(),
         }
 
-        # Critério mínimo: deve ter telefone (Google Places ou Receita Federal).
-        # Site é bonus. Sem telefone a empresa não aparece no dashboard.
+        # Critério mínimo: deve ter telefone para aparecer no dashboard.
         achou = bool(perfil["telefone"])
 
-        # No REENRICH, só salva (e atualiza atualizado_em) se achou algo novo.
-        # Isso evita que o ORDER BY atualizado_em ASC fique descontrolado
-        # e o offset pule empresas não processadas.
+        # Sem telefone: zera o site para que a empresa não apareça no dashboard
+        # (com_contato exige telefone), mas ainda salva o registro para não
+        # reprocessar o mesmo CNPJ no próximo ciclo.
+        if not achou:
+            perfil["site"] = ""
+
+        # Sempre salva em seed mode (marca como processado).
+        # Em REENRICH: só salva se achou algo novo.
         if not forcar or achou:
             db.salvar_empresa(perfil)
 
