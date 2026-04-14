@@ -151,13 +151,24 @@ def listar_empresas(
     com_instagram: bool = Query(False),
     com_telefone:  bool = Query(False),
     com_site:      bool = Query(False),
+    com_contato:   bool = Query(True,  description="Padrão: só empresas com pelo menos 1 contato"),
     pagina:        int  = Query(1, ge=1),
     por_pagina:    int  = Query(50, le=200),
     info:          dict = Depends(get_token_info),
 ):
-    # Free: limita por_pagina ao restante (ver+ consome quota)
-    # Básico/Pro: sem restrição na listagem — quota do básico conta no export
-    if info["plano"] == "free":
+    plano = info["plano"]
+
+    # Free: limita por_pagina ao restante; quota consumida no ver+
+    if plano == "free":
+        restante = info.get("restante", 0)
+        if info.get("limite_dia") is not None:
+            por_pagina = min(por_pagina, restante) if restante > 0 else 0
+            if por_pagina == 0:
+                return {"total": 0, "pagina": pagina, "por_pagina": 0, "dados": [],
+                        "plano": info["nome_plano"], "restante": 0}
+
+    # Básico: limita por_pagina ao restante e consome quota na listagem
+    if plano == "basico":
         restante = info.get("restante", 0)
         if info.get("limite_dia") is not None:
             por_pagina = min(por_pagina, restante) if restante > 0 else 0
@@ -170,17 +181,19 @@ def listar_empresas(
         abertura_de=abertura_de, abertura_ate=abertura_ate,
         com_email=com_email, com_instagram=com_instagram,
         com_telefone=com_telefone, com_site=com_site,
+        com_contato=com_contato,
         pagina=pagina, por_pagina=por_pagina,
     )
 
-    # Quota NÃO é consumida na listagem — só é consumida ao abrir o detalhe
-    # Isso garante que scroll, paginação e filtros não zeram a cota do usuário
+    # Básico: consome quota com base nas linhas retornadas
+    retornados = len(resultado.get("dados", []))
+    if plano == "basico" and retornados > 0 and not info.get("is_admin"):
+        db.consumir_quota(info["token"], retornados)
 
-    # Plano free: remove contatos da listagem (só revelados no detalhe via ver+)
-    if info["plano"] == "free":
-        campos_ocultos = ("telefone", "email", "instagram", "site")
+    # Free: oculta contatos na listagem (revelados via ver+)
+    if plano == "free":
         for emp in resultado.get("dados", []):
-            for campo in campos_ocultos:
+            for campo in ("telefone", "email", "instagram", "site"):
                 emp[campo] = ""
 
     resultado["plano"]    = info["nome_plano"]

@@ -301,6 +301,7 @@ class Database:
                         abertura_de="", abertura_ate="",
                         com_email=False, com_instagram=False,
                         com_telefone=False, com_site=False,
+                        com_contato=True,
                         pagina=1, por_pagina=50) -> dict:
         filtros = ["1=1"]
         params = []
@@ -332,6 +333,13 @@ class Database:
             filtros.append("telefone IS NOT NULL AND telefone != ''")
         if com_site:
             filtros.append("site IS NOT NULL AND site != ''")
+        if com_contato:
+            filtros.append(
+                "(telefone IS NOT NULL AND telefone != '')"
+                " OR (email IS NOT NULL AND email != '')"
+                " OR (instagram IS NOT NULL AND instagram != '')"
+                " OR (site IS NOT NULL AND site != '')"
+            )
 
         where = " AND ".join(filtros)
         offset = (pagina - 1) * por_pagina

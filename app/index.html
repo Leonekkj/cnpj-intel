@@ -195,6 +195,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           <button class="toggle-btn" id="t-email" onclick="toggleFiltro('email')">✉️ Com e-mail</button>
           <button class="toggle-btn" id="t-insta" onclick="toggleFiltro('insta')">📸 Com Instagram</button>
           <button class="toggle-btn" id="t-site"  onclick="toggleFiltro('site')" >🌐 Com site</button>
+          <button class="toggle-btn on-gray" id="t-sem-contato" onclick="toggleSemContato()" title="Clique para incluir empresas sem nenhum contato" style="border-color:#555;color:#888;background:rgba(255,255,255,0.04)">✅ Com contato</button>
         </div>
         <div class="search-actions">
           <button class="btn-clear" onclick="limparFiltros()">Limpar</button>
@@ -439,7 +440,7 @@ const H = {"Authorization": "Bearer " + TOKEN};
 
 let pagina = 1, advPagina = 1;
 let dados = [], advDados = [];
-let filtros = {tel:false, email:false, insta:false, site:false};
+let filtros = {tel:false, email:false, insta:false, site:false, comContato:true};
 let advFiltros = {tel:false, email:false, insta:false, site:false};
 let planoInfo = null;
 
@@ -544,6 +545,7 @@ async function buscar() {
     com_email: filtros.email,
     com_instagram: filtros.insta,
     com_site: filtros.site,
+    com_contato: filtros.comContato,
     pagina, por_pagina: 20
   });
   try {
@@ -569,6 +571,7 @@ async function buscarAvancado() {
     com_email: advFiltros.email,
     com_instagram: advFiltros.insta,
     com_site: advFiltros.site,
+    com_contato: filtros.comContato,
     pagina: advPagina, por_pagina: 20
   });
   try {
@@ -735,6 +738,20 @@ function toggleFiltro(t) {
   document.getElementById("t-" + t).className = "toggle-btn" + (filtros[t] ? " " + cls[t] : "");
   pagina = 1; buscar();
 }
+function toggleSemContato() {
+  filtros.comContato = !filtros.comContato;
+  const btn = document.getElementById("t-sem-contato");
+  if (filtros.comContato) {
+    btn.textContent = "✅ Com contato";
+    btn.style.cssText = "border-color:#555;color:#888;background:rgba(255,255,255,0.04)";
+    btn.title = "Clique para incluir empresas sem nenhum contato";
+  } else {
+    btn.textContent = "⬜ Todos (incl. sem contato)";
+    btn.style.cssText = "border-color:var(--warn);color:#f0b96e;background:rgba(239,159,39,0.08)";
+    btn.title = "Mostrando todas as empresas, inclusive sem contato";
+  }
+  pagina = 1; buscar();
+}
 function toggleAdv(t) {
   advFiltros[t] = !advFiltros[t];
   const cls = {tel:"on-blue", email:"on-amber", insta:"on-green", site:"on-purple"};
@@ -745,8 +762,10 @@ function limparFiltros() {
   document.getElementById("q").value = "";
   document.getElementById("uf").value = "";
   document.getElementById("porte").value = "";
-  filtros = {tel:false, email:false, insta:false, site:false};
+  filtros = {tel:false, email:false, insta:false, site:false, comContato:true};
   ["tel","email","insta","site"].forEach(t => document.getElementById("t-"+t).className = "toggle-btn");
+  const btnSC = document.getElementById("t-sem-contato");
+  if(btnSC) { btnSC.classList.remove("on-gray"); btnSC.title = "Clique para incluir empresas sem contato"; }
   pagina = 1; buscar();
 }
 function limparAvancado() {
