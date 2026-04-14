@@ -201,9 +201,20 @@ def listar_empresas(
     return resultado
 
 
+# Cache em memória das estatísticas — 5 COUNT(*) full-scan custam caro
+import time as _time
+_stats_cache = {"data": None, "ts": 0}
+_STATS_TTL = 60  # segundos
+
 @app.get("/api/stats")
 def estatisticas(info: dict = Depends(get_token_info)):
-    return db.estatisticas()
+    agora = _time.time()
+    if _stats_cache["data"] and (agora - _stats_cache["ts"]) < _STATS_TTL:
+        return _stats_cache["data"]
+    data = db.estatisticas()
+    _stats_cache["data"] = data
+    _stats_cache["ts"] = agora
+    return data
 
 
 @app.get("/api/cnaes")

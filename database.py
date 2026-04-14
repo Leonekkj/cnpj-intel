@@ -18,9 +18,22 @@ USE_POSTGRES = DATABASE_URL.startswith("postgresql") or DATABASE_URL.startswith(
 
 if USE_POSTGRES:
     import psycopg2
-    print("Conectando ao PostgreSQL...")
+    from psycopg2 import pool as _pg_pool
+    from contextlib import contextmanager
+    print("Conectando ao PostgreSQL com pool...")
+    # Pool de conexões reutilizáveis: elimina overhead de TLS+auth a cada query
+    _POOL = _pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=DATABASE_URL)
+
+    @contextmanager
     def _conn():
-        return psycopg2.connect(DATABASE_URL)
+        c = _POOL.getconn()
+        try:
+            yield c
+        finally:
+            try:
+                _POOL.putconn(c)
+            except Exception:
+                pass
 else:
     import sqlite3
     print("Usando SQLite local")
@@ -180,8 +193,16 @@ class Database:
                     atualizado_em   TEXT
                 )
             """)
-            for idx in ["uf", "porte", "email", "cnae", "abertura"]:
+            for idx in ["uf", "porte", "email", "cnae", "abertura", "atualizado_em"]:
                 cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{idx} ON empresas({idx})")
+
+            # Índices parciais para os filtros de "tem contato" — só PostgreSQL
+            if USE_POSTGRES:
+                for col in ("telefone", "email", "instagram", "site"):
+                    cur.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_tem_{col} "
+                        f"ON empresas({col}) WHERE {col} IS NOT NULL AND {col} != ''"
+                    )
             conn.commit()
 
     def criar_tabela_progresso(self):
