@@ -24,17 +24,14 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [AGENTE] %(message)s")
 log = logging.getLogger(__name__)
 
-GOOGLE_API_KEY     = os.environ.get("GOOGLE_API_KEY", "")
+GOOGLE_API_KEY       = os.environ.get("GOOGLE_API_KEY", "")
 REENRICH_SEM_CONTATO = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1", "true", "yes")
 
-# Com Google Places: REENRICH usa concorrência 10 (Google é rápido,
-# DDG só é chamado como fallback dentro de cada task).
-# Sem Google Places: REENRICH fica em 3 para não travar o DDG.
-CONCORRENCIA = 15 if (REENRICH_SEM_CONTATO and GOOGLE_API_KEY) else \
-               (3  if REENRICH_SEM_CONTATO else \
-               (15 if GOOGLE_API_KEY else 5))
+# Google Places desativado — pipeline usa DDG + scraping + BrasilAPI.
+# Concorrência fixa em 5 para não sobrecarregar DDG e BrasilAPI.
+CONCORRENCIA = 3 if REENRICH_SEM_CONTATO else 5
 
-DELAY        = 0.3 if GOOGLE_API_KEY else (0.8 if REENRICH_SEM_CONTATO else 0.5)
+DELAY        = 0.8 if REENRICH_SEM_CONTATO else 0.5
 LOTE         = 3000 if REENRICH_SEM_CONTATO else 5000
 PAUSA_CICLO  = 5
 TIMEOUT_CNPJ = 30
@@ -74,16 +71,20 @@ PAGINAS_CONTATO = ["/contato", "/contact", "/fale-conosco", "/sobre", "/about"]
 async def buscar_brasilapi(session, cnpj):
     url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
     sem = _BRASIL_SEM if _BRASIL_SEM is not None else asyncio.Semaphore(4)
+    rate_limited = False
     try:
         async with sem:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as r:
                 if r.status == 200:
                     return await r.json()
                 elif r.status == 429:
-                    log.warning("BrasilAPI rate limit — aguardando 60s...")
-                    await asyncio.sleep(60)
+                    rate_limited = True
     except Exception:
         pass
+    # sleep FORA do semáforo — não trava os demais workers durante a espera
+    if rate_limited:
+        log.warning("BrasilAPI rate limit — aguardando 60s...")
+        await asyncio.sleep(60)
     return None
 
 
@@ -207,13 +208,12 @@ async def buscar_duckduckgo(session, query: str, tentativas: int = 1) -> str:
                     await asyncio.sleep(2 + tentativa * 2)  # backoff: 4s, 6s...
                 async with session.get(
                     url, headers=HEADERS_BROWSER,
-                    timeout=aiohttp.ClientTimeout(total=5),
+                    timeout=aiohttp.ClientTimeout(total=8),
                     allow_redirects=True,
                 ) as r:
                     if r.status == 200:
                         html = await r.text(errors="ignore")
-                        # DDG retorna página de "no results" ou CAPTCHA quando bloqueado
-                        if "duckduckgo" in html and len(html) > 2000:
+                        if html:
                             return html
                     elif r.status == 429:
                         log.debug("DDG rate limit — aguardando antes de retry")
@@ -312,8 +312,16 @@ def _extrair_emails(html: str) -> list:
     return [e for e in todos if not any(x in e.lower() for x in EMAIL_RUIDO)]
 
 
-# Regex para telefone brasileiro em páginas de contato: (11) 9999-9999, (11) 99999-9999
-_RE_TELEFONE_SITE = re.compile(r'\(\d{2}\)\s*\d{4,5}[\s\-]?\d{4}')
+# Regex telefone BR — captura os formatos mais comuns em sites:
+# (11) 9999-9999, (11) 99999-9999, 11 9999-9999, 11 99999-9999, tel:+5511...
+_RE_TELEFONE_SITE = re.compile(
+    r'(?:\+?55\s?)?'           # código do país opcional
+    r'\(?\s*(\d{2})\s*\)?'    # DDD com ou sem parênteses
+    r'[\s\-]?'
+    r'(\d{4,5})'              # primeira parte (4 ou 5 dígitos)
+    r'[\s\-]?'
+    r'(\d{4})'                # última parte (4 dígitos)
+)
 
 
 async def _scrape_pagina(session, url: str) -> tuple[str, str, str]:
@@ -332,10 +340,10 @@ async def _scrape_pagina(session, url: str) -> tuple[str, str, str]:
                 telefone = ""
                 tel_match = _RE_TELEFONE_SITE.search(html)
                 if tel_match:
-                    tel_raw = tel_match.group(0)
-                    tel_digits = re.sub(r'\D', '', tel_raw)
+                    ddd, parte1, parte2 = tel_match.group(1), tel_match.group(2), tel_match.group(3)
+                    tel_digits = ddd + parte1 + parte2
                     if len(tel_digits) in (10, 11):
-                        telefone = tel_raw.strip()
+                        telefone = f"({ddd}) {parte1}-{parte2}"
                 return email, instagram, telefone
     except Exception:
         pass
