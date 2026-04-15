@@ -359,6 +359,13 @@ def diagnostico_telefone(_: str = Depends(require_admin)):
     return db.diagnostico_telefone()
 
 
+@app.post("/api/admin/vacuum")
+def vacuum_banco(_: str = Depends(require_admin)):
+    """Executa VACUUM ANALYZE no Postgres para liberar espaço após DELETE em massa."""
+    db.vacuum()
+    return {"status": "ok", "mensagem": "VACUUM ANALYZE executado"}
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))

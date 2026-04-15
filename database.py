@@ -758,6 +758,20 @@ class Database:
             "ultimos_com_tel": ultimos_com_tel,
         }
 
+    def vacuum(self):
+        """
+        Executa VACUUM ANALYZE no Postgres para liberar espaço após DELETE em massa.
+        No SQLite não é necessário (o arquivo não encolhe automaticamente, mas o overhead é baixo).
+        """
+        if not USE_POSTGRES:
+            return
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.set_isolation_level(0)  # AUTOCOMMIT obrigatório — VACUUM não pode rodar em transação
+        cur = conn.cursor()
+        cur.execute("VACUUM ANALYZE empresas")
+        cur.close()
+        conn.close()
+
     def limpar_sites_falsos(self) -> int:
         """Alias de limpar_sites_diretorio — mantido para compatibilidade."""
         return self.limpar_sites_diretorio()

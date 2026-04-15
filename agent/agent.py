@@ -73,13 +73,15 @@ PAGINAS_CONTATO = ["/contato", "/contact", "/fale-conosco", "/sobre", "/about"]
 
 async def buscar_brasilapi(session, cnpj):
     url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+    sem = _BRASIL_SEM if _BRASIL_SEM is not None else asyncio.Semaphore(4)
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as r:
-            if r.status == 200:
-                return await r.json()
-            elif r.status == 429:
-                log.warning("BrasilAPI rate limit — aguardando 60s...")
-                await asyncio.sleep(60)
+        async with sem:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as r:
+                if r.status == 200:
+                    return await r.json()
+                elif r.status == 429:
+                    log.warning("BrasilAPI rate limit — aguardando 60s...")
+                    await asyncio.sleep(60)
     except Exception:
         pass
     return None
@@ -127,28 +129,45 @@ async def buscar_google_places(session, nome, cidade):
     if not GOOGLE_API_KEY:
         return {}
     try:
-        url = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
-        params = {
+        # Passo 1: findplacefromtext → obter place_id
+        url1 = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
+        params1 = {
             "input": f"{nome} {cidade}",
             "inputtype": "textquery",
+            "fields": "place_id",
+            "key": GOOGLE_API_KEY,
+        }
+        async with session.get(url1, params=params1, timeout=aiohttp.ClientTimeout(total=5)) as r:
+            if r.status != 200:
+                return {}
+            data1 = await r.json()
+        candidates = data1.get("candidates", [])
+        if not candidates:
+            return {}
+        place_id = candidates[0].get("place_id")
+        if not place_id:
+            return {}
+
+        # Passo 2: Place Details → telefone, site, rating (formatted_phone_number só disponível aqui)
+        url2 = "https://maps.googleapis.com/maps/api/place/details/json"
+        params2 = {
+            "place_id": place_id,
             "fields": "formatted_phone_number,website,rating,user_ratings_total",
             "key": GOOGLE_API_KEY,
         }
-        async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=5)) as r:
-            if r.status == 200:
-                data = await r.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    p = candidates[0]
-                    site_raw = p.get("website", "")
-                    # Descarta sites de diretórios registrados no Google Maps
-                    site = site_raw if _site_valido(site_raw) else ""
-                    return {
-                        "telefone_google": p.get("formatted_phone_number", ""),
-                        "site_google":     site,
-                        "rating_google":   p.get("rating", ""),
-                        "avaliacoes":      p.get("user_ratings_total", ""),
-                    }
+        async with session.get(url2, params=params2, timeout=aiohttp.ClientTimeout(total=5)) as r:
+            if r.status != 200:
+                return {}
+            data2 = await r.json()
+        result = data2.get("result", {})
+        site_raw = result.get("website", "")
+        site = site_raw if _site_valido(site_raw) else ""
+        return {
+            "telefone_google": result.get("formatted_phone_number", ""),
+            "site_google":     site,
+            "rating_google":   result.get("rating", ""),
+            "avaliacoes":      result.get("user_ratings_total", ""),
+        }
     except Exception:
         pass
     return {}
@@ -166,6 +185,10 @@ def _extrair_instagram_do_html(html: str) -> str:
 # Semáforo global de DDG — mais de 3 conexões simultâneas disparam rate limit.
 # Inicializado em rodar_agente() dentro do event loop correto.
 _DDG_SEM: asyncio.Semaphore | None = None
+
+# Semáforo global de BrasilAPI — com 15 workers simultâneos, a API retorna 429.
+# Limita a 4 requisições paralelas para evitar rate limit.
+_BRASIL_SEM: asyncio.Semaphore | None = None
 
 
 async def buscar_duckduckgo(session, query: str, tentativas: int = 1) -> str:
@@ -289,8 +312,12 @@ def _extrair_emails(html: str) -> list:
     return [e for e in todos if not any(x in e.lower() for x in EMAIL_RUIDO)]
 
 
-async def _scrape_pagina(session, url: str) -> tuple[str, str]:
-    """Scrapa uma página e retorna (email, instagram) encontrados."""
+# Regex para telefone brasileiro em páginas de contato: (11) 9999-9999, (11) 99999-9999
+_RE_TELEFONE_SITE = re.compile(r'\(\d{2}\)\s*\d{4,5}[\s\-]?\d{4}')
+
+
+async def _scrape_pagina(session, url: str) -> tuple[str, str, str]:
+    """Scrapa uma página e retorna (email, instagram, telefone) encontrados."""
     try:
         async with session.get(
             url, headers=HEADERS_BROWSER,
@@ -302,10 +329,17 @@ async def _scrape_pagina(session, url: str) -> tuple[str, str]:
                 emails = _extrair_emails(html)
                 email = emails[0] if emails else ""
                 instagram = _extrair_instagram_do_html(html)
-                return email, instagram
+                telefone = ""
+                tel_match = _RE_TELEFONE_SITE.search(html)
+                if tel_match:
+                    tel_raw = tel_match.group(0)
+                    tel_digits = re.sub(r'\D', '', tel_raw)
+                    if len(tel_digits) in (10, 11):
+                        telefone = tel_raw.strip()
+                return email, instagram, telefone
     except Exception:
         pass
-    return "", ""
+    return "", "", ""
 
 
 async def extrair_contatos_do_site(session, site_url: str) -> dict:
@@ -314,7 +348,7 @@ async def extrair_contatos_do_site(session, site_url: str) -> dict:
     Usa asyncio.gather — todas as páginas são buscadas simultaneamente,
     e pega o primeiro resultado não-vazio de cada campo (prioridade = ordem das páginas).
     """
-    resultado = {"email_site": "", "instagram_site": ""}
+    resultado = {"email_site": "", "instagram_site": "", "telefone_site": ""}
     if not site_url:
         return resultado
 
@@ -336,12 +370,14 @@ async def extrair_contatos_do_site(session, site_url: str) -> dict:
     for r in resultados:
         if isinstance(r, Exception):
             continue
-        email, instagram = r
+        email, instagram, telefone = r
         if email and not resultado["email_site"]:
             resultado["email_site"] = email
         if instagram and not resultado["instagram_site"]:
             resultado["instagram_site"] = instagram
-        if resultado["email_site"] and resultado["instagram_site"]:
+        if telefone and not resultado["telefone_site"]:
+            resultado["telefone_site"] = telefone
+        if resultado["email_site"] and resultado["instagram_site"] and resultado["telefone_site"]:
             break
 
     return resultado
@@ -394,8 +430,8 @@ async def _processar(session, cnpj, db, forcar=False):
         if not site:
             site = await buscar_site_ddg(session, nome_busca, cidade)
 
-        # Instagram e e-mail zerados — serão coletados por outro meio futuramente
-        contatos = {"email_site": "", "instagram_site": ""}
+        # Scraping do site: extrai email, instagram e telefone (fallback)
+        contatos = await extrair_contatos_do_site(session, site)
 
         # No REENRICH usamos dados do banco; no fluxo normal usamos dados da BrasilAPI
         if forcar:
@@ -422,7 +458,7 @@ async def _processar(session, cnpj, db, forcar=False):
             "municipio":       cidade,
             "uf":              uf,
             "socio_principal": socio,
-            "telefone":        google.get("telefone_google", "") or tel_receita,
+            "telefone":        google.get("telefone_google", "") or contatos.get("telefone_site", "") or tel_receita,
             "email":           contatos.get("email_site", "") or email_rf or "",
             "instagram":       contatos.get("instagram_site", ""),
             "site":            site,
@@ -480,11 +516,10 @@ async def enriquecer(session, cnpj, db, forcar=False):
 # ─── Loop principal ───────────────────────────────────────────────────────────
 
 async def rodar_agente():
-    global _DDG_SEM
-    # Inicializa o semáforo DDG dentro do event loop correto.
-    # Limita a 3 requisições simultâneas ao DuckDuckGo para evitar rate limit,
-    # independente de quantos workers estejam rodando em paralelo.
-    _DDG_SEM = asyncio.Semaphore(3)
+    global _DDG_SEM, _BRASIL_SEM
+    # Inicializa os semáforos dentro do event loop correto.
+    _DDG_SEM = asyncio.Semaphore(3)      # max 3 conexões simultâneas ao DuckDuckGo
+    _BRASIL_SEM = asyncio.Semaphore(4)   # max 4 conexões simultâneas à BrasilAPI
 
     db = Database()
     db.criar_tabelas()
