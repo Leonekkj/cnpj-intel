@@ -33,9 +33,27 @@ if not ADMIN_TOKEN:
     import warnings
     warnings.warn("⚠️  ADMIN_TOKEN não configurado!")
 
+import logging as _logging
+_log_api = _logging.getLogger("api")
+
 db = Database()
 db.criar_tabelas()
 db.criar_tabela_tokens()
+
+# Converte telefones inválidos (' ', 'N/A', 'None', etc.) para NULL
+_tel_limpos = db.migrar_telefones_invalidos()
+if _tel_limpos > 0:
+    _log_api.info(f"🧹 {_tel_limpos} telefones inválidos convertidos para NULL")
+
+# Recomputa categoria_padrao usando normalização de acentos (corrige ~82k registros)
+_cat_migradas = db.migrar_categorias_faltantes()
+if _cat_migradas > 0:
+    _log_api.info(f"🏷️  {_cat_migradas} categorias recomputadas")
+
+# Limpa sites de diretório que foram salvos erroneamente pelo agente
+_sites_limpos = db.limpar_sites_diretorio()
+if _sites_limpos > 0:
+    _log_api.info(f"🧹 {_sites_limpos} sites de diretório removidos do banco")
 
 # Migra tokens da variável de ambiente TOKENS para o banco como plano "pro"
 # (compatibilidade com tokens já em uso)
@@ -144,44 +162,78 @@ def listar_empresas(
     q:             str  = Query(""),
     uf:            str  = Query(""),
     porte:         str  = Query(""),
-    cnae:          str  = Query("", description="Filtro por CNAE ou palavra-chave do setor"),
+    cnae:          str  = Query("", description="Filtro livre por descrição CNAE"),
+    categoria:     str  = Query("", description="Filtro por categoria padronizada (ex: Advocacia, Saúde)"),
     abertura_de:   str  = Query("", description="Data de abertura inicial YYYY-MM-DD"),
     abertura_ate:  str  = Query("", description="Data de abertura final YYYY-MM-DD"),
     com_email:     bool = Query(False),
     com_instagram: bool = Query(False),
     com_telefone:  bool = Query(False),
     com_site:      bool = Query(False),
+    com_contato:   bool = Query(False, description="Padrão: retorna todos os CNPJs"),
     pagina:        int  = Query(1, ge=1),
     por_pagina:    int  = Query(50, le=200),
     info:          dict = Depends(get_token_info),
 ):
-    # Aplica limite do plano no por_pagina
-    limite = info.get("limite_dia")
-    restante = info.get("restante")
-    if limite is not None and restante is not None:
-        por_pagina = min(por_pagina, restante) if restante > 0 else 0
-        if por_pagina == 0:
-            return {"total": 0, "pagina": pagina, "por_pagina": 0, "dados": [],
-                    "plano": info["nome_plano"], "restante": 0}
+    plano = info["plano"]
+
+    # Free: limita por_pagina ao restante; quota consumida no ver+
+    if plano == "free":
+        restante = info.get("restante", 0)
+        if info.get("limite_dia") is not None:
+            por_pagina = min(por_pagina, restante) if restante > 0 else 0
+            if por_pagina == 0:
+                return {"total": 0, "pagina": pagina, "por_pagina": 0, "dados": [],
+                        "plano": info["nome_plano"], "restante": 0}
+
+    # Básico: limita por_pagina ao restante e consome quota na listagem
+    if plano == "basico":
+        restante = info.get("restante", 0)
+        if info.get("limite_dia") is not None:
+            por_pagina = min(por_pagina, restante) if restante > 0 else 0
+            if por_pagina == 0:
+                return {"total": 0, "pagina": pagina, "por_pagina": 0, "dados": [],
+                        "plano": info["nome_plano"], "restante": 0}
 
     resultado = db.buscar_empresas(
-        q=q, uf=uf, porte=porte, cnae=cnae,
+        q=q, uf=uf, porte=porte, cnae=cnae, categoria=categoria,
         abertura_de=abertura_de, abertura_ate=abertura_ate,
         com_email=com_email, com_instagram=com_instagram,
         com_telefone=com_telefone, com_site=com_site,
+        com_contato=com_contato,
         pagina=pagina, por_pagina=por_pagina,
     )
 
-    # Quota NÃO é consumida na listagem — só é consumida ao abrir o detalhe
-    # Isso garante que scroll, paginação e filtros não zeram a cota do usuário
+    # Básico: consome quota com base nas linhas retornadas
+    retornados = len(resultado.get("dados", []))
+    if plano == "basico" and retornados > 0 and not info.get("is_admin"):
+        db.consumir_quota(info["token"], retornados)
+
+    # Free: oculta contatos na listagem (revelados via ver+)
+    if plano == "free":
+        for emp in resultado.get("dados", []):
+            for campo in ("telefone", "email", "instagram", "site"):
+                emp[campo] = ""
+
     resultado["plano"]    = info["nome_plano"]
     resultado["restante"] = info.get("restante")
     return resultado
 
 
+# Cache em memória das estatísticas — 5 COUNT(*) full-scan custam caro
+import time as _time
+_stats_cache = {"data": None, "ts": 0}
+_STATS_TTL = 60  # segundos
+
 @app.get("/api/stats")
 def estatisticas(info: dict = Depends(get_token_info)):
-    return db.estatisticas()
+    agora = _time.time()
+    if _stats_cache["data"] and (agora - _stats_cache["ts"]) < _STATS_TTL:
+        return _stats_cache["data"]
+    data = db.estatisticas()
+    _stats_cache["data"] = data
+    _stats_cache["ts"] = agora
+    return data
 
 
 @app.get("/api/cnaes")
@@ -197,8 +249,9 @@ def detalhe_empresa(cnpj: str, info: dict = Depends(get_token_info)):
     if not result:
         raise HTTPException(status_code=404, detail="CNPJ não encontrado")
 
-    # Contabiliza 1 CNPJ visualizado
-    if not info.get("is_admin") and info["plano"] != "pro":
+    # Quota: só o plano free consome ao abrir detalhe (ver+)
+    # Básico consome no export, Pro é ilimitado
+    if not info.get("is_admin") and info["plano"] == "free":
         db.consumir_quota(info["token"], 1)
 
     return result
@@ -212,6 +265,7 @@ def exportar_csv(
     uf:            str  = Query(""),
     porte:         str  = Query(""),
     cnae:          str  = Query(""),
+    categoria:     str  = Query(""),
     abertura_de:   str  = Query(""),
     abertura_ate:  str  = Query(""),
     com_email:     bool = Query(False),
@@ -223,7 +277,7 @@ def exportar_csv(
     """Exporta resultados como CSV. Requer plano Básico ou Pro."""
     limite_export = 500 if info["plano"] == "basico" else 5000
     resultado = db.buscar_empresas(
-        q=q, uf=uf, porte=porte, cnae=cnae,
+        q=q, uf=uf, porte=porte, cnae=cnae, categoria=categoria,
         abertura_de=abertura_de, abertura_ate=abertura_ate,
         com_email=com_email, com_instagram=com_instagram,
         com_telefone=com_telefone, com_site=com_site,
@@ -276,10 +330,40 @@ def excluir_token(token: str, _: str = Depends(require_admin)):
     return {"status": "excluido", "token": token}
 
 
+@app.post("/api/admin/reset-database")
+def reset_database(_: str = Depends(require_admin)):
+    """Apaga todos os dados de empresas e zera o progresso do agente."""
+    db.reset_completo()
+    _stats_cache["data"] = None
+    return {"status": "ok", "mensagem": "Base zerada com sucesso"}
+
+
 @app.post("/api/admin/agente")
 def iniciar_agente(_: str = Depends(require_admin)):
     subprocess.Popen([sys.executable, "agent/agent.py"])
     return {"status": "Agente iniciado"}
+
+
+@app.post("/api/admin/limpar-sites")
+def limpar_sites(_: str = Depends(require_admin)):
+    """Remove URLs de diretórios/listagens salvas erroneamente no campo 'site'."""
+    total = db.limpar_sites_falsos()
+    # Invalida cache de stats
+    _stats_cache["data"] = None
+    return {"status": "ok", "registros_limpos": total}
+
+
+@app.get("/api/admin/diagnostico-telefone")
+def diagnostico_telefone(_: str = Depends(require_admin)):
+    """Diagnóstico: verifica se telefones estão sendo salvos no banco."""
+    return db.diagnostico_telefone()
+
+
+@app.post("/api/admin/vacuum")
+def vacuum_banco(_: str = Depends(require_admin)):
+    """Executa VACUUM ANALYZE no Postgres para liberar espaço após DELETE em massa."""
+    db.vacuum()
+    return {"status": "ok", "mensagem": "VACUUM ANALYZE executado"}
 
 
 if __name__ == "__main__":

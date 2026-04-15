@@ -4,6 +4,7 @@ Inclui persistência de progresso do agente.
 """
 
 import os
+import unicodedata
 from datetime import datetime, timedelta, date as date_type
 
 DATABASE_URL = (
@@ -18,9 +19,22 @@ USE_POSTGRES = DATABASE_URL.startswith("postgresql") or DATABASE_URL.startswith(
 
 if USE_POSTGRES:
     import psycopg2
-    print("Conectando ao PostgreSQL...")
+    from psycopg2 import pool as _pg_pool
+    from contextlib import contextmanager
+    print("Conectando ao PostgreSQL com pool...")
+    # Pool de conexões reutilizáveis: elimina overhead de TLS+auth a cada query
+    _POOL = _pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=DATABASE_URL)
+
+    @contextmanager
     def _conn():
-        return psycopg2.connect(DATABASE_URL)
+        c = _POOL.getconn()
+        try:
+            yield c
+        finally:
+            try:
+                _POOL.putconn(c)
+            except Exception:
+                pass
 else:
     import sqlite3
     print("Usando SQLite local")
@@ -31,6 +45,124 @@ else:
 
 PH = "%s" if USE_POSTGRES else "?"
 LIKE = "ILIKE" if USE_POSTGRES else "LIKE"
+
+
+# ─── Utilitários de validação ─────────────────────────────────────────────────
+
+def _norm(text: str) -> str:
+    """Lowercase + remove diacríticos. 'Contábil' → 'contabil'."""
+    return unicodedata.normalize("NFD", text.lower()).encode("ascii", "ignore").decode()
+
+
+_TELEFONES_INVALIDOS = {"", "n/a", "none", "null", "nan", "-", "0", "00000000"}
+
+def telefone_valido(tel) -> bool:
+    """Retorna True apenas para strings com conteúdo telefônico real."""
+    if not tel:
+        return False
+    return tel.strip().lower() not in _TELEFONES_INVALIDOS
+
+
+# ─── Mapeamento CNAE → categoria padronizada ──────────────────────────────────
+# Substring (lowercase) encontrado na descrição CNAE → nome da categoria.
+# A primeira correspondência vence — ordene do mais específico para o mais geral.
+CNAE_CATEGORIAS = {
+    "advocat":                  "Advocacia",
+    "contábi":                  "Contabilidade",
+    "restaurante":              "Restaurantes",
+    "padaria":                  "Padaria",
+    "confeitaria":              "Padaria",
+    "lanchonete":               "Lanchonetes",
+    "mercearia":                "Mercearia",
+    "minimercado":              "Mercearia",
+    "supermercad":              "Supermercado",
+    "hipermercad":              "Supermercado",
+    "açougue":                  "Açougue",
+    "abate":                    "Açougue",
+    "odontol":                  "Odontologia",
+    "farmáci":                  "Farmácias",
+    "farmaci":                  "Farmácias",
+    "drogari":                  "Farmácias",
+    "veterinári":               "Veterinária",
+    "veterinari":               "Veterinária",
+    "fisioterapia":             "Fisioterapia",
+    "psicolog":                 "Psicologia",
+    "cabeleireiro":             "Salão de Beleza",
+    "salão de beleza":          "Salão de Beleza",
+    "manicure":                 "Salão de Beleza",
+    "barbearia":                "Barbearia",
+    "estétic":                  "Estética",
+    "estetica":                 "Estética",
+    "condicionamento físico":   "Academia",
+    "academia":                 "Academia",
+    "ginástica":                "Academia",
+    "software":                 "Software",
+    "desenvolvimento de sistem":"Software",
+    "informátic":               "Informática",
+    "computador":               "Informática",
+    "telecomunicaç":            "Telecomunicações",
+    "telecom":                  "Telecomunicações",
+    "escola":                   "Educação",
+    "ensino fundament":         "Educação",
+    "ensino médio":             "Educação",
+    "ensino superior":          "Educação",
+    "curso":                    "Cursos e Treinamentos",
+    "treinamento":              "Cursos e Treinamentos",
+    "idioma":                   "Idiomas",
+    "língua":                   "Idiomas",
+    "imobiliár":                "Imobiliária",
+    "imobiliari":               "Imobiliária",
+    "engenhari":                "Engenharia",
+    "consultori":               "Consultoria",
+    "construtora":              "Construção",
+    "construção de edifíc":     "Construção",
+    "obras de albanearia":      "Construção",
+    "instalação elétric":       "Elétrica",
+    "eletricista":              "Elétrica",
+    "instalações hidráulic":    "Hidráulica",
+    "encanador":                "Hidráulica",
+    "vestuári":                 "Vestuário",
+    "confecç":                  "Vestuário",
+    "calçado":                  "Calçados",
+    "móveis":                   "Móveis",
+    "moveleiro":                "Móveis",
+    "eletrodoméstic":           "Eletrodomésticos",
+    "eletrodomestic":           "Eletrodomésticos",
+    "veículos automotores":     "Automóveis",
+    "automóvei":                "Automóveis",
+    "peças e acessórios":       "Automóveis",
+    "combustível":              "Combustível",
+    "posto de gasolina":        "Combustível",
+    "transporte rodoviário de carga": "Transporte de Carga",
+    "transporte de carga":      "Transporte de Carga",
+    "transporte rodoviário de passageiro": "Transporte de Passageiros",
+    "transporte de passageiro": "Transporte de Passageiros",
+    "logístic":                 "Logística",
+    "armazenamento":            "Logística",
+    "agricultur":               "Agricultura",
+    "pecuári":                  "Pecuária",
+    "criação de":               "Pecuária",
+    "pesca":                    "Pesca",
+    "aquicultur":               "Pesca",
+    # Saúde — genérico por último (após os específicos)
+    "médico":                   "Saúde",
+    "clínica":                  "Saúde",
+    "hospital":                 "Saúde",
+    "laboratori":               "Saúde",
+}
+
+
+# Dict com chaves normalizadas (sem acento) para matching robusto
+_CNAE_CATS_NORM = {_norm(k): v for k, v in CNAE_CATEGORIAS.items()}
+
+
+def cnae_para_categoria(cnae: str) -> str:
+    """Retorna a categoria padronizada a partir da descrição CNAE."""
+    cnae_norm = _norm(cnae or "")
+    for substr, cat in _CNAE_CATS_NORM.items():
+        if substr in cnae_norm:
+            return cat
+    return "Outros"
 
 
 class Database:
@@ -161,27 +293,45 @@ class Database:
             cur = conn.cursor()
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS empresas (
-                    cnpj            TEXT PRIMARY KEY,
-                    razao_social    TEXT,
-                    nome_fantasia   TEXT,
-                    porte           TEXT,
-                    cnae            TEXT,
-                    situacao        TEXT,
-                    abertura        TEXT,
-                    municipio       TEXT,
-                    uf              TEXT,
-                    socio_principal TEXT,
-                    telefone        TEXT,
-                    email           TEXT,
-                    instagram       TEXT,
-                    site            TEXT,
-                    rating_google   TEXT,
-                    avaliacoes      TEXT,
-                    atualizado_em   TEXT
+                    cnpj             TEXT PRIMARY KEY,
+                    razao_social     TEXT,
+                    nome_fantasia    TEXT,
+                    porte            TEXT,
+                    cnae             TEXT,
+                    situacao         TEXT,
+                    abertura         TEXT,
+                    municipio        TEXT,
+                    uf               TEXT,
+                    socio_principal  TEXT,
+                    telefone         TEXT,
+                    email            TEXT,
+                    instagram        TEXT,
+                    site             TEXT,
+                    rating_google    TEXT,
+                    avaliacoes       TEXT,
+                    atualizado_em    TEXT,
+                    categoria_padrao TEXT
                 )
             """)
-            for idx in ["uf", "porte", "email", "cnae", "abertura"]:
+            # Adiciona coluna categoria_padrao em bancos já existentes (idempotente)
+            if USE_POSTGRES:
+                cur.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS categoria_padrao TEXT")
+            else:
+                try:
+                    cur.execute("ALTER TABLE empresas ADD COLUMN categoria_padrao TEXT")
+                except Exception:
+                    conn.rollback()  # SQLite não suporta IF NOT EXISTS — reseta transação
+
+            for idx in ["uf", "porte", "email", "cnae", "abertura", "atualizado_em", "categoria_padrao"]:
                 cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{idx} ON empresas({idx})")
+
+            # Índices parciais para os filtros de "tem contato" — só PostgreSQL
+            if USE_POSTGRES:
+                for col in ("telefone", "email", "instagram", "site"):
+                    cur.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_tem_{col} "
+                        f"ON empresas({col}) WHERE {col} IS NOT NULL AND {col} != ''"
+                    )
             conn.commit()
 
     def criar_tabela_progresso(self):
@@ -204,6 +354,25 @@ class Database:
             else:
                 cur.execute("""
                     INSERT OR IGNORE INTO agente_progresso (id, posicao, updated)
+                    VALUES (1, 0, datetime('now'))
+                """)
+            conn.commit()
+
+    def reset_completo(self):
+        """Apaga todas as empresas e zera o progresso do agente."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM empresas")
+            cur.execute("DELETE FROM agente_progresso")
+            if USE_POSTGRES:
+                cur.execute("""
+                    INSERT INTO agente_progresso (id, posicao, updated)
+                    VALUES (1, 0, NOW()::TEXT)
+                    ON CONFLICT (id) DO UPDATE SET posicao = 0, updated = NOW()::TEXT
+                """)
+            else:
+                cur.execute("""
+                    INSERT OR REPLACE INTO agente_progresso (id, posicao, updated)
                     VALUES (1, 0, datetime('now'))
                 """)
             conn.commit()
@@ -236,58 +405,93 @@ class Database:
         return 0
 
     def salvar_empresa(self, perfil: dict):
-        sql_pg = """
+        # Campos de contato: só atualiza se o novo valor NÃO for vazio.
+        # Isso evita que o REENRICH apague dados existentes quando a nova
+        # passagem não encontra o contato (ex: telefone que já estava salvo).
+        _coalesce_pg = "CASE WHEN EXCLUDED.{f} != '' THEN EXCLUDED.{f} ELSE empresas.{f} END"
+        _coalesce_sq = "CASE WHEN excluded.{f} != '' THEN excluded.{f} ELSE empresas.{f} END"
+
+        contatos = ("telefone", "email", "instagram", "site", "rating_google", "avaliacoes")
+
+        def _sets_pg():
+            fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
+                     "municipio","uf","socio_principal","atualizado_em","categoria_padrao"]
+            partes = [f"{f}=EXCLUDED.{f}" for f in fixos]
+            partes += [f"{f}={_coalesce_pg.format(f=f)}" for f in contatos]
+            return ", ".join(partes)
+
+        def _sets_sq():
+            fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
+                     "municipio","uf","socio_principal","atualizado_em","categoria_padrao"]
+            partes = [f"{f}=excluded.{f}" for f in fixos]
+            partes += [f"{f}={_coalesce_sq.format(f=f)}" for f in contatos]
+            return ", ".join(partes)
+
+        # Deriva categoria_padrao a partir do CNAE (se não vier no perfil)
+        cat = perfil.get("categoria_padrao") or cnae_para_categoria(perfil.get("cnae", ""))
+
+        sql_pg = f"""
             INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
-             instagram, site, rating_google, avaliacoes, atualizado_em)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (cnpj) DO UPDATE SET
-                razao_social=EXCLUDED.razao_social,
-                nome_fantasia=EXCLUDED.nome_fantasia,
-                porte=EXCLUDED.porte, cnae=EXCLUDED.cnae,
-                situacao=EXCLUDED.situacao, municipio=EXCLUDED.municipio,
-                uf=EXCLUDED.uf, socio_principal=EXCLUDED.socio_principal,
-                telefone=EXCLUDED.telefone, email=EXCLUDED.email,
-                instagram=EXCLUDED.instagram, site=EXCLUDED.site,
-                rating_google=EXCLUDED.rating_google,
-                avaliacoes=EXCLUDED.avaliacoes,
-                atualizado_em=EXCLUDED.atualizado_em
+             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (cnpj) DO UPDATE SET {_sets_pg()}
         """
-        sql_sq = """
-            INSERT OR REPLACE INTO empresas
+        sql_sq = f"""
+            INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
-             instagram, site, rating_google, avaliacoes, atualizado_em)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(cnpj) DO UPDATE SET {_sets_sq()}
         """
         valores = (
             perfil.get("cnpj"), perfil.get("razao_social"), perfil.get("nome_fantasia"),
             perfil.get("porte"), perfil.get("cnae"), perfil.get("situacao"),
             perfil.get("abertura"), perfil.get("municipio"), perfil.get("uf"),
-            perfil.get("socio_principal"), perfil.get("telefone"), perfil.get("email"),
-            perfil.get("instagram"), perfil.get("site"), perfil.get("rating_google"),
-            perfil.get("avaliacoes"), perfil.get("atualizado_em"),
+            perfil.get("socio_principal"), perfil.get("telefone",""), perfil.get("email",""),
+            perfil.get("instagram",""), perfil.get("site",""), perfil.get("rating_google",""),
+            perfil.get("avaliacoes",""), perfil.get("atualizado_em"), cat,
         )
         with _conn() as conn:
             cur = conn.cursor()
             cur.execute(sql_pg if USE_POSTGRES else sql_sq, valores)
             conn.commit()
 
-    def cnpj_existe_recente(self, cnpj: str, dias: int = 30) -> bool:
-        limite = (datetime.utcnow() - timedelta(days=dias)).isoformat()
+    def buscar_telefone_salvo(self, cnpj: str) -> str:
+        """Retorna o telefone salvo no banco para o CNPJ, ou '' se vazio/ausente."""
         with _conn() as conn:
             cur = conn.cursor()
-            cur.execute(f"SELECT atualizado_em FROM empresas WHERE cnpj = {PH}", (cnpj,))
+            cur.execute(f"SELECT telefone FROM empresas WHERE cnpj = {PH}", (cnpj,))
             row = cur.fetchone()
-            if row and row[0] and row[0] > limite:
-                return True
-        return False
+            if row and row[0]:
+                return str(row[0])
+        return ""
 
-    def buscar_empresas(self, q="", uf="", porte="", cnae="",
+    def cnpj_existe_recente(self, cnpj: str, dias: int = 30) -> bool:
+        """
+        Retorna True se o CNPJ já foi processado recentemente e deve ser pulado.
+        TTL adaptativo:
+        - Empresa COM telefone → pula por `dias` (padrão 30 dias)
+        - Empresa SEM telefone → pula por apenas 3 dias (retenta mais cedo)
+        """
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT atualizado_em, telefone FROM empresas WHERE cnpj = {PH}", (cnpj,))
+            row = cur.fetchone()
+            if not row or not row[0]:
+                return False
+            has_phone = telefone_valido(row[1])
+            ttl = dias if has_phone else 3
+            limite = (datetime.utcnow() - timedelta(days=ttl)).isoformat()
+            return row[0] > limite
+
+    def buscar_empresas(self, q="", uf="", porte="", cnae="", categoria="",
                         abertura_de="", abertura_ate="",
                         com_email=False, com_instagram=False,
                         com_telefone=False, com_site=False,
+                        com_contato=False,
                         pagina=1, por_pagina=50) -> dict:
         filtros = ["1=1"]
         params = []
@@ -302,7 +506,12 @@ class Database:
         if porte:
             filtros.append(f"porte {LIKE} {PH}")
             params.append(f"%{porte}%")
-        if cnae:
+        if categoria:
+            # Filtro por categoria padronizada (match exato — campo normalizado)
+            filtros.append(f"categoria_padrao = {PH}")
+            params.append(categoria)
+        elif cnae:
+            # Filtro direto por descrição CNAE (busca textual)
             filtros.append(f"cnae {LIKE} {PH}")
             params.append(f"%{cnae}%")
         if abertura_de:
@@ -315,10 +524,17 @@ class Database:
             filtros.append("email IS NOT NULL AND email != ''")
         if com_instagram:
             filtros.append("instagram IS NOT NULL AND instagram != ''")
+        _tel_valido_sql = (
+            "telefone IS NOT NULL AND TRIM(telefone) != '' "
+            "AND LOWER(telefone) NOT IN ('n/a','none','null','nan','-')"
+        )
         if com_telefone:
-            filtros.append("telefone IS NOT NULL AND telefone != ''")
+            filtros.append(_tel_valido_sql)
         if com_site:
             filtros.append("site IS NOT NULL AND site != ''")
+        if com_contato:
+            # Critério mínimo: telefone válido obrigatório.
+            filtros.append(_tel_valido_sql)
 
         where = " AND ".join(filtros)
         offset = (pagina - 1) * por_pagina
@@ -346,6 +562,89 @@ class Database:
             cols = [d[0] for d in cur.description]
             return dict(zip(cols, row))
 
+    def migrar_telefones_invalidos(self) -> int:
+        """
+        Converte telefones inválidos (' ', 'N/A', 'None', etc.) para NULL.
+        Idempotente — seguro rodar múltiplas vezes.
+        """
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE empresas SET telefone = NULL "
+                "WHERE telefone IS NOT NULL AND ("
+                "  TRIM(telefone) = '' "
+                "  OR LOWER(telefone) IN ('n/a','none','null','nan','-','0','00000000')"
+                ")"
+            )
+            total = cur.rowcount
+            conn.commit()
+        return total
+
+    def migrar_categorias_faltantes(self) -> int:
+        """
+        Recomputa categoria_padrao para todos os registros sem categoria.
+        Usa normalização de acentos — corrige o matching que antes falhava.
+        """
+        total = 0
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT cnpj, cnae FROM empresas "
+                "WHERE categoria_padrao IS NULL OR categoria_padrao = '' OR categoria_padrao = 'Outros'"
+            )
+            rows = cur.fetchall()
+            updates = []
+            for cnpj, cnae in rows:
+                cat = cnae_para_categoria(cnae)
+                updates.append((cat, cnpj))
+                total += 1
+            if updates:
+                cur.executemany(
+                    f"UPDATE empresas SET categoria_padrao = {PH} WHERE cnpj = {PH}",
+                    updates,
+                )
+                conn.commit()
+        return total
+
+    # Lista unificada de domínios de diretórios / listagens de CNPJ.
+    # Usada tanto na limpeza do banco quanto como referência para o agente.
+    _DOMINIOS_DIRETORIO = [
+        # Diretórios brasileiros de CNPJ
+        "%cadastroempresa%", "%cnpj.biz%", "%cnpj.ws%", "%cnpja.com%",
+        "%cnpjativos%", "%infocnpj%", "%buscacnpj%", "%consulta-cnpj%",
+        "%empresasdobrasil%", "%qsa.me%", "%econodata%", "%minhareceita%",
+        "%receitaws%", "%casadosdados%", "%sintegra%",
+        "%servicos.receita%", "%portaldatransparencia%",
+        # Diretórios internacionais
+        "%dnb.com%", "%opencorporates%", "%bloomberg.com/profile%",
+        "%crunchbase%", "%zoominfo%", "%manta.com%", "%bizapedia%",
+        # Listas e guias
+        "%telelistas%", "%guiamais%", "%apontador%", "%yellowpages%",
+        "%paginas.amarelas%", "%infobel%", "%hotfrog%",
+        "%yelp.com%", "%tripadvisor%", "%foursquare%",
+        # Jurídico / institucional
+        "%escavador%", "%jusbrasil%",
+        # Redes sociais (não são site oficial de empresa)
+        "%linkedin.com%",
+    ]
+
+    def limpar_sites_diretorio(self) -> int:
+        """
+        Zera o campo 'site' de registros cujo site é um diretório de empresas
+        e não o site real da empresa. Retorna o número de registros atualizados.
+        """
+        total = 0
+        with _conn() as conn:
+            cur = conn.cursor()
+            for p in self._DOMINIOS_DIRETORIO:
+                cur.execute(
+                    f"UPDATE empresas SET site='' WHERE site {LIKE} {PH}",
+                    (p,)
+                )
+                total += cur.rowcount
+            conn.commit()
+        return total
+
     def listar_cnaes(self) -> list:
         with _conn() as conn:
             cur = conn.cursor()
@@ -359,17 +658,50 @@ class Database:
             """)
             return [{"cnae": r[0], "n": r[1]} for r in cur.fetchall()]
 
+    def buscar_cnpjs_sem_contato(self, limite: int = 5000, offset: int = 0) -> list:
+        """
+        Retorna CNPJs de empresas sem email E sem instagram.
+        Site não é critério — pode ter site mas scraping não achou contato.
+        """
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"""
+                SELECT cnpj FROM empresas
+                WHERE (email IS NULL OR email = '')
+                  AND (instagram IS NULL OR instagram = '')
+                ORDER BY atualizado_em ASC
+                LIMIT {PH} OFFSET {PH}
+            """, (limite, offset))
+            return [row[0] for row in cur.fetchall()]
+
+    def contar_sem_contato(self) -> int:
+        """Conta CNPJs sem email E sem instagram."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT COUNT(*) FROM empresas
+                WHERE (email IS NULL OR email = '')
+                  AND (instagram IS NULL OR instagram = '')
+            """)
+            return cur.fetchone()[0]
+
     def estatisticas(self) -> dict:
         with _conn() as conn:
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) FROM empresas")
-            total = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM empresas WHERE telefone IS NOT NULL AND telefone != ''")
-            com_tel = cur.fetchone()[0]
+            total = cur.fetchone()[0]   # total real no banco (com e sem telefone)
+            cur.execute(
+                "SELECT COUNT(*) FROM empresas WHERE telefone IS NOT NULL "
+                "AND TRIM(telefone) != '' "
+                "AND LOWER(telefone) NOT IN ('n/a','none','null','nan','-')"
+            )
+            com_tel = cur.fetchone()[0]  # empresas contactáveis (com telefone válido)
             cur.execute("SELECT COUNT(*) FROM empresas WHERE email IS NOT NULL AND email != ''")
             com_email = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM empresas WHERE instagram IS NOT NULL AND instagram != ''")
             com_insta = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM empresas WHERE site IS NOT NULL AND site != ''")
+            com_site = cur.fetchone()[0]
             cur.execute("SELECT uf, COUNT(*) as n FROM empresas GROUP BY uf ORDER BY n DESC LIMIT 10")
             por_uf = [{"uf": r[0], "n": r[1]} for r in cur.fetchall()]
             cur.execute("SELECT porte, COUNT(*) as n FROM empresas GROUP BY porte ORDER BY n DESC")
@@ -387,7 +719,59 @@ class Database:
             "com_telefone": com_tel,
             "com_email": com_email,
             "com_instagram": com_insta,
+            "com_site": com_site,
             "por_uf": por_uf,
             "por_porte": por_porte,
             "progresso_agente": progresso,
         }
+
+    def diagnostico_telefone(self) -> dict:
+        """Retorna contagens e últimos registros para diagnóstico de persistência de telefone."""
+        _tel_valido = (
+            "telefone IS NOT NULL AND TRIM(telefone) != '' "
+            "AND LOWER(telefone) NOT IN ('n/a','none','null','nan','-')"
+        )
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM empresas")
+            total = cur.fetchone()[0]
+            cur.execute(f"SELECT COUNT(*) FROM empresas WHERE {_tel_valido}")
+            com_telefone = cur.fetchone()[0]
+            sem_telefone = total - com_telefone
+            cur.execute(
+                "SELECT cnpj, razao_social, telefone, atualizado_em "
+                "FROM empresas ORDER BY atualizado_em DESC LIMIT 10"
+            )
+            cols = [d[0] for d in cur.description]
+            ultimos_salvos = [dict(zip(cols, r)) for r in cur.fetchall()]
+            cur.execute(
+                f"SELECT cnpj, razao_social, telefone, atualizado_em "
+                f"FROM empresas WHERE {_tel_valido} "
+                f"ORDER BY atualizado_em DESC LIMIT 10"
+            )
+            ultimos_com_tel = [dict(zip(cols, r)) for r in cur.fetchall()]
+        return {
+            "total_empresas": total,
+            "com_telefone": com_telefone,
+            "sem_telefone": sem_telefone,
+            "ultimos_salvos": ultimos_salvos,
+            "ultimos_com_tel": ultimos_com_tel,
+        }
+
+    def vacuum(self):
+        """
+        Executa VACUUM ANALYZE no Postgres para liberar espaço após DELETE em massa.
+        No SQLite não é necessário (o arquivo não encolhe automaticamente, mas o overhead é baixo).
+        """
+        if not USE_POSTGRES:
+            return
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.set_isolation_level(0)  # AUTOCOMMIT obrigatório — VACUUM não pode rodar em transação
+        cur = conn.cursor()
+        cur.execute("VACUUM ANALYZE empresas")
+        cur.close()
+        conn.close()
+
+    def limpar_sites_falsos(self) -> int:
+        """Alias de limpar_sites_diretorio — mantido para compatibilidade."""
+        return self.limpar_sites_diretorio()
