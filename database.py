@@ -358,6 +358,25 @@ class Database:
                 """)
             conn.commit()
 
+    def reset_completo(self):
+        """Apaga todas as empresas e zera o progresso do agente."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM empresas")
+            cur.execute("DELETE FROM agente_progresso")
+            if USE_POSTGRES:
+                cur.execute("""
+                    INSERT INTO agente_progresso (id, posicao, updated)
+                    VALUES (1, 0, NOW()::TEXT)
+                    ON CONFLICT (id) DO UPDATE SET posicao = 0, updated = NOW()::TEXT
+                """)
+            else:
+                cur.execute("""
+                    INSERT OR REPLACE INTO agente_progresso (id, posicao, updated)
+                    VALUES (1, 0, datetime('now'))
+                """)
+            conn.commit()
+
     def salvar_progresso(self, offset: int):
         with _conn() as conn:
             cur = conn.cursor()
@@ -440,6 +459,16 @@ class Database:
             cur.execute(sql_pg if USE_POSTGRES else sql_sq, valores)
             conn.commit()
 
+    def buscar_telefone_salvo(self, cnpj: str) -> str:
+        """Retorna o telefone salvo no banco para o CNPJ, ou '' se vazio/ausente."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT telefone FROM empresas WHERE cnpj = {PH}", (cnpj,))
+            row = cur.fetchone()
+            if row and row[0]:
+                return str(row[0])
+        return ""
+
     def cnpj_existe_recente(self, cnpj: str, dias: int = 30) -> bool:
         """
         Retorna True se o CNPJ já foi processado recentemente e deve ser pulado.
@@ -462,7 +491,7 @@ class Database:
                         abertura_de="", abertura_ate="",
                         com_email=False, com_instagram=False,
                         com_telefone=False, com_site=False,
-                        com_contato=True,
+                        com_contato=False,
                         pagina=1, por_pagina=50) -> dict:
         filtros = ["1=1"]
         params = []
@@ -694,6 +723,39 @@ class Database:
             "por_uf": por_uf,
             "por_porte": por_porte,
             "progresso_agente": progresso,
+        }
+
+    def diagnostico_telefone(self) -> dict:
+        """Retorna contagens e últimos registros para diagnóstico de persistência de telefone."""
+        _tel_valido = (
+            "telefone IS NOT NULL AND TRIM(telefone) != '' "
+            "AND LOWER(telefone) NOT IN ('n/a','none','null','nan','-')"
+        )
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM empresas")
+            total = cur.fetchone()[0]
+            cur.execute(f"SELECT COUNT(*) FROM empresas WHERE {_tel_valido}")
+            com_telefone = cur.fetchone()[0]
+            sem_telefone = total - com_telefone
+            cur.execute(
+                "SELECT cnpj, razao_social, telefone, atualizado_em "
+                "FROM empresas ORDER BY atualizado_em DESC LIMIT 10"
+            )
+            cols = [d[0] for d in cur.description]
+            ultimos_salvos = [dict(zip(cols, r)) for r in cur.fetchall()]
+            cur.execute(
+                f"SELECT cnpj, razao_social, telefone, atualizado_em "
+                f"FROM empresas WHERE {_tel_valido} "
+                f"ORDER BY atualizado_em DESC LIMIT 10"
+            )
+            ultimos_com_tel = [dict(zip(cols, r)) for r in cur.fetchall()]
+        return {
+            "total_empresas": total,
+            "com_telefone": com_telefone,
+            "sem_telefone": sem_telefone,
+            "ultimos_salvos": ultimos_salvos,
+            "ultimos_com_tel": ultimos_com_tel,
         }
 
     def limpar_sites_falsos(self) -> int:

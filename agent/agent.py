@@ -445,6 +445,18 @@ async def _processar(session, cnpj, db, forcar=False):
         if not forcar or achou:
             db.salvar_empresa(perfil)
 
+            # Diagnóstico: verifica se telefone foi coletado e persistido no banco
+            tel_coletado = perfil.get("telefone", "")
+            if tel_coletado:
+                log.info(f"[TEL-COLETADO] {cnpj} → {tel_coletado}")
+            else:
+                log.info(f"[TEL-VAZIO] {cnpj} — sem telefone após enriquecimento")
+            confirmado = db.buscar_telefone_salvo(cnpj)
+            if tel_coletado and not confirmado:
+                log.warning(f"[TEL-PERDIDO] {cnpj} — coletado mas NÃO salvo no banco!")
+            elif tel_coletado and confirmado:
+                log.info(f"[TEL-CONFIRMADO] {cnpj} → salvo: {confirmado}")
+
         log.info(
             f"{'✓' if achou else '·'} {nome_busca[:35]:<35} | {uf} | "
             f"tel:{bool(perfil['telefone'])} site:{bool(perfil['site'])}"

@@ -170,7 +170,7 @@ def listar_empresas(
     com_instagram: bool = Query(False),
     com_telefone:  bool = Query(False),
     com_site:      bool = Query(False),
-    com_contato:   bool = Query(True,  description="Padrão: só empresas com pelo menos 1 contato"),
+    com_contato:   bool = Query(False, description="Padrão: retorna todos os CNPJs"),
     pagina:        int  = Query(1, ge=1),
     por_pagina:    int  = Query(50, le=200),
     info:          dict = Depends(get_token_info),
@@ -330,6 +330,14 @@ def excluir_token(token: str, _: str = Depends(require_admin)):
     return {"status": "excluido", "token": token}
 
 
+@app.post("/api/admin/reset-database")
+def reset_database(_: str = Depends(require_admin)):
+    """Apaga todos os dados de empresas e zera o progresso do agente."""
+    db.reset_completo()
+    _stats_cache["data"] = None
+    return {"status": "ok", "mensagem": "Base zerada com sucesso"}
+
+
 @app.post("/api/admin/agente")
 def iniciar_agente(_: str = Depends(require_admin)):
     subprocess.Popen([sys.executable, "agent/agent.py"])
@@ -343,6 +351,12 @@ def limpar_sites(_: str = Depends(require_admin)):
     # Invalida cache de stats
     _stats_cache["data"] = None
     return {"status": "ok", "registros_limpos": total}
+
+
+@app.get("/api/admin/diagnostico-telefone")
+def diagnostico_telefone(_: str = Depends(require_admin)):
+    """Diagnóstico: verifica se telefones estão sendo salvos no banco."""
+    return db.diagnostico_telefone()
 
 
 if __name__ == "__main__":

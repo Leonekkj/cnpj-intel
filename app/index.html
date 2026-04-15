@@ -441,7 +441,7 @@ const H = {"Authorization": "Bearer " + TOKEN};
 
 let pagina = 1, advPagina = 1;
 let dados = [], advDados = [];
-let filtros = {tel:false, email:false, insta:false, site:false, comContato:true};
+let filtros = {tel:false, email:false, insta:false, site:false, comContato:false};
 let advFiltros = {tel:false, email:false, insta:false, site:false};
 let planoInfo = null;
 
@@ -764,7 +764,7 @@ function limparFiltros() {
   document.getElementById("q").value = "";
   document.getElementById("uf").value = "";
   document.getElementById("porte").value = "";
-  filtros = {tel:false, email:false, insta:false, site:false, comContato:true};
+  filtros = {tel:false, email:false, insta:false, site:false, comContato:false};
   ["tel","email","insta","site"].forEach(t => document.getElementById("t-"+t).className = "toggle-btn");
   const btnSC = document.getElementById("t-sem-contato");
   if(btnSC) { btnSC.classList.remove("on-gray"); btnSC.title = "Clique para incluir empresas sem contato"; }
