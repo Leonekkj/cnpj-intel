@@ -148,8 +148,8 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div class="metrics">
       <div class="metric"><div class="metric-lbl">Total CNPJs</div><div class="metric-val green" id="m-total">—</div><div class="metric-sub">empresas ativas</div></div>
       <div class="metric"><div class="metric-lbl">Com telefone</div><div class="metric-val blue" id="m-tel">—</div><div class="metric-sub">contatos diretos</div></div>
-      <!-- e-mail e Instagram desativados temporariamente -->
-      <div class="metric"><div class="metric-lbl">Com site</div><div class="metric-val amber" id="m-site2">—</div><div class="metric-sub">presença online</div></div>
+      <div class="metric"><div class="metric-lbl">Com e-mail</div><div class="metric-val amber" id="m-email">—</div><div class="metric-sub">para prospecção</div></div>
+      <div class="metric"><div class="metric-lbl">Com Instagram</div><div class="metric-val pink" id="m-insta">—</div><div class="metric-sub">redes sociais</div></div>
     </div>
 
     <div class="tabs">
@@ -192,11 +192,9 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         </div>
         <div class="toggles">
           <button class="toggle-btn" id="t-tel"   onclick="toggleFiltro('tel')"  >📞 Com telefone</button>
+          <button class="toggle-btn" id="t-email" onclick="toggleFiltro('email')">✉️ Com e-mail</button>
+          <button class="toggle-btn" id="t-insta" onclick="toggleFiltro('insta')">📸 Com Instagram</button>
           <button class="toggle-btn" id="t-site"  onclick="toggleFiltro('site')" >🌐 Com site</button>
-          <!-- e-mail e Instagram desativados temporariamente -->
-          <button class="toggle-btn" id="t-email" onclick="toggleFiltro('email')" style="display:none">✉️ Com e-mail</button>
-          <button class="toggle-btn" id="t-insta" onclick="toggleFiltro('insta')" style="display:none">📸 Com Instagram</button>
-          <button class="toggle-btn on-gray" id="t-sem-contato" onclick="toggleSemContato()" title="Clique para incluir empresas sem nenhum contato" style="border-color:#555;color:#888;background:rgba(255,255,255,0.04)">✅ Com contato</button>
         </div>
         <div class="search-actions">
           <button class="btn-clear" onclick="limparFiltros()">Limpar</button>
@@ -240,21 +238,21 @@ tr:hover td{background:rgba(255,255,255,0.02)}
               <optgroup label="Alimentação">
                 <option value="Restaurantes">🍽️ Restaurantes e similares</option>
                 <option value="Padaria">🥖 Padarias e confeitarias</option>
-                <option value="Lanchonetes">🍔 Lanchonetes e fast food</option>
+                <option value="Lanchonete">🍔 Lanchonetes e fast food</option>
                 <option value="Mercearia">🛒 Mercearias e minimercados</option>
                 <option value="Supermercado">🏪 Supermercados</option>
                 <option value="Açougue">🥩 Açougues e frigoríficos</option>
               </optgroup>
               <optgroup label="Saúde">
-                <option value="Odontologia">🦷 Clínicas odontológicas</option>
-                <option value="Saúde">🏥 Clínicas médicas e saúde</option>
-                <option value="Farmácias">💊 Farmácias e drogarias</option>
+                <option value="Odontol">🦷 Clínicas odontológicas</option>
+                <option value="Médico">🏥 Clínicas médicas</option>
+                <option value="Farmácia">💊 Farmácias e drogarias</option>
                 <option value="Veterinária">🐾 Clínicas veterinárias</option>
                 <option value="Fisioterapia">🏃 Fisioterapia e reabilitação</option>
                 <option value="Psicologia">🧠 Psicologia e saúde mental</option>
               </optgroup>
               <optgroup label="Beleza e Estética">
-                <option value="Salão de Beleza">💈 Salões de beleza</option>
+                <option value="Salão">💈 Salões de beleza</option>
                 <option value="Barbearia">✂️ Barbearias</option>
                 <option value="Estética">💅 Clínicas estéticas</option>
                 <option value="Academia">🏋️ Academias e fitness</option>
@@ -265,19 +263,20 @@ tr:hover td{background:rgba(255,255,255,0.02)}
                 <option value="Telecomunicações">📡 Telecomunicações</option>
               </optgroup>
               <optgroup label="Educação">
-                <option value="Educação">📚 Escolas e colégios</option>
-                <option value="Cursos e Treinamentos">🎓 Cursos e treinamentos</option>
-                <option value="Idiomas">🌍 Escolas de idiomas</option>
+                <option value="Escola">📚 Escolas e colégios</option>
+                <option value="Ensino">🎓 Cursos e treinamentos</option>
+                <option value="Idioma">🌍 Escolas de idiomas</option>
               </optgroup>
               <optgroup label="Serviços Profissionais">
                 <option value="Advocacia">⚖️ Advocacia e jurídico</option>
-                <option value="Contabilidade">📊 Contabilidade</option>
+                <option value="Contábil">📊 Contabilidade</option>
                 <option value="Imobiliária">🏠 Imobiliárias</option>
                 <option value="Engenharia">🔧 Engenharia e projetos</option>
                 <option value="Consultoria">💼 Consultorias</option>
               </optgroup>
               <optgroup label="Construção">
-                <option value="Construção">🏗️ Construtoras e obras</option>
+                <option value="Construtora">🏗️ Construtoras</option>
+                <option value="Materiais de construção">🧱 Materiais de construção</option>
                 <option value="Elétrica">⚡ Serviços elétricos</option>
                 <option value="Hidráulica">🔩 Serviços hidráulicos</option>
               </optgroup>
@@ -290,8 +289,8 @@ tr:hover td{background:rgba(255,255,255,0.02)}
                 <option value="Combustível">⛽ Postos de combustível</option>
               </optgroup>
               <optgroup label="Transporte e Logística">
-                <option value="Transporte de Carga">🚛 Transporte de carga</option>
-                <option value="Transporte de Passageiros">🚌 Transporte de passageiros</option>
+                <option value="Transporte rodoviário de carga">🚛 Transporte de carga</option>
+                <option value="Transporte de passageiros">🚌 Transporte de passageiros</option>
                 <option value="Logística">📦 Logística e armazéns</option>
               </optgroup>
               <optgroup label="Agropecuária">
@@ -337,10 +336,9 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         </div>
         <div class="toggles">
           <button class="toggle-btn" id="adv-t-tel"   onclick="toggleAdv('tel')"  >📞 Com telefone</button>
+          <button class="toggle-btn" id="adv-t-email" onclick="toggleAdv('email')">✉️ Com e-mail</button>
+          <button class="toggle-btn" id="adv-t-insta" onclick="toggleAdv('insta')">📸 Com Instagram</button>
           <button class="toggle-btn" id="adv-t-site"  onclick="toggleAdv('site')" >🌐 Com site</button>
-          <!-- e-mail e Instagram desativados temporariamente -->
-          <button class="toggle-btn" id="adv-t-email" onclick="toggleAdv('email')" style="display:none">✉️ Com e-mail</button>
-          <button class="toggle-btn" id="adv-t-insta" onclick="toggleAdv('insta')" style="display:none">📸 Com Instagram</button>
         </div>
         <div class="search-actions">
           <button class="btn-search" onclick="buscarAvancado()">Buscar →</button>
@@ -441,7 +439,7 @@ const H = {"Authorization": "Bearer " + TOKEN};
 
 let pagina = 1, advPagina = 1;
 let dados = [], advDados = [];
-let filtros = {tel:false, email:false, insta:false, site:false, comContato:false};
+let filtros = {tel:false, email:false, insta:false, site:false};
 let advFiltros = {tel:false, email:false, insta:false, site:false};
 let planoInfo = null;
 
@@ -491,7 +489,7 @@ function atualizarPlanoUI(d) {
 }
 
 function abrirUpgrade() {
-  _abrirModalHtml(`
+  abrirModal(`
     <h3 style="margin-bottom:16px">Fazer upgrade</h3>
     <p style="color:var(--muted);font-size:13px;margin-bottom:20px">
       Escolha o plano que melhor se encaixa na sua necessidade:
@@ -530,7 +528,8 @@ async function carregarStats() {
     const d = await r.json();
     document.getElementById("m-total").textContent = (d.total||0).toLocaleString("pt-BR");
     document.getElementById("m-tel").textContent = (d.com_telefone||0).toLocaleString("pt-BR");
-    document.getElementById("m-site2").textContent = (d.com_site||0).toLocaleString("pt-BR");
+    document.getElementById("m-email").textContent = (d.com_email||0).toLocaleString("pt-BR");
+    document.getElementById("m-insta").textContent = (d.com_instagram||0).toLocaleString("pt-BR");
   } catch(e) {
     document.getElementById("m-total").textContent = "offline";
   }
@@ -545,7 +544,6 @@ async function buscar() {
     com_email: filtros.email,
     com_instagram: filtros.insta,
     com_site: filtros.site,
-    com_contato: filtros.comContato,
     pagina, por_pagina: 20
   });
   try {
@@ -559,19 +557,18 @@ async function buscar() {
 }
 
 async function buscarAvancado() {
-  const categoria = document.getElementById("adv-cnae").value;
+  const cnae = document.getElementById("adv-cnae").value;
   const params = new URLSearchParams({
     q: document.getElementById("adv-q").value,
     uf: document.getElementById("adv-uf").value,
     porte: document.getElementById("adv-porte").value,
-    categoria: categoria,
+    cnae: cnae,
     abertura_de: document.getElementById("adv-de").value,
     abertura_ate: document.getElementById("adv-ate").value,
     com_telefone: advFiltros.tel,
     com_email: advFiltros.email,
     com_instagram: advFiltros.insta,
     com_site: advFiltros.site,
-    com_contato: filtros.comContato,
     pagina: advPagina, por_pagina: 20
   });
   try {
@@ -580,26 +577,6 @@ async function buscarAvancado() {
     advDados = d.dados || [];
     renderTabela(d, "adv-tbody", "adv-page-info", "adv-page-btns", "adv-count", advPagina, (pg) => { advPagina = pg; buscarAvancado(); });
   } catch(e) {}
-}
-
-function _celTelefone(e) {
-  const isFree = planoInfo.plano === "free";
-  if (isFree) return '<span style="color:var(--muted);font-size:11px">🔒 ver+</span>';
-  if (e.telefone) return '<span style="color:var(--accent2)">' + e.telefone + '</span>';
-  return '<span style="color:var(--muted)">—</span>';
-}
-function _celContatos(e) {
-  const isFree = planoInfo.plano === "free";
-  if (isFree) return '<span style="color:var(--muted);font-size:11px">🔒 ver+</span>';
-  let tags = "";
-  if (e.telefone) {
-    tags += '<span class="tag tag-tel" title="' + e.telefone + '">📞 ' + e.telefone + '</span>';
-  }
-  if (e.site) {
-    const dominio = e.site.replace(/https?:\/\/(www\.)?/, "").split("/")[0];
-    tags += '<span class="tag tag-site" title="' + e.site + '">🌐 ' + dominio + '</span>';
-  }
-  return tags || '<span style="color:var(--muted);font-size:11px">—</span>';
 }
 
 function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, onPage) {
@@ -616,8 +593,13 @@ function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, 
         <td style="font-size:12px">${e.municipio||"—"}<br><span style="color:var(--muted)">${e.uf||""}</span></td>
         <td style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">${e.abertura||"—"}</td>
         <td style="font-size:12px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.socio_principal||"—"}</td>
-        <td class="mono" style="font-size:11px">${_celTelefone(e)}</td>
-        <td>${_celContatos(e)}</td>
+        <td class="mono" style="font-size:11px;color:${e.telefone?"var(--accent2)":"var(--muted)"}">${e.telefone||"—"}</td>
+        <td>
+          ${e.email ? `<span class="tag tag-email" title="${e.email}">email</span>` : ""}
+          ${e.instagram ? `<span class="tag tag-insta" title="${e.instagram}">insta</span>` : ""}
+          ${e.site ? `<span class="tag tag-site" title="${e.site}">site</span>` : ""}
+          ${!e.email && !e.instagram && !e.site ? `<span style="color:var(--muted);font-size:11px">—</span>` : ""}
+        </td>
         <td><button class="btn-ver" onclick="abrirModal(${i},'${tbodyId}')">ver +</button></td>
       </tr>`).join("");
   }
@@ -670,44 +652,9 @@ function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, 
   pb.appendChild(btnNext);
 }
 
-async function abrirModal(i, tbodyId) {
+function abrirModal(i, tbodyId) {
   const arr = tbodyId === "tbody" ? dados : advDados;
-  const base = arr[i]; if(!base) return;
-
-  // Mostra modal de loading imediatamente
-  document.getElementById("modal-content").innerHTML = `
-    <div class="modal-top">
-      <div>
-        <div class="modal-title">${base.razao_social||"—"}</div>
-        <div class="modal-sub">${fmtCNPJ(base.cnpj)}</div>
-      </div>
-      <button class="modal-close" onclick="fecharModal()">×</button>
-    </div>
-    <div style="text-align:center;padding:2rem;color:var(--muted)">Carregando detalhes...</div>`;
-  document.getElementById("modal").className = "modal-bg open";
-
-  // Chama API para consumir quota e obter dados completos
-  let e = base;
-  try {
-    const r = await fetch(API + "/api/empresa/" + base.cnpj, {headers: H});
-    if (r.status === 429) {
-      document.getElementById("modal-content").innerHTML = `
-        <div class="modal-top"><div><div class="modal-title">Limite diário atingido</div></div>
-          <button class="modal-close" onclick="fecharModal()">×</button></div>
-        <div style="padding:1.5rem;color:var(--muted);text-align:center">
-          <div style="font-size:2rem;margin-bottom:12px">🔒</div>
-          <p>Você atingiu o limite de <strong>${planoInfo.limite_dia} CNPJs/dia</strong> do plano Free.</p>
-          <button class="modal-btn" style="margin-top:16px" onclick="fecharModal();abrirUpgrade()">Ver planos</button>
-        </div>`;
-      return;
-    }
-    if (r.ok) {
-      e = await r.json();
-      // Atualiza quota na barra lateral
-      carregarPlano();
-    }
-  } catch(err) { /* usa dados locais como fallback */ }
-
+  const e = arr[i]; if(!e) return;
   document.getElementById("modal-content").innerHTML = `
     <div class="modal-top">
       <div>
@@ -722,15 +669,18 @@ async function abrirModal(i, tbodyId) {
       <div class="modal-field"><div class="lbl">Sócio principal</div><div class="val">${e.socio_principal||"—"}</div></div>
       <div class="modal-field"><div class="lbl">Cidade / UF</div><div class="val">${e.municipio||"—"} — ${e.uf||"—"}</div></div>
       <div class="modal-field"><div class="lbl">Telefone</div><div class="val" style="color:var(--accent2)">${e.telefone||"Não encontrado"}</div></div>
+      <div class="modal-field"><div class="lbl">E-mail</div><div class="val" style="color:#7bbef0;font-size:13px">${e.email||"Não encontrado"}</div></div>
+      <div class="modal-field"><div class="lbl">Instagram</div><div class="val" style="color:#e88ab0">${e.instagram||"Não encontrado"}</div></div>
       <div class="modal-field"><div class="lbl">Site</div><div class="val" style="font-size:12px">${e.site||"—"}</div></div>
-      <!-- E-mail e Instagram desativados temporariamente -->
       <div class="modal-field" style="grid-column:span 2"><div class="lbl">Setor / CNAE</div><div class="val" style="font-size:13px">${e.cnae||"—"}</div></div>
     </div>
     <div class="modal-actions">
       ${e.telefone ? `<button class="modal-btn" onclick="window.open('https://wa.me/55${(e.telefone||"").replace(/\D/g,"")}','_blank')">💬 WhatsApp</button>` : ""}
+      ${e.email ? `<button class="modal-btn" onclick="window.open('mailto:${e.email}','_blank')">✉️ E-mail</button>` : ""}
+      ${e.instagram ? `<button class="modal-btn" onclick="window.open('https://instagram.com/${(e.instagram||"").replace("@","")}','_blank')">📸 Instagram</button>` : ""}
       ${e.site ? `<button class="modal-btn" onclick="window.open('https://${(e.site||"").replace(/https?:\/\//,"")}','_blank')">🌐 Site</button>` : ""}
-      <!-- Botões e-mail e Instagram desativados temporariamente -->
     </div>`;
+  document.getElementById("modal").className = "modal-bg open";
 }
 function fecharModal() { document.getElementById("modal").className = "modal-bg"; }
 
@@ -738,20 +688,6 @@ function toggleFiltro(t) {
   filtros[t] = !filtros[t];
   const cls = {tel:"on-blue", email:"on-amber", insta:"on-green", site:"on-purple"};
   document.getElementById("t-" + t).className = "toggle-btn" + (filtros[t] ? " " + cls[t] : "");
-  pagina = 1; buscar();
-}
-function toggleSemContato() {
-  filtros.comContato = !filtros.comContato;
-  const btn = document.getElementById("t-sem-contato");
-  if (filtros.comContato) {
-    btn.textContent = "✅ Com contato";
-    btn.style.cssText = "border-color:#555;color:#888;background:rgba(255,255,255,0.04)";
-    btn.title = "Clique para incluir empresas sem nenhum contato";
-  } else {
-    btn.textContent = "⬜ Todos (incl. sem contato)";
-    btn.style.cssText = "border-color:var(--warn);color:#f0b96e;background:rgba(239,159,39,0.08)";
-    btn.title = "Mostrando todas as empresas, inclusive sem contato";
-  }
   pagina = 1; buscar();
 }
 function toggleAdv(t) {
@@ -764,10 +700,8 @@ function limparFiltros() {
   document.getElementById("q").value = "";
   document.getElementById("uf").value = "";
   document.getElementById("porte").value = "";
-  filtros = {tel:false, email:false, insta:false, site:false, comContato:false};
+  filtros = {tel:false, email:false, insta:false, site:false};
   ["tel","email","insta","site"].forEach(t => document.getElementById("t-"+t).className = "toggle-btn");
-  const btnSC = document.getElementById("t-sem-contato");
-  if(btnSC) { btnSC.classList.remove("on-gray"); btnSC.title = "Clique para incluir empresas sem contato"; }
   pagina = 1; buscar();
 }
 function limparAvancado() {
@@ -820,7 +754,7 @@ function exportarCSVAdv() {
     q: document.getElementById("adv-q")?.value || "",
     uf: document.getElementById("adv-uf")?.value || "",
     porte: document.getElementById("adv-porte")?.value || "",
-    categoria: document.getElementById("adv-cnae")?.value || "",
+    cnae: document.getElementById("adv-cnae")?.value || "",
     abertura_de: document.getElementById("adv-de")?.value || "",
     abertura_ate: document.getElementById("adv-ate")?.value || "",
     com_telefone: advFiltros.tel,
@@ -842,7 +776,7 @@ function exportarCSVAdv() {
     .catch(e => alert("Erro ao exportar: " + e.message));
 }
 
-function _abrirModalHtml(html) {
+function abrirModal(html) {
   document.getElementById("modal-content").innerHTML = html;
   document.getElementById("modal").className = "modal-bg open";
 }
