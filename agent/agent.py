@@ -420,18 +420,14 @@ async def _processar(session, cnpj, db, forcar=False):
             tel_receita = f"({ddd}) {num}" if ddd and num else ""
             nome_busca = fantasia or nome
 
-        # 1. Google Places (telefone + site) — fonte principal
-        # Instagram e e-mail via scraping/DDG desativados temporariamente.
-        google = await buscar_google_places(session, nome_busca, cidade)
+        # 1. DDG para encontrar o site oficial da empresa
+        site = await buscar_site_ddg(session, nome_busca, cidade)
 
-        site = google.get("site_google", "")
-
-        # 2. Se Google não achou site, tenta DDG (só site, sem Instagram)
-        if not site:
-            site = await buscar_site_ddg(session, nome_busca, cidade)
-
-        # Scraping do site: extrai email, instagram e telefone (fallback)
+        # 2. Scraping do site: extrai email, instagram e telefone
         contatos = await extrair_contatos_do_site(session, site)
+
+        # Google Places desativado — telefone vem do scraping do site ou da BrasilAPI
+        google = {}
 
         # No REENRICH usamos dados do banco; no fluxo normal usamos dados da BrasilAPI
         if forcar:
@@ -458,7 +454,7 @@ async def _processar(session, cnpj, db, forcar=False):
             "municipio":       cidade,
             "uf":              uf,
             "socio_principal": socio,
-            "telefone":        google.get("telefone_google", "") or contatos.get("telefone_site", "") or tel_receita,
+            "telefone":        contatos.get("telefone_site", "") or tel_receita,
             "email":           contatos.get("email_site", "") or email_rf or "",
             "instagram":       contatos.get("instagram_site", ""),
             "site":            site,
