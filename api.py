@@ -33,14 +33,27 @@ if not ADMIN_TOKEN:
     import warnings
     warnings.warn("⚠️  ADMIN_TOKEN não configurado!")
 
+import logging as _logging
+_log_api = _logging.getLogger("api")
+
 db = Database()
 db.criar_tabelas()
 db.criar_tabela_tokens()
 
+# Converte telefones inválidos (' ', 'N/A', 'None', etc.) para NULL
+_tel_limpos = db.migrar_telefones_invalidos()
+if _tel_limpos > 0:
+    _log_api.info(f"🧹 {_tel_limpos} telefones inválidos convertidos para NULL")
+
+# Recomputa categoria_padrao usando normalização de acentos (corrige ~82k registros)
+_cat_migradas = db.migrar_categorias_faltantes()
+if _cat_migradas > 0:
+    _log_api.info(f"🏷️  {_cat_migradas} categorias recomputadas")
+
 # Limpa sites de diretório que foram salvos erroneamente pelo agente
 _sites_limpos = db.limpar_sites_diretorio()
 if _sites_limpos > 0:
-    import logging; logging.getLogger("api").info(f"🧹 {_sites_limpos} sites de diretório removidos do banco")
+    _log_api.info(f"🧹 {_sites_limpos} sites de diretório removidos do banco")
 
 # Migra tokens da variável de ambiente TOKENS para o banco como plano "pro"
 # (compatibilidade com tokens já em uso)

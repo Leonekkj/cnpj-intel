@@ -4,6 +4,7 @@ Inclui persistência de progresso do agente.
 """
 
 import os
+import unicodedata
 from datetime import datetime, timedelta, date as date_type
 
 DATABASE_URL = (
@@ -44,6 +45,22 @@ else:
 
 PH = "%s" if USE_POSTGRES else "?"
 LIKE = "ILIKE" if USE_POSTGRES else "LIKE"
+
+
+# ─── Utilitários de validação ─────────────────────────────────────────────────
+
+def _norm(text: str) -> str:
+    """Lowercase + remove diacríticos. 'Contábil' → 'contabil'."""
+    return unicodedata.normalize("NFD", text.lower()).encode("ascii", "ignore").decode()
+
+
+_TELEFONES_INVALIDOS = {"", "n/a", "none", "null", "nan", "-", "0", "00000000"}
+
+def telefone_valido(tel) -> bool:
+    """Retorna True apenas para strings com conteúdo telefônico real."""
+    if not tel:
+        return False
+    return tel.strip().lower() not in _TELEFONES_INVALIDOS
 
 
 # ─── Mapeamento CNAE → categoria padronizada ──────────────────────────────────
@@ -135,13 +152,17 @@ CNAE_CATEGORIAS = {
 }
 
 
+# Dict com chaves normalizadas (sem acento) para matching robusto
+_CNAE_CATS_NORM = {_norm(k): v for k, v in CNAE_CATEGORIAS.items()}
+
+
 def cnae_para_categoria(cnae: str) -> str:
     """Retorna a categoria padronizada a partir da descrição CNAE."""
-    cnae_lower = (cnae or "").lower()
-    for substr, cat in CNAE_CATEGORIAS.items():
-        if substr in cnae_lower:
+    cnae_norm = _norm(cnae or "")
+    for substr, cat in _CNAE_CATS_NORM.items():
+        if substr in cnae_norm:
             return cat
-    return ""
+    return "Outros"
 
 
 class Database:
@@ -432,7 +453,7 @@ class Database:
             row = cur.fetchone()
             if not row or not row[0]:
                 return False
-            has_phone = bool(row[1])
+            has_phone = telefone_valido(row[1])
             ttl = dias if has_phone else 3
             limite = (datetime.utcnow() - timedelta(days=ttl)).isoformat()
             return row[0] > limite
@@ -474,14 +495,17 @@ class Database:
             filtros.append("email IS NOT NULL AND email != ''")
         if com_instagram:
             filtros.append("instagram IS NOT NULL AND instagram != ''")
+        _tel_valido_sql = (
+            "telefone IS NOT NULL AND TRIM(telefone) != '' "
+            "AND LOWER(telefone) NOT IN ('n/a','none','null','nan','-')"
+        )
         if com_telefone:
-            filtros.append("telefone IS NOT NULL AND telefone != ''")
+            filtros.append(_tel_valido_sql)
         if com_site:
             filtros.append("site IS NOT NULL AND site != ''")
         if com_contato:
-            # Critério mínimo: telefone obrigatório.
-            # E-mail e Instagram serão adicionados futuramente.
-            filtros.append("telefone IS NOT NULL AND telefone != ''")
+            # Critério mínimo: telefone válido obrigatório.
+            filtros.append(_tel_valido_sql)
 
         where = " AND ".join(filtros)
         offset = (pagina - 1) * por_pagina
@@ -508,6 +532,50 @@ class Database:
                 return None
             cols = [d[0] for d in cur.description]
             return dict(zip(cols, row))
+
+    def migrar_telefones_invalidos(self) -> int:
+        """
+        Converte telefones inválidos (' ', 'N/A', 'None', etc.) para NULL.
+        Idempotente — seguro rodar múltiplas vezes.
+        """
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE empresas SET telefone = NULL "
+                "WHERE telefone IS NOT NULL AND ("
+                "  TRIM(telefone) = '' "
+                "  OR LOWER(telefone) IN ('n/a','none','null','nan','-','0','00000000')"
+                ")"
+            )
+            total = cur.rowcount
+            conn.commit()
+        return total
+
+    def migrar_categorias_faltantes(self) -> int:
+        """
+        Recomputa categoria_padrao para todos os registros sem categoria.
+        Usa normalização de acentos — corrige o matching que antes falhava.
+        """
+        total = 0
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT cnpj, cnae FROM empresas "
+                "WHERE categoria_padrao IS NULL OR categoria_padrao = '' OR categoria_padrao = 'Outros'"
+            )
+            rows = cur.fetchall()
+            updates = []
+            for cnpj, cnae in rows:
+                cat = cnae_para_categoria(cnae)
+                updates.append((cat, cnpj))
+                total += 1
+            if updates:
+                cur.executemany(
+                    f"UPDATE empresas SET categoria_padrao = {PH} WHERE cnpj = {PH}",
+                    updates,
+                )
+                conn.commit()
+        return total
 
     # Lista unificada de domínios de diretórios / listagens de CNPJ.
     # Usada tanto na limpeza do banco quanto como referência para o agente.
@@ -593,8 +661,12 @@ class Database:
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) FROM empresas")
             total = cur.fetchone()[0]   # total real no banco (com e sem telefone)
-            cur.execute("SELECT COUNT(*) FROM empresas WHERE telefone IS NOT NULL AND telefone != ''")
-            com_tel = cur.fetchone()[0]  # empresas contactáveis (com telefone)
+            cur.execute(
+                "SELECT COUNT(*) FROM empresas WHERE telefone IS NOT NULL "
+                "AND TRIM(telefone) != '' "
+                "AND LOWER(telefone) NOT IN ('n/a','none','null','nan','-')"
+            )
+            com_tel = cur.fetchone()[0]  # empresas contactáveis (com telefone válido)
             cur.execute("SELECT COUNT(*) FROM empresas WHERE email IS NOT NULL AND email != ''")
             com_email = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM empresas WHERE instagram IS NOT NULL AND instagram != ''")

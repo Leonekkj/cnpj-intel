@@ -18,7 +18,7 @@ import sys
 from urllib.parse import quote, urljoin, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from database import Database
+from database import Database, telefone_valido
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [AGENTE] %(message)s")
@@ -431,8 +431,8 @@ async def _processar(session, cnpj, db, forcar=False):
             "atualizado_em":   datetime.utcnow().isoformat(),
         }
 
-        # Critério mínimo: deve ter telefone para aparecer no dashboard.
-        achou = bool(perfil["telefone"])
+        # Critério mínimo: deve ter telefone válido para aparecer no dashboard.
+        achou = telefone_valido(perfil["telefone"])
 
         # Sem telefone: zera o site para que a empresa não apareça no dashboard
         # (com_contato exige telefone), mas ainda salva o registro para não
