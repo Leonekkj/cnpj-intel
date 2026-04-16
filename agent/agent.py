@@ -778,9 +778,9 @@ def carregar_cnpjs_seed():
     Retorna lista de dicts com os campos disponíveis.
     """
     locais = [
-        "cnpjs_seed.txt", "cnpjs_seed.txt.gz",
-        "../cnpjs_seed.txt", "../cnpjs_seed.txt.gz",
-        "/app/cnpjs_seed.txt", "/app/cnpjs_seed.txt.gz",
+        "cnpjs_seed.txt.gz", "cnpjs_seed.txt",
+        "../cnpjs_seed.txt.gz", "../cnpjs_seed.txt",
+        "/app/cnpjs_seed.txt.gz", "/app/cnpjs_seed.txt",
     ]
     for caminho in locais:
         if not os.path.exists(caminho):
