@@ -7,7 +7,7 @@ Via rápida (telefone já vem do seed da Receita Federal):
 
 Via lenta (sem telefone no seed):
   BrasilAPI → DuckDuckGo (site) → scraping (contatos) → salvar
-  ~5 workers, com rate limiting
+  ~20 workers, com rate limiting
 """
 
 import asyncio
@@ -33,11 +33,10 @@ REENRICH_SEM_CONTATO = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1
 # Via rápida (seed com telefone): só BrasilAPI → alta concorrência
 # Via lenta (sem telefone): DDG + scraping → concorrência baixa para evitar rate limit
 CONCORRENCIA_RAPIDA = 3 if REENRICH_SEM_CONTATO else 40
-CONCORRENCIA_LENTA  = 3 if REENRICH_SEM_CONTATO else 5
+CONCORRENCIA_LENTA  = 3 if REENRICH_SEM_CONTATO else 20
 
-DELAY_LENTA  = 0.2   # delay só na via lenta (DDG)
 LOTE         = 3000 if REENRICH_SEM_CONTATO else 5000
-PAUSA_CICLO  = 3
+PAUSA_CICLO  = 0.5
 TIMEOUT_RAPIDO = 10   # BrasilAPI only
 TIMEOUT_LENTO  = 20   # BrasilAPI + DDG + scraping
 
@@ -87,8 +86,8 @@ async def buscar_brasilapi(session, cnpj):
         pass
     # sleep FORA do semáforo — não trava os demais workers durante a espera
     if rate_limited:
-        log.warning("BrasilAPI rate limit — aguardando 10s...")
-        await asyncio.sleep(10)
+        log.warning("BrasilAPI rate limit — aguardando 2s...")
+        await asyncio.sleep(2)
     return None
 
 
@@ -592,8 +591,8 @@ async def enriquecer_lento(session, seed_data, db, forcar=False):
 
 async def rodar_agente():
     global _DDG_SEM, _BRASIL_SEM
-    _DDG_SEM = asyncio.Semaphore(3)       # max 3 conexões simultâneas ao DuckDuckGo
-    _BRASIL_SEM = asyncio.Semaphore(15)   # max 15 conexões simultâneas à BrasilAPI
+    _DDG_SEM = asyncio.Semaphore(5)       # max 5 conexões simultâneas ao DuckDuckGo
+    _BRASIL_SEM = asyncio.Semaphore(4)    # max 4 conexões simultâneas à BrasilAPI (evita 429)
 
     db = Database()
     db.criar_tabelas()
@@ -613,6 +612,7 @@ async def rodar_agente():
 
 async def rodar_seed(db):
     """Loop padrão: processa CNPJs do cnpjs_seed.txt com pipeline dual."""
+    import time
     registros = carregar_cnpjs_seed()
     total = len(registros)
 
@@ -628,7 +628,7 @@ async def rodar_seed(db):
 
     sem_rapido = asyncio.Semaphore(CONCORRENCIA_RAPIDA)
     sem_lento  = asyncio.Semaphore(CONCORRENCIA_LENTA)
-    SUB_LOTE   = 200  # batch size para saves e progresso
+    SUB_LOTE   = 500  # batch size para saves e progresso
 
     async def worker_rapido(session, seed_data, db):
         async with sem_rapido:
@@ -636,9 +636,7 @@ async def rodar_seed(db):
 
     async def worker_lento(session, seed_data, db):
         async with sem_lento:
-            resultado = await enriquecer_lento(session, seed_data, db)
-            await asyncio.sleep(DELAY_LENTA)
-            return resultado
+            return await enriquecer_lento(session, seed_data, db)
 
     connector = aiohttp.TCPConnector(limit=200, limit_per_host=30, ttl_dns_cache=300)
     async with aiohttp.ClientSession(connector=connector) as session:
@@ -665,6 +663,7 @@ async def rodar_seed(db):
                 )
                 salvos_tel = 0
                 salvos_total = 0
+                t_inicio_ciclo = time.monotonic()
 
                 # Processa via rápida em sub-lotes
                 for sub_inicio in range(0, len(rapidos), SUB_LOTE):
@@ -701,9 +700,11 @@ async def rodar_seed(db):
                 offset = fim
                 db.salvar_progresso(offset)
                 pct_tel = (salvos_tel / salvos_total * 100) if salvos_total else 0
+                elapsed = time.monotonic() - t_inicio_ciclo
+                throughput = (len(lote) / elapsed * 3600) if elapsed > 0 else 0
                 log.info(
                     f"Ciclo completo. {salvos_total} salvos ({salvos_tel} com tel = {pct_tel:.0f}%). "
-                    f"Posição: {offset:,}/{total:,}"
+                    f"Posição: {offset:,}/{total:,} | Throughput: {throughput:,.0f} CNPJs/hora"
                 )
                 await asyncio.sleep(PAUSA_CICLO)
 
@@ -726,9 +727,7 @@ async def rodar_reenrich(db):
 
     async def worker_reenrich(session, cnpj, db):
         async with semaphore:
-            resultado = await enriquecer_lento(session, {"cnpj": cnpj}, db, forcar=True)
-            await asyncio.sleep(DELAY_LENTA)
-            return resultado
+            return await enriquecer_lento(session, {"cnpj": cnpj}, db, forcar=True)
 
     connector = aiohttp.TCPConnector(limit=100, limit_per_host=20, ttl_dns_cache=300)
     async with aiohttp.ClientSession(connector=connector) as session:
