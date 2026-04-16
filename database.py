@@ -459,6 +459,64 @@ class Database:
             cur.execute(sql_pg if USE_POSTGRES else sql_sq, valores)
             conn.commit()
 
+    def salvar_empresas_batch(self, perfis: list):
+        """
+        Salva múltiplas empresas em uma única transação.
+        Usa executemany para reduzir overhead de conexão/commit.
+        """
+        if not perfis:
+            return
+
+        _coalesce_pg = "CASE WHEN EXCLUDED.{f} != '' THEN EXCLUDED.{f} ELSE empresas.{f} END"
+        _coalesce_sq = "CASE WHEN excluded.{f} != '' THEN excluded.{f} ELSE empresas.{f} END"
+        contatos = ("telefone", "email", "instagram", "site", "rating_google", "avaliacoes")
+        fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
+                 "municipio","uf","socio_principal","atualizado_em","categoria_padrao"]
+
+        sets_pg = ", ".join(
+            [f"{f}=EXCLUDED.{f}" for f in fixos] +
+            [f"{f}={_coalesce_pg.format(f=f)}" for f in contatos]
+        )
+        sets_sq = ", ".join(
+            [f"{f}=excluded.{f}" for f in fixos] +
+            [f"{f}={_coalesce_sq.format(f=f)}" for f in contatos]
+        )
+
+        sql_pg = f"""
+            INSERT INTO empresas
+            (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
+             abertura, municipio, uf, socio_principal, telefone, email,
+             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (cnpj) DO UPDATE SET {sets_pg}
+        """
+        sql_sq = f"""
+            INSERT INTO empresas
+            (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
+             abertura, municipio, uf, socio_principal, telefone, email,
+             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(cnpj) DO UPDATE SET {sets_sq}
+        """
+
+        rows = []
+        for perfil in perfis:
+            cat = perfil.get("categoria_padrao") or cnae_para_categoria(perfil.get("cnae", ""))
+            rows.append((
+                perfil.get("cnpj"), perfil.get("razao_social"), perfil.get("nome_fantasia"),
+                perfil.get("porte"), perfil.get("cnae"), perfil.get("situacao"),
+                perfil.get("abertura"), perfil.get("municipio"), perfil.get("uf"),
+                perfil.get("socio_principal"), perfil.get("telefone", ""), perfil.get("email", ""),
+                perfil.get("instagram", ""), perfil.get("site", ""), perfil.get("rating_google", ""),
+                perfil.get("avaliacoes", ""), perfil.get("atualizado_em"), cat,
+            ))
+
+        sql = sql_pg if USE_POSTGRES else sql_sq
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.executemany(sql, rows)
+            conn.commit()
+
     def buscar_telefone_salvo(self, cnpj: str) -> str:
         """Retorna o telefone salvo no banco para o CNPJ, ou '' se vazio/ausente."""
         with _conn() as conn:

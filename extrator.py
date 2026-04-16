@@ -93,6 +93,21 @@ def extrair_zip(caminho_zip):
     return None
 
 
+def _formatar_telefone(ddd: str, numero: str) -> str:
+    """Formata DDD+número da Receita em '(DD) XXXXX-XXXX' ou '(DD) XXXX-XXXX'."""
+    ddd = ddd.strip()
+    numero = numero.strip()
+    if not ddd or not numero:
+        return ""
+    if len(numero) == 9:
+        return f"({ddd}) {numero[:5]}-{numero[5:]}"
+    elif len(numero) == 8:
+        return f"({ddd}) {numero[:4]}-{numero[4:]}"
+    elif len(numero) >= 7:
+        return f"({ddd}) {numero}"
+    return ""
+
+
 def extrair_cnpjs(
     arquivo,
     ufs=None,
@@ -104,6 +119,7 @@ def extrair_cnpjs(
 ):
     """
     Lê o arquivo de Estabelecimentos e filtra os CNPJs.
+    Gera TSV com dados cadastrais e de contato (telefone, email) da Receita.
 
     Parâmetros:
         arquivo      — caminho do arquivo da Receita (zip ou csv)
@@ -128,9 +144,12 @@ def extrair_cnpjs(
     tamanho_mb = os.path.getsize(arquivo) / 1024 / 1024
     print(f"\nArquivo: {arquivo} ({tamanho_mb:.0f} MB)")
     print(f"Filtros: UFs={ufs or 'TODOS'} | Ativas={apenas_ativas} | Limite={limite or 'SEM LIMITE'}")
+    print(f"Formato de saída: TSV com dados de contato (telefone, email)")
     print("Processando... (pode demorar alguns minutos para arquivos grandes)\n")
 
     encontrados = 0
+    com_telefone = 0
+    com_email = 0
     processados = 0
     ignorados   = 0
 
@@ -144,7 +163,7 @@ def extrair_cnpjs(
 
             # Mostra progresso a cada 500k linhas
             if processados % 500_000 == 0:
-                print(f"  {processados:,} linhas processadas | {encontrados:,} CNPJs encontrados...")
+                print(f"  {processados:,} linhas processadas | {encontrados:,} CNPJs | {com_telefone:,} com tel...")
 
             if len(linha) < 20:
                 ignorados += 1
@@ -179,20 +198,56 @@ def extrair_cnpjs(
                 continue
 
             cnpj = montar_cnpj(cnpj_base, cnpj_ordem, cnpj_dv)
-            f_out.write(cnpj + "\n")
+
+            # Extrai dados de contato se disponíveis (colunas 21-27)
+            nome_fantasia = ""
+            municipio     = ""
+            data_inicio   = ""
+            telefone1     = ""
+            telefone2     = ""
+            email         = ""
+
+            if len(linha) >= 28:
+                nome_fantasia = linha[4].strip()
+                municipio     = linha[20].strip()
+                data_inicio   = linha[10].strip()
+
+                ddd1  = linha[21].strip()
+                num1  = linha[22].strip()
+                ddd2  = linha[23].strip()
+                num2  = linha[24].strip()
+
+                telefone1 = _formatar_telefone(ddd1, num1)
+                telefone2 = _formatar_telefone(ddd2, num2)
+                email     = linha[27].strip().lower()
+
+            # TSV: cnpj\tnome_fantasia\tuf\tmunicipio\tcnae\tabertura\ttelefone1\ttelefone2\temail
+            campos = [cnpj, nome_fantasia, uf, municipio, cnae, data_inicio,
+                      telefone1, telefone2, email]
+            f_out.write("\t".join(campos) + "\n")
+
             encontrados += 1
+            if telefone1:
+                com_telefone += 1
+            if email:
+                com_email += 1
 
             if limite and encontrados >= limite:
                 print(f"\nLimite de {limite:,} CNPJs atingido.")
                 break
 
+    pct_tel = (com_telefone / encontrados * 100) if encontrados else 0
+    pct_email = (com_email / encontrados * 100) if encontrados else 0
+
     print(f"\n{'='*50}")
     print(f"Concluído!")
     print(f"  Linhas processadas : {processados:,}")
     print(f"  CNPJs extraídos    : {encontrados:,}")
+    print(f"  Com telefone       : {com_telefone:,} ({pct_tel:.1f}%)")
+    print(f"  Com email          : {com_email:,} ({pct_email:.1f}%)")
     print(f"  Arquivo gerado     : {saida}")
     print(f"{'='*50}")
-    print(f"\nAgora rode: python agent.py")
+    print(f"\nAgora rode: python agent/agent.py")
 
 
 # ─── CLI ──────────────────────────────────────────────────────────

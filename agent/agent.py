@@ -1,12 +1,13 @@
 """
-CNPJ Intel Agent — com persistência de progresso no PostgreSQL.
-Ao reiniciar, retoma de onde parou sem reprocessar CNPJs já salvos.
+CNPJ Intel Agent — pipeline dual de enriquecimento.
 
-Estratégia de enriquecimento (em ordem de prioridade):
-  1. Google Places API (melhor qualidade — requer GOOGLE_API_KEY no Railway)
-  2. DuckDuckGo search (fallback sem API key — acha Instagram e site)
-  3. Scraping do site oficial (homepage + página de contato)
-  4. BrasilAPI email/telefone da Receita Federal
+Via rápida (telefone já vem do seed da Receita Federal):
+  Seed TSV → BrasilAPI (razao_social/porte/socios) → salvar
+  ~40 workers, sem DDG/scraping, ~30k CNPJs/hora
+
+Via lenta (sem telefone no seed):
+  BrasilAPI → DuckDuckGo (site) → scraping (contatos) → salvar
+  ~5 workers, com rate limiting
 """
 
 import asyncio
@@ -15,6 +16,7 @@ import re
 import logging
 import os
 import sys
+import gzip
 from urllib.parse import quote, urljoin, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,15 +29,17 @@ log = logging.getLogger(__name__)
 GOOGLE_API_KEY       = os.environ.get("GOOGLE_API_KEY", "")
 REENRICH_SEM_CONTATO = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1", "true", "yes")
 
-# Google Places desativado — pipeline usa DDG + scraping + BrasilAPI.
-# Concorrência fixa em 5 para não sobrecarregar DDG e BrasilAPI.
-CONCORRENCIA = 3 if REENRICH_SEM_CONTATO else 5
+# ─── Concorrência e throughput ────────────────────────────────────────────────
+# Via rápida (seed com telefone): só BrasilAPI → alta concorrência
+# Via lenta (sem telefone): DDG + scraping → concorrência baixa para evitar rate limit
+CONCORRENCIA_RAPIDA = 3 if REENRICH_SEM_CONTATO else 40
+CONCORRENCIA_LENTA  = 3 if REENRICH_SEM_CONTATO else 5
 
-DELAY        = 0.8 if REENRICH_SEM_CONTATO else 0.5
+DELAY_LENTA  = 0.2   # delay só na via lenta (DDG)
 LOTE         = 3000 if REENRICH_SEM_CONTATO else 5000
-PAUSA_CICLO  = 5
-TIMEOUT_CNPJ = 30
-SALVAR_A_CADA = 50
+PAUSA_CICLO  = 3
+TIMEOUT_RAPIDO = 10   # BrasilAPI only
+TIMEOUT_LENTO  = 20   # BrasilAPI + DDG + scraping
 
 # Headers realistas para evitar bloqueio nos scrapers
 HEADERS_BROWSER = {
@@ -63,7 +67,7 @@ EMAIL_RUIDO = [
 ]
 
 # Slugs de páginas de contato para tentar após homepage
-PAGINAS_CONTATO = ["/contato", "/contact", "/fale-conosco", "/sobre", "/about"]
+PAGINAS_CONTATO = ["/contato", "/contact"]
 
 
 # ─── BrasilAPI ────────────────────────────────────────────────────────────────
@@ -83,8 +87,8 @@ async def buscar_brasilapi(session, cnpj):
         pass
     # sleep FORA do semáforo — não trava os demais workers durante a espera
     if rate_limited:
-        log.warning("BrasilAPI rate limit — aguardando 60s...")
-        await asyncio.sleep(60)
+        log.warning("BrasilAPI rate limit — aguardando 10s...")
+        await asyncio.sleep(10)
     return None
 
 
@@ -329,7 +333,7 @@ async def _scrape_pagina(session, url: str) -> tuple[str, str, str]:
     try:
         async with session.get(
             url, headers=HEADERS_BROWSER,
-            timeout=aiohttp.ClientTimeout(total=6),
+            timeout=aiohttp.ClientTimeout(total=4),
             allow_redirects=True,
         ) as r:
             if r.status == 200:
@@ -393,11 +397,93 @@ async def extrair_contatos_do_site(session, site_url: str) -> dict:
 
 # ─── Pipeline principal ───────────────────────────────────────────────────────
 
-async def _processar(session, cnpj, db, forcar=False):
-    cnpj = re.sub(r"\D", "", cnpj)
+async def _processar_rapido(session, seed_data, db):
+    """
+    Via rápida: CNPJ já tem telefone do seed (Receita Federal).
+    Só chama BrasilAPI para razao_social/porte/socios. Pula DDG e scraping.
+    """
+    cnpj = re.sub(r"\D", "", seed_data["cnpj"])
     try:
-        # Em modo REENRICH (forcar=True): usa dados já salvos no banco
-        # para evitar chamadas desnecessárias à BrasilAPI (que tem rate limit).
+        if db.cnpj_existe_recente(cnpj, dias=30):
+            return None
+
+        # Dados do seed (Receita Federal via extrator.py)
+        tel_seed   = seed_data.get("telefone", "")
+        email_seed = seed_data.get("email", "")
+        fantasia   = seed_data.get("nome_fantasia", "")
+        uf_seed    = seed_data.get("uf", "")
+        cidade_seed = seed_data.get("municipio", "")
+        cnae_seed  = seed_data.get("cnae", "")
+        abertura_seed = seed_data.get("abertura", "")
+
+        # BrasilAPI para dados complementares (razao_social, porte, socios)
+        dados = await buscar_brasilapi(session, cnpj)
+
+        if dados:
+            if dados.get("descricao_situacao_cadastral", "").upper() != "ATIVA":
+                return None
+            nome   = dados.get("razao_social", "")
+            porte  = dados.get("porte", "")
+            socios = dados.get("qsa", [])
+            socio  = socios[0].get("nome_socio", "") if socios else ""
+            # BrasilAPI pode ter dados melhores — usa se disponível
+            fantasia = fantasia or dados.get("nome_fantasia", "")
+            uf_seed  = uf_seed or dados.get("uf", "")
+            cidade_seed = cidade_seed or dados.get("municipio", "")
+            cnae_seed = cnae_seed or dados.get("cnae_fiscal_descricao", "")
+            abertura_seed = abertura_seed or dados.get("data_inicio_atividade", "")
+            email_api = dados.get("email", "")
+            # Telefone da BrasilAPI como fallback
+            ddd = dados.get("ddd_telefone_1", "")
+            num = dados.get("telefone_1", "")
+            tel_api = f"({ddd}) {num}" if ddd and num else ""
+        else:
+            # BrasilAPI falhou — usa só dados do seed
+            nome  = fantasia
+            porte = ""
+            socio = ""
+            email_api = ""
+            tel_api = ""
+
+        perfil = {
+            "cnpj":            cnpj,
+            "razao_social":    nome,
+            "nome_fantasia":   fantasia,
+            "porte":           porte,
+            "cnae":            cnae_seed,
+            "situacao":        "ATIVA",
+            "abertura":        abertura_seed,
+            "municipio":       cidade_seed,
+            "uf":              uf_seed,
+            "socio_principal": socio,
+            "telefone":        tel_seed or tel_api,
+            "email":           email_seed or email_api or "",
+            "instagram":       "",
+            "site":            "",
+            "rating_google":   "",
+            "avaliacoes":      "",
+            "atualizado_em":   datetime.utcnow().isoformat(),
+        }
+
+        achou = telefone_valido(perfil["telefone"])
+        nome_busca = fantasia or nome
+        log.debug(
+            f"{'✓' if achou else '·'} [RÁPIDO] {nome_busca[:30]:<30} | {uf_seed} | tel:{bool(perfil['telefone'])}"
+        )
+        return perfil
+
+    except Exception as e:
+        log.debug(f"Erro rápido {cnpj}: {e}")
+        return None
+
+
+async def _processar_lento(session, seed_data, db, forcar=False):
+    """
+    Via lenta: CNPJ sem telefone no seed. Pipeline completo com DDG + scraping.
+    Também usado no modo REENRICH.
+    """
+    cnpj = re.sub(r"\D", "", seed_data["cnpj"])
+    try:
         if forcar:
             registro = db.buscar_empresa_por_cnpj(cnpj)
             if not registro:
@@ -419,8 +505,8 @@ async def _processar(session, cnpj, db, forcar=False):
                 return None
 
             nome       = dados.get("razao_social", "")
-            fantasia   = dados.get("nome_fantasia", "")
-            cidade     = dados.get("municipio", "")
+            fantasia   = seed_data.get("nome_fantasia", "") or dados.get("nome_fantasia", "")
+            cidade     = seed_data.get("municipio", "") or dados.get("municipio", "")
             socios     = dados.get("qsa", [])
             socio      = socios[0].get("nome_socio", "") if socios else ""
             ddd        = dados.get("ddd_telefone_1", "")
@@ -428,16 +514,12 @@ async def _processar(session, cnpj, db, forcar=False):
             tel_receita = f"({ddd}) {num}" if ddd and num else ""
             nome_busca = fantasia or nome
 
-        # 1. DDG para encontrar o site oficial da empresa
+        # DDG para encontrar o site oficial da empresa
         site = await buscar_site_ddg(session, nome_busca, cidade)
 
-        # 2. Scraping do site: extrai email, instagram e telefone
+        # Scraping do site: extrai email, instagram e telefone
         contatos = await extrair_contatos_do_site(session, site)
 
-        # Google Places desativado — telefone vem do scraping do site ou da BrasilAPI
-        google = {}
-
-        # No REENRICH usamos dados do banco; no fluxo normal usamos dados da BrasilAPI
         if forcar:
             porte    = registro.get("porte", "")
             cnae_str = registro.get("cnae", "")
@@ -446,10 +528,10 @@ async def _processar(session, cnpj, db, forcar=False):
             email_rf = registro.get("email", "")
         else:
             porte    = dados.get("porte", "")
-            cnae_str = dados.get("cnae_fiscal_descricao", "")
-            abertura = dados.get("data_inicio_atividade", "")
-            uf       = dados.get("uf", "")
-            email_rf = dados.get("email", "")
+            cnae_str = seed_data.get("cnae", "") or dados.get("cnae_fiscal_descricao", "")
+            abertura = seed_data.get("abertura", "") or dados.get("data_inicio_atividade", "")
+            uf       = seed_data.get("uf", "") or dados.get("uf", "")
+            email_rf = seed_data.get("email", "") or dados.get("email", "")
 
         perfil = {
             "cnpj":            cnpj,
@@ -466,54 +548,43 @@ async def _processar(session, cnpj, db, forcar=False):
             "email":           contatos.get("email_site", "") or email_rf or "",
             "instagram":       contatos.get("instagram_site", ""),
             "site":            site,
-            "rating_google":   str(google.get("rating_google", "")),
-            "avaliacoes":      str(google.get("avaliacoes", "")),
+            "rating_google":   "",
+            "avaliacoes":      "",
             "atualizado_em":   datetime.utcnow().isoformat(),
         }
 
-        # Critério mínimo: deve ter telefone válido para aparecer no dashboard.
         achou = telefone_valido(perfil["telefone"])
-
-        # Sem telefone: zera o site para que a empresa não apareça no dashboard
-        # (com_contato exige telefone), mas ainda salva o registro para não
-        # reprocessar o mesmo CNPJ no próximo ciclo.
         if not achou:
             perfil["site"] = ""
 
-        # Sempre salva em seed mode (marca como processado).
-        # Em REENRICH: só salva se achou algo novo.
-        if not forcar or achou:
-            db.salvar_empresa(perfil)
-
-            # Diagnóstico: verifica se telefone foi coletado e persistido no banco
-            tel_coletado = perfil.get("telefone", "")
-            if tel_coletado:
-                log.info(f"[TEL-COLETADO] {cnpj} → {tel_coletado}")
-            else:
-                log.info(f"[TEL-VAZIO] {cnpj} — sem telefone após enriquecimento")
-            confirmado = db.buscar_telefone_salvo(cnpj)
-            if tel_coletado and not confirmado:
-                log.warning(f"[TEL-PERDIDO] {cnpj} — coletado mas NÃO salvo no banco!")
-            elif tel_coletado and confirmado:
-                log.info(f"[TEL-CONFIRMADO] {cnpj} → salvo: {confirmado}")
-
-        log.info(
-            f"{'✓' if achou else '·'} {nome_busca[:35]:<35} | {uf} | "
+        log.debug(
+            f"{'✓' if achou else '·'} [LENTO] {nome_busca[:30]:<30} | {uf} | "
             f"tel:{bool(perfil['telefone'])} site:{bool(perfil['site'])}"
         )
-        return perfil if achou else None
+        return perfil
 
     except Exception as e:
-        log.debug(f"Erro {cnpj}: {e}")
+        log.debug(f"Erro lento {cnpj}: {e}")
         return None
 
 
-async def enriquecer(session, cnpj, db, forcar=False):
+async def enriquecer_rapido(session, seed_data, db):
     try:
-        return await asyncio.wait_for(_processar(session, cnpj, db, forcar=forcar), timeout=TIMEOUT_CNPJ)
-    except asyncio.TimeoutError:
+        return await asyncio.wait_for(
+            _processar_rapido(session, seed_data, db),
+            timeout=TIMEOUT_RAPIDO,
+        )
+    except (asyncio.TimeoutError, Exception):
         return None
-    except Exception:
+
+
+async def enriquecer_lento(session, seed_data, db, forcar=False):
+    try:
+        return await asyncio.wait_for(
+            _processar_lento(session, seed_data, db, forcar=forcar),
+            timeout=TIMEOUT_LENTO,
+        )
+    except (asyncio.TimeoutError, Exception):
         return None
 
 
@@ -521,84 +592,119 @@ async def enriquecer(session, cnpj, db, forcar=False):
 
 async def rodar_agente():
     global _DDG_SEM, _BRASIL_SEM
-    # Inicializa os semáforos dentro do event loop correto.
-    _DDG_SEM = asyncio.Semaphore(3)      # max 3 conexões simultâneas ao DuckDuckGo
-    _BRASIL_SEM = asyncio.Semaphore(4)   # max 4 conexões simultâneas à BrasilAPI
+    _DDG_SEM = asyncio.Semaphore(3)       # max 3 conexões simultâneas ao DuckDuckGo
+    _BRASIL_SEM = asyncio.Semaphore(15)   # max 15 conexões simultâneas à BrasilAPI
 
     db = Database()
     db.criar_tabelas()
     db.criar_tabela_progresso()
 
-    if GOOGLE_API_KEY:
-        log.info(f"✅ Google Places API ativa — concorrência={CONCORRENCIA}, delay={DELAY}s")
-    else:
-        log.info(f"⚠️  GOOGLE_API_KEY não configurada — DuckDuckGo fallback | concorrência={CONCORRENCIA}")
+    log.info(
+        f"Pipeline dual: via rápida={CONCORRENCIA_RAPIDA} workers, "
+        f"via lenta={CONCORRENCIA_LENTA} workers"
+    )
 
     if REENRICH_SEM_CONTATO:
-        log.info("🔁 Modo REENRICH_SEM_CONTATO ativo — re-processando registros sem email/instagram/site")
+        log.info("Modo REENRICH_SEM_CONTATO ativo")
         await rodar_reenrich(db)
     else:
         await rodar_seed(db)
 
 
 async def rodar_seed(db):
-    """Loop padrão: processa CNPJs do cnpjs_seed.txt em ordem."""
-    cnpjs = carregar_cnpjs_seed()
-    total = len(cnpjs)
+    """Loop padrão: processa CNPJs do cnpjs_seed.txt com pipeline dual."""
+    registros = carregar_cnpjs_seed()
+    total = len(registros)
 
     offset = db.carregar_progresso()
     if offset > 0 and offset < total:
-        log.info(f"🔄 Retomando do CNPJ {offset:,} de {total:,}")
+        log.info(f"Retomando do CNPJ {offset:,} de {total:,}")
     elif offset >= total:
-        log.info("✅ Todos processados. Reiniciando do zero.")
+        log.info("Todos processados. Reiniciando do zero.")
         offset = 0
         db.salvar_progresso(0)
     else:
-        log.info(f"🆕 Iniciando do zero. {total:,} CNPJs na fila.")
+        log.info(f"Iniciando do zero. {total:,} CNPJs na fila.")
 
-    semaphore = asyncio.Semaphore(CONCORRENCIA)
-    SUB_LOTE  = CONCORRENCIA * 10
+    sem_rapido = asyncio.Semaphore(CONCORRENCIA_RAPIDA)
+    sem_lento  = asyncio.Semaphore(CONCORRENCIA_LENTA)
+    SUB_LOTE   = 200  # batch size para saves e progresso
 
-    async def enriquecer_paralelo(session, cnpj, db):
-        async with semaphore:
-            resultado = await enriquecer(session, cnpj, db)
-            await asyncio.sleep(DELAY)
+    async def worker_rapido(session, seed_data, db):
+        async with sem_rapido:
+            return await enriquecer_rapido(session, seed_data, db)
+
+    async def worker_lento(session, seed_data, db):
+        async with sem_lento:
+            resultado = await enriquecer_lento(session, seed_data, db)
+            await asyncio.sleep(DELAY_LENTA)
             return resultado
 
-    connector = aiohttp.TCPConnector(limit=100, limit_per_host=20, ttl_dns_cache=300)
+    connector = aiohttp.TCPConnector(limit=200, limit_per_host=30, ttl_dns_cache=300)
     async with aiohttp.ClientSession(connector=connector) as session:
         while True:
             try:
                 inicio = offset
                 fim    = min(offset + LOTE, total)
-                lote   = cnpjs[inicio:fim]
+                lote   = registros[inicio:fim]
 
                 if not lote:
-                    log.info("✅ Todos processados! Reiniciando em 60s...")
+                    log.info("Todos processados! Reiniciando em 60s...")
                     db.salvar_progresso(0)
                     offset = 0
                     await asyncio.sleep(60)
                     continue
 
-                log.info(f"Ciclo: {inicio:,} → {fim:,} de {total:,} ({100*inicio//total}%) | concorrência={CONCORRENCIA}")
-                salvos = 0
+                # Separa CNPJs em via rápida (tem telefone) e via lenta (sem telefone)
+                rapidos = [r for r in lote if r.get("telefone")]
+                lentos  = [r for r in lote if not r.get("telefone")]
 
-                for sub_inicio in range(0, len(lote), SUB_LOTE):
-                    sub = lote[sub_inicio:sub_inicio + SUB_LOTE]
+                log.info(
+                    f"Ciclo: {inicio:,} → {fim:,} de {total:,} ({100*inicio//total}%) | "
+                    f"rápidos={len(rapidos)} lentos={len(lentos)}"
+                )
+                salvos_tel = 0
+                salvos_total = 0
+
+                # Processa via rápida em sub-lotes
+                for sub_inicio in range(0, len(rapidos), SUB_LOTE):
+                    sub = rapidos[sub_inicio:sub_inicio + SUB_LOTE]
                     try:
                         resultados = await asyncio.gather(
-                            *[enriquecer_paralelo(session, cnpj, db) for cnpj in sub],
-                            return_exceptions=True
+                            *[worker_rapido(session, r, db) for r in sub],
+                            return_exceptions=True,
                         )
-                        salvos += sum(1 for r in resultados if r and not isinstance(r, Exception))
+                        perfis = [r for r in resultados if r and not isinstance(r, Exception)]
+                        if perfis:
+                            db.salvar_empresas_batch(perfis)
+                            salvos_total += len(perfis)
+                            salvos_tel += sum(1 for p in perfis if telefone_valido(p.get("telefone", "")))
                     except Exception as e:
-                        log.debug(f"Erro no sub-lote: {e}")
+                        log.debug(f"Erro sub-lote rápido: {e}")
 
-                    db.salvar_progresso(inicio + sub_inicio + len(sub))
+                # Processa via lenta em sub-lotes
+                for sub_inicio in range(0, len(lentos), SUB_LOTE):
+                    sub = lentos[sub_inicio:sub_inicio + SUB_LOTE]
+                    try:
+                        resultados = await asyncio.gather(
+                            *[worker_lento(session, r, db) for r in sub],
+                            return_exceptions=True,
+                        )
+                        perfis = [r for r in resultados if r and not isinstance(r, Exception)]
+                        if perfis:
+                            db.salvar_empresas_batch(perfis)
+                            salvos_total += len(perfis)
+                            salvos_tel += sum(1 for p in perfis if telefone_valido(p.get("telefone", "")))
+                    except Exception as e:
+                        log.debug(f"Erro sub-lote lento: {e}")
 
                 offset = fim
                 db.salvar_progresso(offset)
-                log.info(f"Ciclo completo. {salvos} salvos. Posição: {offset:,}/{total:,}")
+                pct_tel = (salvos_tel / salvos_total * 100) if salvos_total else 0
+                log.info(
+                    f"Ciclo completo. {salvos_total} salvos ({salvos_tel} com tel = {pct_tel:.0f}%). "
+                    f"Posição: {offset:,}/{total:,}"
+                )
                 await asyncio.sleep(PAUSA_CICLO)
 
             except Exception as e:
@@ -609,20 +715,19 @@ async def rodar_seed(db):
 async def rodar_reenrich(db):
     """
     Re-enriquece registros já salvos no banco que não têm email, instagram nem site.
-    Ideal para usar com Google Places API para extrair o máximo de contatos dos 130k.
     """
     total_sem_contato = db.contar_sem_contato()
-    log.info(f"📊 {total_sem_contato:,} empresas sem contato algum — iniciando re-enriquecimento")
+    log.info(f"{total_sem_contato:,} empresas sem contato — iniciando re-enriquecimento")
 
-    semaphore = asyncio.Semaphore(CONCORRENCIA)
-    SUB_LOTE  = CONCORRENCIA * 10
+    semaphore = asyncio.Semaphore(CONCORRENCIA_LENTA)
+    SUB_LOTE  = CONCORRENCIA_LENTA * 10
     offset_db = 0
     total_salvos = 0
 
-    async def enriquecer_forçado(session, cnpj, db):
+    async def worker_reenrich(session, cnpj, db):
         async with semaphore:
-            resultado = await enriquecer(session, cnpj, db, forcar=True)
-            await asyncio.sleep(DELAY)
+            resultado = await enriquecer_lento(session, {"cnpj": cnpj}, db, forcar=True)
+            await asyncio.sleep(DELAY_LENTA)
             return resultado
 
     connector = aiohttp.TCPConnector(limit=100, limit_per_host=20, ttl_dns_cache=300)
@@ -631,33 +736,31 @@ async def rodar_reenrich(db):
             try:
                 lote = db.buscar_cnpjs_sem_contato(limite=LOTE, offset=offset_db)
                 if not lote:
-                    log.info(f"✅ REENRICH completo! {total_salvos:,} registros atualizados. Aguardando 5min...")
+                    log.info(f"REENRICH completo! {total_salvos:,} atualizados. Aguardando 5min...")
                     await asyncio.sleep(300)
-                    # Recomeça — pode ter novos sem contato
                     offset_db = 0
                     total_sem_contato = db.contar_sem_contato()
-                    log.info(f"🔄 Novo ciclo REENRICH: {total_sem_contato:,} ainda sem contato")
+                    log.info(f"Novo ciclo REENRICH: {total_sem_contato:,} ainda sem contato")
                     continue
 
-                log.info(f"REENRICH: processando {len(lote)} CNPJs (offset={offset_db:,}) | {total_salvos:,} salvos até agora")
+                log.info(f"REENRICH: {len(lote)} CNPJs (offset={offset_db:,}) | {total_salvos:,} salvos")
                 salvos_lote = 0
 
                 for sub_inicio in range(0, len(lote), SUB_LOTE):
                     sub = lote[sub_inicio:sub_inicio + SUB_LOTE]
                     try:
                         resultados = await asyncio.gather(
-                            *[enriquecer_forçado(session, cnpj, db) for cnpj in sub],
-                            return_exceptions=True
+                            *[worker_reenrich(session, cnpj, db) for cnpj in sub],
+                            return_exceptions=True,
                         )
-                        salvos_lote += sum(1 for r in resultados if r and not isinstance(r, Exception))
+                        perfis = [r for r in resultados if r and not isinstance(r, Exception)]
+                        if perfis:
+                            db.salvar_empresas_batch(perfis)
+                            salvos_lote += len(perfis)
                     except Exception as e:
                         log.debug(f"Erro sub-lote reenrich: {e}")
 
                 total_salvos += salvos_lote
-                # Avança pelo tamanho total do lote — os que achamos contato saem
-                # da query (não têm mais email/insta vazio), os que não achamos
-                # ficam no banco com atualizado_em INALTERADO (não chamamos salvar_empresa
-                # pra eles), então são vistos novamente na próxima rodada mas com offset maior.
                 offset_db += len(lote)
                 log.info(f"Lote REENRICH: {salvos_lote} atualizados. Total: {total_salvos:,}")
                 await asyncio.sleep(PAUSA_CICLO)
@@ -668,13 +771,50 @@ async def rodar_reenrich(db):
 
 
 def carregar_cnpjs_seed():
-    locais = ["cnpjs_seed.txt", "../cnpjs_seed.txt", "/app/cnpjs_seed.txt"]
+    """
+    Carrega o seed file. Suporta dois formatos:
+    - Formato antigo: um CNPJ por linha
+    - Formato TSV: cnpj\\tnome_fantasia\\tuf\\tmunicipio\\tcnae\\tabertura\\ttelefone1\\ttelefone2\\temail
+    Retorna lista de dicts com os campos disponíveis.
+    """
+    locais = [
+        "cnpjs_seed.txt", "cnpjs_seed.txt.gz",
+        "../cnpjs_seed.txt", "../cnpjs_seed.txt.gz",
+        "/app/cnpjs_seed.txt", "/app/cnpjs_seed.txt.gz",
+    ]
     for caminho in locais:
-        if os.path.exists(caminho):
-            with open(caminho, "r") as f:
-                cnpjs = [l.strip() for l in f if l.strip()]
-            log.info(f"Carregados {len(cnpjs):,} CNPJs de '{caminho}'")
-            return cnpjs
+        if not os.path.exists(caminho):
+            continue
+        registros = []
+        com_tel = 0
+        opener = gzip.open if caminho.endswith(".gz") else open
+        with opener(caminho, "rt", encoding="utf-8", errors="ignore") as f:
+            for linha in f:
+                linha = linha.strip()
+                if not linha:
+                    continue
+                partes = linha.split("\t")
+                if len(partes) >= 9:
+                    tel = partes[6] or partes[7]
+                    reg = {
+                        "cnpj": partes[0],
+                        "nome_fantasia": partes[1],
+                        "uf": partes[2],
+                        "municipio": partes[3],
+                        "cnae": partes[4],
+                        "abertura": partes[5],
+                        "telefone": tel,
+                        "email": partes[8],
+                    }
+                    if tel:
+                        com_tel += 1
+                else:
+                    reg = {"cnpj": partes[0]}
+                registros.append(reg)
+        total = len(registros)
+        pct = (com_tel / total * 100) if total else 0
+        log.info(f"Carregados {total:,} CNPJs de '{caminho}' | {com_tel:,} com telefone ({pct:.0f}%)")
+        return registros
     log.warning("cnpjs_seed.txt não encontrado!")
     return []
 

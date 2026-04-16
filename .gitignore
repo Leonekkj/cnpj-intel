@@ -1,0 +1,5 @@
+cnpjs_seed.txt
+cnpj_intel.db
+__pycache__/
+*.pyc
+.env
