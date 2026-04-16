@@ -15,6 +15,7 @@ import aiohttp
 import re
 import logging
 import os
+import random
 import sys
 import gzip
 from urllib.parse import quote, urljoin, urlparse
@@ -32,8 +33,8 @@ REENRICH_SEM_CONTATO = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1
 # ─── Concorrência e throughput ────────────────────────────────────────────────
 # Via rápida (seed com telefone): só BrasilAPI → alta concorrência
 # Via lenta (sem telefone): DDG + scraping → concorrência baixa para evitar rate limit
-CONCORRENCIA_RAPIDA = 3 if REENRICH_SEM_CONTATO else 40
-CONCORRENCIA_LENTA  = 3 if REENRICH_SEM_CONTATO else 20
+CONCORRENCIA_RAPIDA = 3 if REENRICH_SEM_CONTATO else 15
+CONCORRENCIA_LENTA  = 3 if REENRICH_SEM_CONTATO else 8
 
 LOTE         = 3000 if REENRICH_SEM_CONTATO else 5000
 PAUSA_CICLO  = 0.5
@@ -71,23 +72,27 @@ PAGINAS_CONTATO = ["/contato", "/contact"]
 
 # ─── BrasilAPI ────────────────────────────────────────────────────────────────
 
-async def buscar_brasilapi(session, cnpj):
+async def buscar_brasilapi(session, cnpj, tentativas=3):
     url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
     sem = _BRASIL_SEM if _BRASIL_SEM is not None else asyncio.Semaphore(4)
-    rate_limited = False
-    try:
-        async with sem:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as r:
-                if r.status == 200:
-                    return await r.json()
-                elif r.status == 429:
-                    rate_limited = True
-    except Exception:
-        pass
-    # sleep FORA do semáforo — não trava os demais workers durante a espera
-    if rate_limited:
-        log.warning("BrasilAPI rate limit — aguardando 2s...")
-        await asyncio.sleep(2)
+    for tentativa in range(tentativas):
+        rate_limited = False
+        try:
+            async with sem:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as r:
+                    if r.status == 200:
+                        return await r.json()
+                    elif r.status == 429:
+                        rate_limited = True
+        except Exception:
+            pass
+        # sleep FORA do semáforo — não trava os demais workers durante a espera
+        if rate_limited:
+            espera = (2 ** tentativa) + random.uniform(0, 1)
+            log.warning(f"BrasilAPI rate limit — aguardando {espera:.1f}s (tentativa {tentativa+1}/{tentativas})...")
+            await asyncio.sleep(espera)
+        else:
+            break  # erro de rede ou outro — não retenta
     return None
 
 
@@ -666,8 +671,11 @@ async def rodar_seed(db):
                 t_inicio_ciclo = time.monotonic()
 
                 # Processa via rápida em sub-lotes
+                n_sub_rapidos = (len(rapidos) + SUB_LOTE - 1) // SUB_LOTE
                 for sub_inicio in range(0, len(rapidos), SUB_LOTE):
                     sub = rapidos[sub_inicio:sub_inicio + SUB_LOTE]
+                    sub_n = sub_inicio // SUB_LOTE + 1
+                    log.info(f"  Sub-lote rápido {sub_n}/{n_sub_rapidos}: {len(sub)} CNPJs...")
                     try:
                         resultados = await asyncio.gather(
                             *[worker_rapido(session, r, db) for r in sub],
@@ -675,15 +683,18 @@ async def rodar_seed(db):
                         )
                         perfis = [r for r in resultados if r and not isinstance(r, Exception)]
                         if perfis:
-                            db.salvar_empresas_batch(perfis)
+                            await asyncio.to_thread(db.salvar_empresas_batch, perfis)
                             salvos_total += len(perfis)
                             salvos_tel += sum(1 for p in perfis if telefone_valido(p.get("telefone", "")))
                     except Exception as e:
                         log.debug(f"Erro sub-lote rápido: {e}")
 
                 # Processa via lenta em sub-lotes
+                n_sub_lentos = (len(lentos) + SUB_LOTE - 1) // SUB_LOTE
                 for sub_inicio in range(0, len(lentos), SUB_LOTE):
                     sub = lentos[sub_inicio:sub_inicio + SUB_LOTE]
+                    sub_n = sub_inicio // SUB_LOTE + 1
+                    log.info(f"  Sub-lote lento {sub_n}/{n_sub_lentos}: {len(sub)} CNPJs...")
                     try:
                         resultados = await asyncio.gather(
                             *[worker_lento(session, r, db) for r in sub],
@@ -691,14 +702,14 @@ async def rodar_seed(db):
                         )
                         perfis = [r for r in resultados if r and not isinstance(r, Exception)]
                         if perfis:
-                            db.salvar_empresas_batch(perfis)
+                            await asyncio.to_thread(db.salvar_empresas_batch, perfis)
                             salvos_total += len(perfis)
                             salvos_tel += sum(1 for p in perfis if telefone_valido(p.get("telefone", "")))
                     except Exception as e:
                         log.debug(f"Erro sub-lote lento: {e}")
 
                 offset = fim
-                db.salvar_progresso(offset)
+                await asyncio.to_thread(db.salvar_progresso, offset)
                 pct_tel = (salvos_tel / salvos_total * 100) if salvos_total else 0
                 elapsed = time.monotonic() - t_inicio_ciclo
                 throughput = (len(lote) / elapsed * 3600) if elapsed > 0 else 0
@@ -754,7 +765,7 @@ async def rodar_reenrich(db):
                         )
                         perfis = [r for r in resultados if r and not isinstance(r, Exception)]
                         if perfis:
-                            db.salvar_empresas_batch(perfis)
+                            await asyncio.to_thread(db.salvar_empresas_batch, perfis)
                             salvos_lote += len(perfis)
                     except Exception as e:
                         log.debug(f"Erro sub-lote reenrich: {e}")
