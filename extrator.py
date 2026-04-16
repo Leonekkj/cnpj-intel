@@ -210,7 +210,11 @@ def extrair_cnpjs(
             if len(linha) >= 28:
                 nome_fantasia = linha[4].strip()
                 municipio     = linha[20].strip()
-                data_inicio   = linha[10].strip()
+                raw_data      = linha[10].strip()
+                if len(raw_data) == 8 and raw_data.isdigit():
+                    data_inicio = f"{raw_data[:4]}-{raw_data[4:6]}-{raw_data[6:]}"
+                else:
+                    data_inicio = raw_data
 
                 ddd1  = linha[21].strip()
                 num1  = linha[22].strip()

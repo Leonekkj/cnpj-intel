@@ -425,12 +425,12 @@ async def _processar_rapido(session, seed_data, db):
             porte  = dados.get("porte", "")
             socios = dados.get("qsa", [])
             socio  = socios[0].get("nome_socio", "") if socios else ""
-            # BrasilAPI pode ter dados melhores — usa se disponível
+            # BrasilAPI tem prioridade — seus dados são legíveis (vs. códigos brutos do seed)
             fantasia = fantasia or dados.get("nome_fantasia", "")
-            uf_seed  = uf_seed or dados.get("uf", "")
-            cidade_seed = cidade_seed or dados.get("municipio", "")
-            cnae_seed = cnae_seed or dados.get("cnae_fiscal_descricao", "")
-            abertura_seed = abertura_seed or dados.get("data_inicio_atividade", "")
+            uf_seed       = dados.get("uf", "")                    or uf_seed
+            cidade_seed   = dados.get("municipio", "")             or cidade_seed
+            cnae_seed     = dados.get("cnae_fiscal_descricao", "") or cnae_seed
+            abertura_seed = dados.get("data_inicio_atividade", "") or abertura_seed
             email_api = dados.get("email", "")
             # Telefone da BrasilAPI como fallback
             ddd = dados.get("ddd_telefone_1", "")
@@ -505,7 +505,7 @@ async def _processar_lento(session, seed_data, db, forcar=False):
 
             nome       = dados.get("razao_social", "")
             fantasia   = seed_data.get("nome_fantasia", "") or dados.get("nome_fantasia", "")
-            cidade     = seed_data.get("municipio", "") or dados.get("municipio", "")
+            cidade     = dados.get("municipio", "") or seed_data.get("municipio", "")
             socios     = dados.get("qsa", [])
             socio      = socios[0].get("nome_socio", "") if socios else ""
             ddd        = dados.get("ddd_telefone_1", "")
@@ -527,9 +527,9 @@ async def _processar_lento(session, seed_data, db, forcar=False):
             email_rf = registro.get("email", "")
         else:
             porte    = dados.get("porte", "")
-            cnae_str = seed_data.get("cnae", "") or dados.get("cnae_fiscal_descricao", "")
-            abertura = seed_data.get("abertura", "") or dados.get("data_inicio_atividade", "")
-            uf       = seed_data.get("uf", "") or dados.get("uf", "")
+            cnae_str = dados.get("cnae_fiscal_descricao", "") or seed_data.get("cnae", "")
+            abertura = dados.get("data_inicio_atividade", "") or seed_data.get("abertura", "")
+            uf       = dados.get("uf", "") or seed_data.get("uf", "")
             email_rf = seed_data.get("email", "") or dados.get("email", "")
 
         perfil = {
