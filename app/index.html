@@ -212,7 +212,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           <table>
             <thead><tr>
               <th>Empresa / Setor</th><th>CNPJ</th><th>Porte</th><th>Cidade / UF</th>
-              <th>Abertura</th><th>Sócio</th><th>Telefone</th><th>Contatos</th><th></th>
+              <th>Abertura</th><th>Sócio</th><th>Telefone</th><th>E-mail</th><th></th>
             </tr></thead>
             <tbody id="tbody"></tbody>
           </table>
@@ -356,7 +356,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           <table>
             <thead><tr>
               <th>Empresa / Setor</th><th>CNPJ</th><th>Porte</th><th>Cidade / UF</th>
-              <th>Abertura</th><th>Sócio</th><th>Telefone</th><th>Contatos</th><th></th>
+              <th>Abertura</th><th>Sócio</th><th>Telefone</th><th>E-mail</th><th></th>
             </tr></thead>
             <tbody id="adv-tbody"></tbody>
           </table>
@@ -586,18 +586,11 @@ function _celTelefone(e) {
   if (e.telefone) return '<span style="color:var(--accent2)">' + e.telefone + '</span>';
   return '<span style="color:var(--muted)">—</span>';
 }
-function _celContatos(e) {
+function _celEmail(e) {
   const isFree = planoInfo.plano === "free";
   if (isFree) return '<span style="color:var(--muted);font-size:11px">🔒 ver+</span>';
-  let tags = "";
-  if (e.telefone) {
-    tags += '<span class="tag tag-tel" title="' + e.telefone + '">📞 ' + e.telefone + '</span>';
-  }
-  if (e.site) {
-    const dominio = e.site.replace(/https?:\/\/(www\.)?/, "").split("/")[0];
-    tags += '<span class="tag tag-site" title="' + e.site + '">🌐 ' + dominio + '</span>';
-  }
-  return tags || '<span style="color:var(--muted);font-size:11px">—</span>';
+  if (e.email) return '<span class="tag tag-email" title="' + e.email + '">✉️ ' + e.email + '</span>';
+  return '<span style="color:var(--muted)">—</span>';
 }
 
 function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, onPage) {
@@ -615,7 +608,7 @@ function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, 
         <td style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">${e.abertura||"—"}</td>
         <td style="font-size:12px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.socio_principal||"—"}</td>
         <td class="mono" style="font-size:11px">${_celTelefone(e)}</td>
-        <td>${_celContatos(e)}</td>
+        <td>${_celEmail(e)}</td>
         <td><button class="btn-ver" onclick="abrirModal(${i},'${tbodyId}')">ver +</button></td>
       </tr>`).join("");
   }
@@ -720,14 +713,14 @@ async function abrirModal(i, tbodyId) {
       <div class="modal-field"><div class="lbl">Sócio principal</div><div class="val">${e.socio_principal||"—"}</div></div>
       <div class="modal-field"><div class="lbl">Cidade / UF</div><div class="val">${e.municipio||"—"} — ${e.uf||"—"}</div></div>
       <div class="modal-field"><div class="lbl">Telefone</div><div class="val" style="color:var(--accent2)">${e.telefone||"Não encontrado"}</div></div>
+      <div class="modal-field"><div class="lbl">E-mail</div><div class="val" style="font-size:12px;color:#7bbef0">${e.email||"—"}</div></div>
       <div class="modal-field"><div class="lbl">Site</div><div class="val" style="font-size:12px">${e.site||"—"}</div></div>
-      <!-- E-mail e Instagram desativados temporariamente -->
       <div class="modal-field" style="grid-column:span 2"><div class="lbl">Setor / CNAE</div><div class="val" style="font-size:13px">${e.cnae||"—"}</div></div>
     </div>
     <div class="modal-actions">
       ${e.telefone ? `<button class="modal-btn" onclick="window.open('https://wa.me/55${(e.telefone||"").replace(/\D/g,"")}','_blank')">💬 WhatsApp</button>` : ""}
+      ${e.email ? `<button class="modal-btn" onclick="window.open('mailto:${e.email}','_blank')">✉️ E-mail</button>` : ""}
       ${e.site ? `<button class="modal-btn" onclick="window.open('https://${(e.site||"").replace(/https?:\/\//,"")}','_blank')">🌐 Site</button>` : ""}
-      <!-- Botões e-mail e Instagram desativados temporariamente -->
     </div>`;
 }
 function fecharModal() { document.getElementById("modal").className = "modal-bg"; }
