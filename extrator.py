@@ -1,13 +1,16 @@
 """
 Extrator de CNPJs da base oficial da Receita Federal.
-Lê o arquivo de Estabelecimentos (.csv descompactado) e gera o cnpjs_seed.txt
-filtrado por estado, porte e situação cadastral.
+Lê o arquivo de Estabelecimentos e — opcionalmente — Empresas e Socios,
+e gera o cnpjs_seed.txt filtrado por estado, porte e situação cadastral.
 
 Como usar:
-1. Baixe UM arquivo de: https://arquivos.receitafederal.gov.br/index.php/s/YggdBLfdninEJX9
-   Exemplo: Estabelecimentos0.zip
-2. Extraia o .zip — vai gerar um arquivo sem extensão ou .csv
-3. Rode: python extrator.py --arquivo Estabelecimentos0 --uf MG
+1. Baixe os arquivos de: https://arquivos.receitafederal.gov.br/index.php/s/YggdBLfdninEJX9
+   - Estabelecimentos0.zip  (obrigatório)
+   - Empresas0.zip          (opcional — preenche razao_social e porte no seed)
+   - Socios0.zip            (opcional — preenche socio_principal no seed)
+2. Rode (sem BrasilAPI em tempo de scraping):
+   python extrator.py --arquivo Estabelecimentos0.zip \\
+       --empresas Empresas0.zip --socios Socios0.zip --uf MG
 """
 
 import csv
@@ -50,6 +53,40 @@ COLUNAS = [
     "situacao_especial",  # 28
     "data_situacao_esp",  # 29
 ]
+
+# ─── Colunas do arquivo de Empresas da Receita Federal ────────────
+COLUNAS_EMPRESAS = [
+    "cnpj_basico",                # 0
+    "razao_social",               # 1
+    "natureza_juridica",          # 2
+    "qualificacao_responsavel",   # 3
+    "capital_social",             # 4
+    "porte",                      # 5 — 01=ME, 03=EPP, 05=Demais
+    "ente_federativo_responsavel",# 6
+]
+
+# ─── Colunas do arquivo de Socios da Receita Federal ──────────────
+COLUNAS_SOCIOS = [
+    "cnpj_basico",                # 0
+    "identificador_socio",        # 1 — 1=PJ, 2=PF, 3=estrangeiro
+    "nome_socio",                 # 2
+    "cnpj_cpf_socio",             # 3
+    "qualificacao_socio",         # 4
+    "data_entrada",               # 5
+    "pais",                       # 6
+    "representante_legal",        # 7
+    "nome_representante",         # 8
+    "qualificacao_representante", # 9
+    "faixa_etaria",               # 10
+]
+
+# Mapeia código de porte (Receita) → texto compatível com BrasilAPI
+PORTE_MAP = {
+    "01": "MICRO EMPRESA",
+    "03": "EMPRESA DE PEQUENO PORTE",
+    "05": "DEMAIS",
+}
+
 
 # CNAEs de alto valor comercial (adapte como quiser)
 CNAES_INTERESSE = {
@@ -108,6 +145,78 @@ def _formatar_telefone(ddd: str, numero: str) -> str:
     return ""
 
 
+def carregar_empresas(arquivo):
+    """
+    Lê Empresas*.zip (ou CSV extraído) e retorna:
+        dict[cnpj_basico] = (razao_social, porte_texto)
+
+    Usa ~400MB de RAM para o país inteiro (~50M empresas).
+    """
+    if arquivo.endswith(".zip"):
+        arquivo = extrair_zip(arquivo)
+        if not arquivo:
+            print("Erro: não encontrou arquivo dentro do zip de Empresas.")
+            return {}
+
+    if not os.path.exists(arquivo):
+        print(f"Arquivo de Empresas não encontrado: {arquivo}")
+        return {}
+
+    tamanho_mb = os.path.getsize(arquivo) / 1024 / 1024
+    print(f"Carregando Empresas: {arquivo} ({tamanho_mb:.0f} MB)...")
+
+    resultado = {}
+    with open(arquivo, encoding="latin-1", errors="ignore") as f:
+        reader = csv.reader(f, delimiter=";", quotechar='"')
+        for linha in reader:
+            if len(linha) < 6:
+                continue
+            cnpj_basico = linha[0].strip().zfill(8)
+            razao = linha[1].strip()
+            porte_cod = linha[5].strip()
+            porte_txt = PORTE_MAP.get(porte_cod, "")
+            resultado[cnpj_basico] = (razao, porte_txt)
+
+    print(f"  {len(resultado):,} empresas indexadas por cnpj_basico")
+    return resultado
+
+
+def carregar_socios(arquivo):
+    """
+    Lê Socios*.zip (ou CSV extraído) e retorna:
+        dict[cnpj_basico] = nome_socio_principal
+
+    Mantém o primeiro sócio encontrado por cnpj_basico (setdefault).
+    Usa ~200MB de RAM para o país inteiro.
+    """
+    if arquivo.endswith(".zip"):
+        arquivo = extrair_zip(arquivo)
+        if not arquivo:
+            print("Erro: não encontrou arquivo dentro do zip de Socios.")
+            return {}
+
+    if not os.path.exists(arquivo):
+        print(f"Arquivo de Socios não encontrado: {arquivo}")
+        return {}
+
+    tamanho_mb = os.path.getsize(arquivo) / 1024 / 1024
+    print(f"Carregando Socios: {arquivo} ({tamanho_mb:.0f} MB)...")
+
+    resultado = {}
+    with open(arquivo, encoding="latin-1", errors="ignore") as f:
+        reader = csv.reader(f, delimiter=";", quotechar='"')
+        for linha in reader:
+            if len(linha) < 3:
+                continue
+            cnpj_basico = linha[0].strip().zfill(8)
+            nome = linha[2].strip()
+            if nome:
+                resultado.setdefault(cnpj_basico, nome)
+
+    print(f"  {len(resultado):,} cnpj_basico com sócio identificado")
+    return resultado
+
+
 def extrair_cnpjs(
     arquivo,
     ufs=None,
@@ -116,6 +225,8 @@ def extrair_cnpjs(
     apenas_matriz=False,
     limite=None,
     saida="cnpjs_seed.txt",
+    empresas_dict=None,
+    socios_dict=None,
 ):
     """
     Lê o arquivo de Estabelecimentos e filtra os CNPJs.
@@ -225,9 +336,26 @@ def extrair_cnpjs(
                 telefone2 = _formatar_telefone(ddd2, num2)
                 email     = linha[27].strip().lower()
 
-            # TSV: cnpj\tnome_fantasia\tuf\tmunicipio\tcnae\tabertura\ttelefone1\ttelefone2\temail
+            # Lookup em empresas_dict/socios_dict via cnpj_basico (primeiros 8 dígitos)
+            cnpj_basico_padded = cnpj_base.zfill(8)
+            razao_social = ""
+            porte_txt    = ""
+            socio_princ  = ""
+            if empresas_dict:
+                rp = empresas_dict.get(cnpj_basico_padded)
+                if rp:
+                    razao_social, porte_txt = rp
+            if socios_dict:
+                socio_princ = socios_dict.get(cnpj_basico_padded, "")
+
+            # Sanitiza valores para não quebrar TSV (tab/newline nos dados brutos)
+            def _clean(s):
+                return s.replace("\t", " ").replace("\n", " ").replace("\r", " ")
+
+            # TSV: cnpj\tnome_fantasia\tuf\tmunicipio\tcnae\tabertura\ttelefone1\ttelefone2\temail\trazao_social\tporte\tsocio_principal
             campos = [cnpj, nome_fantasia, uf, municipio, cnae, data_inicio,
-                      telefone1, telefone2, email]
+                      telefone1, telefone2, email,
+                      _clean(razao_social), porte_txt, _clean(socio_princ)]
             f_out.write("\t".join(campos) + "\n")
 
             encontrados += 1
@@ -283,11 +411,22 @@ if __name__ == "__main__":
         "--saida", default="cnpjs_seed.txt",
         help="Nome do arquivo de saída (padrão: cnpjs_seed.txt)"
     )
+    parser.add_argument(
+        "--empresas", default="",
+        help="Arquivo Empresas*.zip (ou CSV extraído) para enriquecer razao_social e porte"
+    )
+    parser.add_argument(
+        "--socios", default="",
+        help="Arquivo Socios*.zip (ou CSV extraído) para enriquecer sócio principal"
+    )
 
     args = parser.parse_args()
 
     ufs_filtro   = [u.strip().upper() for u in args.uf.split(",") if u.strip()] or None
     cnaes_filtro = None if args.todos_cnaes else CNAES_INTERESSE
+
+    empresas_dict = carregar_empresas(args.empresas) if args.empresas else None
+    socios_dict   = carregar_socios(args.socios) if args.socios else None
 
     extrair_cnpjs(
         arquivo=args.arquivo,
@@ -297,4 +436,6 @@ if __name__ == "__main__":
         apenas_matriz=args.so_matriz,
         limite=args.limite,
         saida=args.saida,
+        empresas_dict=empresas_dict,
+        socios_dict=socios_dict,
     )

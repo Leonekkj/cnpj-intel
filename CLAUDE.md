@@ -140,7 +140,9 @@ Script assíncrono que processa CNPJs em paralelo (asyncio + aiohttp).
 
 ### Pipeline por empresa
 ```
-1. BrasilAPI (só modo seed)  — dados cadastrais: nome, sócio, UF, telefone da Receita
+1. Seed expandido (12 cols)   — razao_social/porte/sócio vêm do extrator (Empresas+Socios)
+   → pula BrasilAPI quando seed completo (caso >95%). BrasilAPI é FALLBACK só
+     para seeds antigos de 9 colunas, via semáforo de 3 (dentro do rate limit real).
 2. Google Places API          — telefone formatado + site + rating (requer GOOGLE_API_KEY)
 3. DuckDuckGo (fallback)      — busca site quando Google Places indisponível
 4. Scraping do site           — homepage + /contato + /fale-conosco em paralelo
@@ -157,9 +159,11 @@ Sem telefone → salvo no banco (para não reprocessar) mas invisível ao client
 | Re-enrich | `REENRICH_SEM_CONTATO=1` | Re-processa registros já no banco sem email/instagram/site |
 
 ### Concorrência adaptativa
-- 15 workers com Google Places, 5 sem, 3 no re-enrich sem Google
-- DuckDuckGo: semáforo global de 3 conexões simultâneas + backoff exponencial
-- Timeout por CNPJ: 30s; progresso salvo a cada sub-lote
+- Via rápida: 15 workers (3 em re-enrich)
+- Via lenta: 30 workers com `GOOGLE_API_KEY`, 15 sem, 3 em re-enrich
+- DuckDuckGo: semáforo global de 8 conexões simultâneas + backoff exponencial
+- BrasilAPI: semáforo global de 3 (fallback raro, dentro do rate limit real da API)
+- Timeout por CNPJ: 30s; progresso salvo a cada ciclo, pré-filtro batch de CNPJs já processados
 
 ### Coalesce no upsert (`database.py:salvar_empresa`)
 Campos de contato só são sobrescritos se o novo valor não for vazio — preserva dados existentes quando o scraping não encontra resultado numa segunda passagem.
@@ -178,17 +182,29 @@ Campos de contato só são sobrescritos se o novo valor não for vazio — prese
 
 Ferramenta CLI offline para gerar `cnpjs_seed.txt` a partir dos arquivos brutos da Receita Federal.
 
-Fonte: `https://arquivos.receitafederal.gov.br/index.php/s/YggdBLfdninEJX9`  
-Formato: `Estabelecimentos0.zip` … `Estabelecimentos9.zip` (CSV com `;`, encoding latin-1, sem cabeçalho).
+Fonte: `https://arquivos.receitafederal.gov.br/index.php/s/YggdBLfdninEJX9`
+
+Três grupos de arquivos:
+- `Estabelecimentos0.zip` … `9.zip` — **obrigatório**. Dados cadastrais + contatos.
+- `Empresas0.zip` … `9.zip` — **opcional mas recomendado**. Adiciona `razao_social` e `porte`.
+- `Socios0.zip` … `9.zip` — **opcional mas recomendado**. Adiciona `socio_principal`.
+
+Todos: CSV com `;`, encoding latin-1, sem cabeçalho.
 
 ```bash
+# Modo antigo (9 colunas — agente cai no fallback da BrasilAPI):
 python extrator.py --arquivo Estabelecimentos0.zip --uf SP,MG --limite 100000
-python extrator.py --arquivo Estabelecimentos0.zip --uf SP --todos-cnaes --so-matriz
+
+# Modo recomendado (12 colunas — agente NÃO chama BrasilAPI, ~10× mais rápido):
+python extrator.py --arquivo Estabelecimentos0.zip \
+    --empresas Empresas0.zip --socios Socios0.zip \
+    --uf SP --limite 100000
 ```
 
-CNPJ montado de 3 campos: `cnpj_basico` (8 dígitos) + `cnpj_ordem` (4) + `cnpj_dv` (2).  
-Situação `02` = ativa (único valor importado por padrão).  
-CNAEs pré-filtrados para alto valor comercial definidos em `extrator.py:55` (`CNAES_INTERESSE`).
+CNPJ montado de 3 campos: `cnpj_basico` (8 dígitos) + `cnpj_ordem` (4) + `cnpj_dv` (2).
+Situação `02` = ativa (único valor importado por padrão).
+CNAEs pré-filtrados para alto valor comercial definidos em `extrator.py` (`CNAES_INTERESSE`).
+Empresas/Socios são carregados em memória por `cnpj_basico` (~400MB+200MB RAM para país inteiro).
 
 ## Deploy (Railway)
 

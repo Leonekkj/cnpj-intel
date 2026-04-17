@@ -34,7 +34,8 @@ REENRICH_SEM_CONTATO = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1
 # Via rápida (seed com telefone): só BrasilAPI → alta concorrência
 # Via lenta (sem telefone): DDG + scraping → concorrência baixa para evitar rate limit
 CONCORRENCIA_RAPIDA = 3 if REENRICH_SEM_CONTATO else 15
-CONCORRENCIA_LENTA  = 3 if REENRICH_SEM_CONTATO else 15
+# Via lenta é I/O-bound (DDG + scraping). Sobe com GOOGLE_API_KEY (sem depender de DDG para site).
+CONCORRENCIA_LENTA  = 3 if REENRICH_SEM_CONTATO else (30 if GOOGLE_API_KEY else 15)
 
 LOTE         = 3000 if REENRICH_SEM_CONTATO else 5000
 PAUSA_CICLO  = 0.5
@@ -73,6 +74,7 @@ PAGINAS_CONTATO = ["/contato", "/contact"]
 # ─── BrasilAPI ────────────────────────────────────────────────────────────────
 
 async def buscar_brasilapi(session, cnpj, tentativas=3):
+    global _BRASIL_429_COUNT
     url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
     sem = _BRASIL_SEM if _BRASIL_SEM is not None else asyncio.Semaphore(4)
     for tentativa in range(tentativas):
@@ -88,8 +90,9 @@ async def buscar_brasilapi(session, cnpj, tentativas=3):
             pass
         # sleep FORA do semáforo — não trava os demais workers durante a espera
         if rate_limited:
+            _BRASIL_429_COUNT += 1
             espera = (2 ** tentativa) + random.uniform(0, 1)
-            log.warning(f"BrasilAPI rate limit — aguardando {espera:.1f}s (tentativa {tentativa+1}/{tentativas})...")
+            log.debug(f"BrasilAPI rate limit — aguardando {espera:.1f}s (tentativa {tentativa+1}/{tentativas})...")
             await asyncio.sleep(espera)
         else:
             break  # erro de rede ou outro — não retenta
@@ -195,9 +198,14 @@ def _extrair_instagram_do_html(html: str) -> str:
 # Inicializado em rodar_agente() dentro do event loop correto.
 _DDG_SEM: asyncio.Semaphore | None = None
 
-# Semáforo global de BrasilAPI — com 15 workers simultâneos, a API retorna 429.
-# Limita a 4 requisições paralelas para evitar rate limit.
+# Semáforo global de BrasilAPI — via rápida agora quase não chama (seed expandido
+# traz razao_social/porte/socio). Fica baixo (3) para os fallbacks esporádicos
+# e para a via lenta, que continua usando BrasilAPI.
 _BRASIL_SEM: asyncio.Semaphore | None = None
+
+# Contador agregado de 429s da BrasilAPI — logado como resumo por ciclo
+# em vez de uma linha por tentativa.
+_BRASIL_429_COUNT: int = 0
 
 
 async def buscar_duckduckgo(session, query: str, tentativas: int = 1) -> str:
@@ -420,34 +428,44 @@ async def _processar_rapido(session, seed_data, db):
         cnae_seed  = seed_data.get("cnae", "")
         abertura_seed = seed_data.get("abertura", "")
 
-        # BrasilAPI para dados complementares (razao_social, porte, socios)
-        dados = await buscar_brasilapi(session, cnpj)
+        # Dados complementares: seed expandido (12 colunas) elimina BrasilAPI na via rápida.
+        # Se faltar razao_social/porte no seed (seed antigo de 9 colunas), cai no fallback.
+        razao_seed = seed_data.get("razao_social", "")
+        porte_seed = seed_data.get("porte", "")
+        socio_seed = seed_data.get("socio_principal", "")
 
-        if dados:
-            if dados.get("descricao_situacao_cadastral", "").upper() != "ATIVA":
-                return None
-            nome   = dados.get("razao_social", "")
-            porte  = dados.get("porte", "")
-            socios = dados.get("qsa", [])
-            socio  = socios[0].get("nome_socio", "") if socios else ""
-            # BrasilAPI tem prioridade — seus dados são legíveis (vs. códigos brutos do seed)
-            fantasia = fantasia or dados.get("nome_fantasia", "")
-            uf_seed       = dados.get("uf", "")                    or uf_seed
-            cidade_seed   = dados.get("municipio", "")             or cidade_seed
-            cnae_seed     = dados.get("cnae_fiscal_descricao", "") or cnae_seed
-            abertura_seed = dados.get("data_inicio_atividade", "") or abertura_seed
-            email_api = dados.get("email", "")
-            # Telefone da BrasilAPI como fallback
-            ddd = dados.get("ddd_telefone_1", "")
-            num = dados.get("telefone_1", "")
-            tel_api = f"({ddd}) {num}" if ddd and num else ""
-        else:
-            # BrasilAPI falhou — usa só dados do seed
-            nome  = fantasia
-            porte = ""
-            socio = ""
+        if razao_seed and porte_seed:
+            # Caminho principal (≥95% dos CNPJs): zero chamadas à BrasilAPI
+            nome   = razao_seed
+            porte  = porte_seed
+            socio  = socio_seed
             email_api = ""
             tel_api = ""
+        else:
+            # Fallback: seed antigo sem as colunas de Empresas/Socios
+            dados = await buscar_brasilapi(session, cnpj)
+            if dados:
+                if dados.get("descricao_situacao_cadastral", "").upper() != "ATIVA":
+                    return None
+                nome   = dados.get("razao_social", "")
+                porte  = dados.get("porte", "")
+                socios = dados.get("qsa", [])
+                socio  = socios[0].get("nome_socio", "") if socios else ""
+                fantasia = fantasia or dados.get("nome_fantasia", "")
+                uf_seed       = dados.get("uf", "")                    or uf_seed
+                cidade_seed   = dados.get("municipio", "")             or cidade_seed
+                cnae_seed     = dados.get("cnae_fiscal_descricao", "") or cnae_seed
+                abertura_seed = dados.get("data_inicio_atividade", "") or abertura_seed
+                email_api = dados.get("email", "")
+                ddd = dados.get("ddd_telefone_1", "")
+                num = dados.get("telefone_1", "")
+                tel_api = f"({ddd}) {num}" if ddd and num else ""
+            else:
+                nome  = fantasia
+                porte = ""
+                socio = ""
+                email_api = ""
+                tel_api = ""
 
         perfil = {
             "cnpj":            cnpj,
@@ -597,7 +615,9 @@ async def enriquecer_lento(session, seed_data, db, forcar=False):
 async def rodar_agente():
     global _DDG_SEM, _BRASIL_SEM
     _DDG_SEM = asyncio.Semaphore(8)       # max 8 conexões simultâneas ao DuckDuckGo
-    _BRASIL_SEM = asyncio.Semaphore(6)    # max 6 conexões simultâneas à BrasilAPI (evita 429)
+    # BrasilAPI agora é fallback raro (seed expandido via extrator --empresas/--socios).
+    # 3 é suficiente e fica dentro do rate limit real da API (~3 req/s).
+    _BRASIL_SEM = asyncio.Semaphore(3)
 
     db = Database()
     db.criar_tabelas()
@@ -644,7 +664,7 @@ async def rodar_seed(db):
         async with sem_lento:
             return await enriquecer_lento(session, seed_data, db)
 
-    connector = aiohttp.TCPConnector(limit=200, limit_per_host=30, ttl_dns_cache=300)
+    connector = aiohttp.TCPConnector(limit=200, limit_per_host=50, ttl_dns_cache=300)
     async with aiohttp.ClientSession(connector=connector) as session:
         while True:
             try:
@@ -659,29 +679,34 @@ async def rodar_seed(db):
                     await asyncio.sleep(60)
                     continue
 
+                # Pré-filtro do lote inteiro: uma query batch elimina CNPJs já processados,
+                # evitando despachar workers inúteis.
+                cnpjs_lote = [re.sub(r"\D", "", r["cnpj"]) for r in lote]
+                recentes_lote = await asyncio.to_thread(db.filtrar_cnpjs_recentes, cnpjs_lote)
+                lote_filtrado = [r for r in lote if re.sub(r"\D", "", r["cnpj"]) not in recentes_lote]
+                pulados_lote = len(lote) - len(lote_filtrado)
+
                 # Separa CNPJs em via rápida (tem telefone) e via lenta (sem telefone)
-                rapidos = [r for r in lote if r.get("telefone")]
-                lentos  = [r for r in lote if not r.get("telefone")]
+                rapidos = [r for r in lote_filtrado if r.get("telefone")]
+                lentos  = [r for r in lote_filtrado if not r.get("telefone")]
 
                 log.info(
                     f"Ciclo: {inicio:,} → {fim:,} de {total:,} ({100*inicio//total}%) | "
-                    f"rápidos={len(rapidos)} lentos={len(lentos)}"
+                    f"rápidos={len(rapidos)} lentos={len(lentos)} (pulados={pulados_lote:,})"
                 )
                 salvos_tel = 0
                 salvos_total = 0
                 t_inicio_ciclo = time.monotonic()
 
+                global _BRASIL_429_COUNT
+                _BRASIL_429_COUNT = 0
+
                 # Processa via rápida em sub-lotes
                 n_sub_rapidos = (len(rapidos) + SUB_LOTE_RAPIDO - 1) // SUB_LOTE_RAPIDO
                 for sub_inicio in range(0, len(rapidos), SUB_LOTE_RAPIDO):
                     sub = rapidos[sub_inicio:sub_inicio + SUB_LOTE_RAPIDO]
-                    # Pre-filter: elimina CNPJs já processados com 1 query batch
-                    cnpjs_sub = [re.sub(r"\D", "", r["cnpj"]) for r in sub]
-                    recentes = await asyncio.to_thread(db.filtrar_cnpjs_recentes, cnpjs_sub)
-                    sub = [r for r in sub if re.sub(r"\D", "", r["cnpj"]) not in recentes]
                     sub_n = sub_inicio // SUB_LOTE_RAPIDO + 1
-                    pulados = len(cnpjs_sub) - len(sub)
-                    log.info(f"  Sub-lote rápido {sub_n}/{n_sub_rapidos}: {len(sub)} CNPJs ({pulados} pulados)...")
+                    log.info(f"  Sub-lote rápido {sub_n}/{n_sub_rapidos}: {len(sub)} CNPJs...")
                     if not sub:
                         continue
                     try:
@@ -701,13 +726,8 @@ async def rodar_seed(db):
                 n_sub_lentos = (len(lentos) + SUB_LOTE_LENTO - 1) // SUB_LOTE_LENTO
                 for sub_inicio in range(0, len(lentos), SUB_LOTE_LENTO):
                     sub = lentos[sub_inicio:sub_inicio + SUB_LOTE_LENTO]
-                    # Pre-filter: elimina CNPJs já processados com 1 query batch
-                    cnpjs_sub = [re.sub(r"\D", "", r["cnpj"]) for r in sub]
-                    recentes = await asyncio.to_thread(db.filtrar_cnpjs_recentes, cnpjs_sub)
-                    sub = [r for r in sub if re.sub(r"\D", "", r["cnpj"]) not in recentes]
                     sub_n = sub_inicio // SUB_LOTE_LENTO + 1
-                    pulados = len(cnpjs_sub) - len(sub)
-                    log.info(f"  Sub-lote lento {sub_n}/{n_sub_lentos}: {len(sub)} CNPJs ({pulados} pulados)...")
+                    log.info(f"  Sub-lote lento {sub_n}/{n_sub_lentos}: {len(sub)} CNPJs...")
                     if not sub:
                         continue
                     try:
@@ -732,6 +752,8 @@ async def rodar_seed(db):
                     f"Ciclo completo. {salvos_total} salvos ({salvos_tel} com tel = {pct_tel:.0f}%). "
                     f"Posição: {offset:,}/{total:,} | Throughput: {throughput:,.0f} CNPJs/hora"
                 )
+                if _BRASIL_429_COUNT > 0:
+                    log.info(f"BrasilAPI: {_BRASIL_429_COUNT} rate limits neste ciclo")
                 await asyncio.sleep(PAUSA_CICLO)
 
             except Exception as e:
@@ -797,9 +819,10 @@ async def rodar_reenrich(db):
 
 def carregar_cnpjs_seed():
     """
-    Carrega o seed file. Suporta dois formatos:
-    - Formato antigo: um CNPJ por linha
-    - Formato TSV: cnpj\\tnome_fantasia\\tuf\\tmunicipio\\tcnae\\tabertura\\ttelefone1\\ttelefone2\\temail
+    Carrega o seed file. Suporta três formatos (detecção por número de colunas):
+    - 1 coluna:  apenas CNPJ
+    - 9 colunas: cnpj, nome_fantasia, uf, municipio, cnae, abertura, telefone1, telefone2, email
+    - 12 colunas: + razao_social, porte, socio_principal  (extrator com --empresas/--socios)
     Retorna lista de dicts com os campos disponíveis.
     """
     locais = [
@@ -812,6 +835,7 @@ def carregar_cnpjs_seed():
             continue
         registros = []
         com_tel = 0
+        com_razao = 0
         opener = gzip.open if caminho.endswith(".gz") else open
         with opener(caminho, "rt", encoding="utf-8", errors="ignore") as f:
             for linha in f:
@@ -830,15 +854,25 @@ def carregar_cnpjs_seed():
                         "abertura": partes[5],
                         "telefone": tel,
                         "email": partes[8],
+                        "razao_social":    partes[9]  if len(partes) >= 10 else "",
+                        "porte":           partes[10] if len(partes) >= 11 else "",
+                        "socio_principal": partes[11] if len(partes) >= 12 else "",
                     }
                     if tel:
                         com_tel += 1
+                    if reg["razao_social"]:
+                        com_razao += 1
                 else:
                     reg = {"cnpj": partes[0]}
                 registros.append(reg)
         total = len(registros)
-        pct = (com_tel / total * 100) if total else 0
-        log.info(f"Carregados {total:,} CNPJs de '{caminho}' | {com_tel:,} com telefone ({pct:.0f}%)")
+        pct_tel = (com_tel / total * 100) if total else 0
+        pct_razao = (com_razao / total * 100) if total else 0
+        log.info(
+            f"Carregados {total:,} CNPJs de '{caminho}' | "
+            f"{com_tel:,} com telefone ({pct_tel:.0f}%) | "
+            f"{com_razao:,} com razao_social ({pct_razao:.0f}%)"
+        )
         return registros
     log.warning("cnpjs_seed.txt não encontrado!")
     return []
