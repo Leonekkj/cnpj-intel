@@ -22,7 +22,13 @@ if USE_POSTGRES:
     from psycopg2 import pool as _pg_pool
     from contextlib import contextmanager
     print("Conectando ao PostgreSQL com pool...")
-    _POOL = _pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=DATABASE_URL)
+    _POOL = _pg_pool.ThreadedConnectionPool(
+        minconn=2, maxconn=20, dsn=DATABASE_URL,
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=3,
+    )
 
     @contextmanager
     def _conn():
@@ -555,6 +561,31 @@ class Database:
             ttl = dias if has_phone else 3
             limite = (datetime.utcnow() - timedelta(days=ttl)).isoformat()
             return row[0] > limite
+
+    def filtrar_cnpjs_recentes(self, cnpjs: list, dias: int = 30) -> set:
+        """
+        Retorna o SET de CNPJs que já foram processados recentemente e devem ser pulados.
+        Usa uma única query IN(...) em vez de N queries individuais.
+        TTL adaptativo: com telefone → `dias` dias, sem telefone → 3 dias.
+        """
+        if not cnpjs:
+            return set()
+        limite_com_tel = (datetime.utcnow() - timedelta(days=dias)).isoformat()
+        limite_sem_tel = (datetime.utcnow() - timedelta(days=3)).isoformat()
+        placeholders = ",".join([PH] * len(cnpjs))
+        sql = f"SELECT cnpj, atualizado_em, telefone FROM empresas WHERE cnpj IN ({placeholders})"
+        recentes = set()
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(sql, tuple(cnpjs))
+            for row in cur.fetchall():
+                cnpj_db, atualizado, tel = row[0], row[1], row[2]
+                if not atualizado:
+                    continue
+                limite = limite_com_tel if telefone_valido(tel) else limite_sem_tel
+                if atualizado > limite:
+                    recentes.add(cnpj_db)
+        return recentes
 
     def buscar_empresas(self, q="", uf="", porte="", cnae="", categoria="",
                         abertura_de="", abertura_ate="",

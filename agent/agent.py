@@ -34,7 +34,7 @@ REENRICH_SEM_CONTATO = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1
 # Via rápida (seed com telefone): só BrasilAPI → alta concorrência
 # Via lenta (sem telefone): DDG + scraping → concorrência baixa para evitar rate limit
 CONCORRENCIA_RAPIDA = 3 if REENRICH_SEM_CONTATO else 15
-CONCORRENCIA_LENTA  = 3 if REENRICH_SEM_CONTATO else 8
+CONCORRENCIA_LENTA  = 3 if REENRICH_SEM_CONTATO else 15
 
 LOTE         = 3000 if REENRICH_SEM_CONTATO else 5000
 PAUSA_CICLO  = 0.5
@@ -408,7 +408,7 @@ async def _processar_rapido(session, seed_data, db):
     """
     cnpj = re.sub(r"\D", "", seed_data["cnpj"])
     try:
-        if db.cnpj_existe_recente(cnpj, dias=30):
+        if await asyncio.to_thread(db.cnpj_existe_recente, cnpj, 30):
             return None
 
         # Dados do seed (Receita Federal via extrator.py)
@@ -489,7 +489,7 @@ async def _processar_lento(session, seed_data, db, forcar=False):
     cnpj = re.sub(r"\D", "", seed_data["cnpj"])
     try:
         if forcar:
-            registro = db.buscar_empresa_por_cnpj(cnpj)
+            registro = await asyncio.to_thread(db.buscar_empresa_por_cnpj, cnpj)
             if not registro:
                 return None
             nome       = registro.get("razao_social", "")
@@ -499,7 +499,7 @@ async def _processar_lento(session, seed_data, db, forcar=False):
             tel_receita = registro.get("telefone", "")
             nome_busca = fantasia or nome
         else:
-            if db.cnpj_existe_recente(cnpj, dias=30):
+            if await asyncio.to_thread(db.cnpj_existe_recente, cnpj, 30):
                 return None
 
             dados = await buscar_brasilapi(session, cnpj)
@@ -596,8 +596,8 @@ async def enriquecer_lento(session, seed_data, db, forcar=False):
 
 async def rodar_agente():
     global _DDG_SEM, _BRASIL_SEM
-    _DDG_SEM = asyncio.Semaphore(5)       # max 5 conexões simultâneas ao DuckDuckGo
-    _BRASIL_SEM = asyncio.Semaphore(4)    # max 4 conexões simultâneas à BrasilAPI (evita 429)
+    _DDG_SEM = asyncio.Semaphore(8)       # max 8 conexões simultâneas ao DuckDuckGo
+    _BRASIL_SEM = asyncio.Semaphore(6)    # max 6 conexões simultâneas à BrasilAPI (evita 429)
 
     db = Database()
     db.criar_tabelas()
@@ -633,7 +633,8 @@ async def rodar_seed(db):
 
     sem_rapido = asyncio.Semaphore(CONCORRENCIA_RAPIDA)
     sem_lento  = asyncio.Semaphore(CONCORRENCIA_LENTA)
-    SUB_LOTE   = 500  # batch size para saves e progresso
+    SUB_LOTE_RAPIDO = 500
+    SUB_LOTE_LENTO  = 200  # menor para suavizar WAL writes no PG
 
     async def worker_rapido(session, seed_data, db):
         async with sem_rapido:
@@ -671,11 +672,18 @@ async def rodar_seed(db):
                 t_inicio_ciclo = time.monotonic()
 
                 # Processa via rápida em sub-lotes
-                n_sub_rapidos = (len(rapidos) + SUB_LOTE - 1) // SUB_LOTE
-                for sub_inicio in range(0, len(rapidos), SUB_LOTE):
-                    sub = rapidos[sub_inicio:sub_inicio + SUB_LOTE]
-                    sub_n = sub_inicio // SUB_LOTE + 1
-                    log.info(f"  Sub-lote rápido {sub_n}/{n_sub_rapidos}: {len(sub)} CNPJs...")
+                n_sub_rapidos = (len(rapidos) + SUB_LOTE_RAPIDO - 1) // SUB_LOTE_RAPIDO
+                for sub_inicio in range(0, len(rapidos), SUB_LOTE_RAPIDO):
+                    sub = rapidos[sub_inicio:sub_inicio + SUB_LOTE_RAPIDO]
+                    # Pre-filter: elimina CNPJs já processados com 1 query batch
+                    cnpjs_sub = [re.sub(r"\D", "", r["cnpj"]) for r in sub]
+                    recentes = await asyncio.to_thread(db.filtrar_cnpjs_recentes, cnpjs_sub)
+                    sub = [r for r in sub if re.sub(r"\D", "", r["cnpj"]) not in recentes]
+                    sub_n = sub_inicio // SUB_LOTE_RAPIDO + 1
+                    pulados = len(cnpjs_sub) - len(sub)
+                    log.info(f"  Sub-lote rápido {sub_n}/{n_sub_rapidos}: {len(sub)} CNPJs ({pulados} pulados)...")
+                    if not sub:
+                        continue
                     try:
                         resultados = await asyncio.gather(
                             *[worker_rapido(session, r, db) for r in sub],
@@ -689,12 +697,19 @@ async def rodar_seed(db):
                     except Exception as e:
                         log.debug(f"Erro sub-lote rápido: {e}")
 
-                # Processa via lenta em sub-lotes
-                n_sub_lentos = (len(lentos) + SUB_LOTE - 1) // SUB_LOTE
-                for sub_inicio in range(0, len(lentos), SUB_LOTE):
-                    sub = lentos[sub_inicio:sub_inicio + SUB_LOTE]
-                    sub_n = sub_inicio // SUB_LOTE + 1
-                    log.info(f"  Sub-lote lento {sub_n}/{n_sub_lentos}: {len(sub)} CNPJs...")
+                # Processa via lenta em sub-lotes (menores para suavizar WAL writes)
+                n_sub_lentos = (len(lentos) + SUB_LOTE_LENTO - 1) // SUB_LOTE_LENTO
+                for sub_inicio in range(0, len(lentos), SUB_LOTE_LENTO):
+                    sub = lentos[sub_inicio:sub_inicio + SUB_LOTE_LENTO]
+                    # Pre-filter: elimina CNPJs já processados com 1 query batch
+                    cnpjs_sub = [re.sub(r"\D", "", r["cnpj"]) for r in sub]
+                    recentes = await asyncio.to_thread(db.filtrar_cnpjs_recentes, cnpjs_sub)
+                    sub = [r for r in sub if re.sub(r"\D", "", r["cnpj"]) not in recentes]
+                    sub_n = sub_inicio // SUB_LOTE_LENTO + 1
+                    pulados = len(cnpjs_sub) - len(sub)
+                    log.info(f"  Sub-lote lento {sub_n}/{n_sub_lentos}: {len(sub)} CNPJs ({pulados} pulados)...")
+                    if not sub:
+                        continue
                     try:
                         resultados = await asyncio.gather(
                             *[worker_lento(session, r, db) for r in sub],
