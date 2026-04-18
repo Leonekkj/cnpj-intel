@@ -614,7 +614,7 @@ async def enriquecer_lento(session, seed_data, db, forcar=False):
 
 async def rodar_agente():
     global _DDG_SEM, _BRASIL_SEM
-    _DDG_SEM = asyncio.Semaphore(8)       # max 8 conexões simultâneas ao DuckDuckGo
+    _DDG_SEM = asyncio.Semaphore(min(CONCORRENCIA_LENTA, 10))  # alinhado com workers lenta
     # BrasilAPI agora é fallback raro (seed expandido via extrator --empresas/--socios).
     # 3 é suficiente e fica dentro do rate limit real da API (~3 req/s).
     _BRASIL_SEM = asyncio.Semaphore(3)
@@ -639,7 +639,19 @@ async def rodar_seed(db):
     """Loop padrão: processa CNPJs do cnpjs_seed.txt com pipeline dual."""
     import time
     registros = carregar_cnpjs_seed()
+    while not registros:
+        log.error("Seed vazio ou não encontrado. Aguardando 300s antes de nova tentativa.")
+        await asyncio.sleep(300)
+        registros = carregar_cnpjs_seed()
+
     total = len(registros)
+    rapidos_seed_total = sum(1 for r in registros if r.get("telefone"))
+    log.info(
+        f"Seed pronto: {total:,} CNPJs | via rápida estimada={rapidos_seed_total:,} "
+        f"({100*rapidos_seed_total//total if total else 0}%) | via lenta estimada={total-rapidos_seed_total:,}"
+    )
+    if rapidos_seed_total == 0:
+        log.warning("Nenhum CNPJ com telefone no seed. Todos irão via lenta (BrasilAPI+DDG) — progresso será lento.")
 
     offset = db.carregar_progresso()
     if offset > 0 and offset < total:
@@ -686,9 +698,15 @@ async def rodar_seed(db):
                 lote_filtrado = [r for r in lote if re.sub(r"\D", "", r["cnpj"]) not in recentes_lote]
                 pulados_lote = len(lote) - len(lote_filtrado)
 
-                # Separa CNPJs em via rápida (tem telefone) e via lenta (sem telefone)
-                rapidos = [r for r in lote_filtrado if r.get("telefone")]
-                lentos  = [r for r in lote_filtrado if not r.get("telefone")]
+                # Separa CNPJs em via rápida (tem telefone) e via lenta (sem telefone).
+                # Seed 1-coluna: todos têm só "cnpj" → força via rápida (BrasilAPI busca tel).
+                if lote_filtrado and all(len(r) == 1 for r in lote_filtrado):
+                    log.info("Seed formato 1-coluna: roteando lote inteiro para via rápida (BrasilAPI)")
+                    rapidos = lote_filtrado
+                    lentos  = []
+                else:
+                    rapidos = [r for r in lote_filtrado if r.get("telefone")]
+                    lentos  = [r for r in lote_filtrado if not r.get("telefone")]
 
                 log.info(
                     f"Ciclo: {inicio:,} → {fim:,} de {total:,} ({100*inicio//total}%) | "
@@ -720,7 +738,7 @@ async def rodar_seed(db):
                             salvos_total += len(perfis)
                             salvos_tel += sum(1 for p in perfis if telefone_valido(p.get("telefone", "")))
                     except Exception as e:
-                        log.debug(f"Erro sub-lote rápido: {e}")
+                        log.warning(f"Erro sub-lote rápido: {e}")
 
                 # Processa via lenta em sub-lotes (menores para suavizar WAL writes)
                 n_sub_lentos = (len(lentos) + SUB_LOTE_LENTO - 1) // SUB_LOTE_LENTO
@@ -741,7 +759,7 @@ async def rodar_seed(db):
                             salvos_total += len(perfis)
                             salvos_tel += sum(1 for p in perfis if telefone_valido(p.get("telefone", "")))
                     except Exception as e:
-                        log.debug(f"Erro sub-lote lento: {e}")
+                        log.warning(f"Erro sub-lote lento: {e}")
 
                 offset = fim
                 await asyncio.to_thread(db.salvar_progresso, offset)
