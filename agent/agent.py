@@ -638,20 +638,25 @@ async def rodar_agente():
 async def rodar_seed(db):
     """Loop padrão: processa CNPJs do cnpjs_seed.txt com pipeline dual."""
     import time
-    registros = carregar_cnpjs_seed()
-    while not registros:
+    meta = carregar_cnpjs_seed()
+    while not meta.get("total"):
         log.error("Seed vazio ou não encontrado. Aguardando 300s antes de nova tentativa.")
         await asyncio.sleep(300)
-        registros = carregar_cnpjs_seed()
+        meta = carregar_cnpjs_seed()
 
-    total = len(registros)
-    rapidos_seed_total = sum(1 for r in registros if r.get("telefone"))
+    total              = meta["total"]
+    caminho            = meta["caminho"]
+    com_tel_amostra    = meta.get("com_tel", 0)
+    com_razao_amostra  = meta.get("com_razao", 0)
+    amostra            = meta.get("amostra", 0)
+    pct_tel_amostra    = (com_tel_amostra / amostra * 100) if amostra else 0
     log.info(
-        f"Seed pronto: {total:,} CNPJs | via rápida estimada={rapidos_seed_total:,} "
-        f"({100*rapidos_seed_total//total if total else 0}%) | via lenta estimada={total-rapidos_seed_total:,}"
+        f"Seed pronto: {total:,} CNPJs de '{caminho}' | amostra={amostra:,}: "
+        f"{com_tel_amostra:,} com telefone ({pct_tel_amostra:.0f}%), "
+        f"{com_razao_amostra:,} com razao_social"
     )
-    if rapidos_seed_total == 0:
-        log.warning("Nenhum CNPJ com telefone no seed. Todos irão via lenta (BrasilAPI+DDG) — progresso será lento.")
+    if amostra and com_tel_amostra == 0:
+        log.warning("Nenhum CNPJ com telefone na amostra. Todos provavelmente irão via lenta (BrasilAPI+DDG) — progresso será lento.")
 
     offset = db.carregar_progresso()
     if offset > 0 and offset < total:
@@ -682,7 +687,8 @@ async def rodar_seed(db):
             try:
                 inicio = offset
                 fim    = min(offset + LOTE, total)
-                lote   = registros[inicio:fim]
+                # Streaming: lê apenas o lote atual do arquivo — O(LOTE) de memória.
+                lote   = await asyncio.to_thread(_ler_lote_seed, caminho, inicio, LOTE)
 
                 if not lote:
                     log.info("Todos processados! Reiniciando em 60s...")
@@ -835,65 +841,156 @@ async def rodar_reenrich(db):
                 await asyncio.sleep(30)
 
 
-def carregar_cnpjs_seed():
+# ─── Seed I/O (streaming) ────────────────────────────────────────────────────
+# Antes carregávamos o seed inteiro em memória (~1.3GB para 1.3M CNPJs).
+# Agora:
+#   - carregar_cnpjs_seed() → retorna APENAS metadados (total, caminho, amostra)
+#   - _ler_lote_seed(caminho, offset, batch_size) → lê um lote sob demanda
+# Memória pico por ciclo: ~LOTE × ~1KB ≈ 5MB.
+
+_SEED_LOCAIS = [
+    "cnpjs_seed.txt.gz", "cnpjs_seed.txt",
+    "../cnpjs_seed.txt.gz", "../cnpjs_seed.txt",
+    "/app/cnpjs_seed.txt.gz", "/app/cnpjs_seed.txt",
+]
+
+
+def _encontrar_seed() -> str:
+    """Retorna o primeiro caminho existente do seed, ou '' se não encontrar."""
+    for caminho in _SEED_LOCAIS:
+        if os.path.exists(caminho):
+            return caminho
+    return ""
+
+
+def _abrir_seed(caminho: str):
+    """Abre o seed (.gz ou texto) em modo texto com encoding tolerante."""
+    opener = gzip.open if caminho.endswith(".gz") else open
+    return opener(caminho, "rt", encoding="utf-8", errors="ignore")
+
+
+def _parse_linha_seed(linha: str) -> dict | None:
     """
-    Carrega o seed file. Suporta três formatos (detecção por número de colunas):
+    Converte uma linha do seed em dict.
+    Suporta três formatos por contagem de colunas:
     - 1 coluna:  apenas CNPJ
-    - 9 colunas: cnpj, nome_fantasia, uf, municipio, cnae, abertura, telefone1, telefone2, email
-    - 12 colunas: + razao_social, porte, socio_principal  (extrator com --empresas/--socios)
-    Retorna lista de dicts com os campos disponíveis.
+    - 9 colunas: cnpj, nome_fantasia, uf, municipio, cnae, abertura, tel1, tel2, email
+    - 12 colunas: + razao_social, porte, socio_principal
+    Retorna None se a linha for vazia.
     """
-    locais = [
-        "cnpjs_seed.txt.gz", "cnpjs_seed.txt",
-        "../cnpjs_seed.txt.gz", "../cnpjs_seed.txt",
-        "/app/cnpjs_seed.txt.gz", "/app/cnpjs_seed.txt",
-    ]
-    for caminho in locais:
-        if not os.path.exists(caminho):
-            continue
-        registros = []
-        com_tel = 0
-        com_razao = 0
-        opener = gzip.open if caminho.endswith(".gz") else open
-        with opener(caminho, "rt", encoding="utf-8", errors="ignore") as f:
+    linha = linha.strip()
+    if not linha:
+        return None
+    partes = linha.split("\t")
+    if len(partes) >= 9:
+        tel = partes[6] or partes[7]
+        return {
+            "cnpj":            partes[0],
+            "nome_fantasia":   partes[1],
+            "uf":              partes[2],
+            "municipio":       partes[3],
+            "cnae":            partes[4],
+            "abertura":        partes[5],
+            "telefone":        tel,
+            "email":           partes[8],
+            "razao_social":    partes[9]  if len(partes) >= 10 else "",
+            "porte":           partes[10] if len(partes) >= 11 else "",
+            "socio_principal": partes[11] if len(partes) >= 12 else "",
+        }
+    return {"cnpj": partes[0]}
+
+
+def _contar_linhas_seed() -> tuple[int, str]:
+    """
+    Conta linhas não-vazias do seed sem carregá-lo em memória.
+    Retorna (total_linhas, caminho) ou (0, '') se não encontrar.
+    """
+    caminho = _encontrar_seed()
+    if not caminho:
+        return 0, ""
+    total = 0
+    with _abrir_seed(caminho) as f:
+        for linha in f:
+            if linha.strip():
+                total += 1
+    return total, caminho
+
+
+def _ler_lote_seed(caminho: str, offset: int, batch_size: int) -> list[dict]:
+    """
+    Lê um lote do seed a partir de `offset` (contado em linhas não-vazias),
+    com no máximo `batch_size` registros. Suporta .gz e .txt.
+    Memória: O(batch_size). Não loga — chamado a cada ciclo.
+    """
+    if not caminho or batch_size <= 0:
+        return []
+    lote: list[dict] = []
+    visto = 0  # linhas não-vazias já vistas
+    try:
+        with _abrir_seed(caminho) as f:
             for linha in f:
-                linha = linha.strip()
-                if not linha:
+                if not linha.strip():
                     continue
-                partes = linha.split("\t")
-                if len(partes) >= 9:
-                    tel = partes[6] or partes[7]
-                    reg = {
-                        "cnpj": partes[0],
-                        "nome_fantasia": partes[1],
-                        "uf": partes[2],
-                        "municipio": partes[3],
-                        "cnae": partes[4],
-                        "abertura": partes[5],
-                        "telefone": tel,
-                        "email": partes[8],
-                        "razao_social":    partes[9]  if len(partes) >= 10 else "",
-                        "porte":           partes[10] if len(partes) >= 11 else "",
-                        "socio_principal": partes[11] if len(partes) >= 12 else "",
-                    }
-                    if tel:
-                        com_tel += 1
-                    if reg["razao_social"]:
-                        com_razao += 1
-                else:
-                    reg = {"cnpj": partes[0]}
-                registros.append(reg)
-        total = len(registros)
-        pct_tel = (com_tel / total * 100) if total else 0
-        pct_razao = (com_razao / total * 100) if total else 0
-        log.info(
-            f"Carregados {total:,} CNPJs de '{caminho}' | "
-            f"{com_tel:,} com telefone ({pct_tel:.0f}%) | "
-            f"{com_razao:,} com razao_social ({pct_razao:.0f}%)"
-        )
-        return registros
-    log.warning("cnpjs_seed.txt não encontrado!")
-    return []
+                if visto < offset:
+                    visto += 1
+                    continue
+                reg = _parse_linha_seed(linha)
+                if reg is not None:
+                    lote.append(reg)
+                visto += 1
+                if len(lote) >= batch_size:
+                    break
+    except (OSError, EOFError) as e:
+        log.warning(f"Erro lendo seed '{caminho}' em offset={offset}: {e}")
+    return lote
+
+
+def carregar_cnpjs_seed() -> dict:
+    """
+    Retorna metadados do seed (sem carregar registros em memória).
+
+    Suporta três formatos (detecção por número de colunas):
+    - 1 coluna:   apenas CNPJ
+    - 9 colunas:  cnpj, nome_fantasia, uf, municipio, cnae, abertura, tel1, tel2, email
+    - 12 colunas: + razao_social, porte, socio_principal  (extrator com --empresas/--socios)
+
+    Retorno:
+        {
+            "total":     int,   # total de linhas não-vazias
+            "caminho":   str,   # caminho do arquivo encontrado
+            "com_tel":   int,   # CNPJs com telefone na amostra inicial
+            "com_razao": int,   # CNPJs com razao_social na amostra inicial
+            "amostra":   int,   # tamanho da amostra lida
+        }
+    Em caso de seed ausente, retorna dict com total=0.
+    """
+    total, caminho = _contar_linhas_seed()
+    if not caminho:
+        log.warning("cnpjs_seed.txt não encontrado!")
+        return {"total": 0, "caminho": "", "com_tel": 0, "com_razao": 0, "amostra": 0}
+
+    # Amostra de até 5.000 registros no início do arquivo — o suficiente para
+    # estimar % com telefone / razao_social sem carregar o seed inteiro.
+    AMOSTRA_MAX = 5000
+    amostra_regs = _ler_lote_seed(caminho, 0, AMOSTRA_MAX)
+    amostra = len(amostra_regs)
+    com_tel   = sum(1 for r in amostra_regs if r.get("telefone"))
+    com_razao = sum(1 for r in amostra_regs if r.get("razao_social"))
+
+    pct_tel   = (com_tel   / amostra * 100) if amostra else 0
+    pct_razao = (com_razao / amostra * 100) if amostra else 0
+    log.info(
+        f"Seed '{caminho}': {total:,} CNPJs total | amostra={amostra:,}: "
+        f"{com_tel:,} com telefone ({pct_tel:.0f}%), "
+        f"{com_razao:,} com razao_social ({pct_razao:.0f}%)"
+    )
+    return {
+        "total":     total,
+        "caminho":   caminho,
+        "com_tel":   com_tel,
+        "com_razao": com_razao,
+        "amostra":   amostra,
+    }
 
 
 if __name__ == "__main__":
