@@ -19,34 +19,46 @@ USE_POSTGRES = DATABASE_URL.startswith("postgresql") or DATABASE_URL.startswith(
 
 if USE_POSTGRES:
     import psycopg2
+    import threading
     from psycopg2 import pool as _pg_pool
     from contextlib import contextmanager
-    print("Conectando ao PostgreSQL com pool...")
-    _POOL = _pg_pool.ThreadedConnectionPool(
-        minconn=2, maxconn=20, dsn=DATABASE_URL,
-        keepalives=1,
-        keepalives_idle=30,
-        keepalives_interval=10,
-        keepalives_count=3,
-    )
+
+    _POOL = None
+    _POOL_LOCK = threading.Lock()
+
+    def _get_pool():
+        global _POOL
+        if _POOL is None:
+            with _POOL_LOCK:
+                if _POOL is None:
+                    print("Conectando ao PostgreSQL com pool...")
+                    _POOL = _pg_pool.ThreadedConnectionPool(
+                        minconn=2, maxconn=20, dsn=DATABASE_URL,
+                        keepalives=1,
+                        keepalives_idle=30,
+                        keepalives_interval=10,
+                        keepalives_count=3,
+                    )
+        return _POOL
 
     @contextmanager
     def _conn():
-        c = _POOL.getconn()
+        pool = _get_pool()
+        c = pool.getconn()
         try:
             # Testa se a conexão ainda está viva; reconecta se necessário
             try:
                 c.cursor().execute("SELECT 1")
             except Exception:
                 try:
-                    _POOL.putconn(c, close=True)
+                    pool.putconn(c, close=True)
                 except Exception:
                     pass
                 c = psycopg2.connect(DATABASE_URL)
             yield c
         finally:
             try:
-                _POOL.putconn(c)
+                pool.putconn(c)
             except Exception:
                 try:
                     c.close()
