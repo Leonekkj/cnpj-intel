@@ -18,6 +18,7 @@ print(f"DATABASE_URL detectado: {DATABASE_URL[:40] if DATABASE_URL else 'VAZIO -
 USE_POSTGRES = DATABASE_URL.startswith("postgresql") or DATABASE_URL.startswith("postgres")
 
 if USE_POSTGRES:
+    import time
     import psycopg2
     import threading
     from psycopg2 import pool as _pg_pool
@@ -32,13 +33,22 @@ if USE_POSTGRES:
             with _POOL_LOCK:
                 if _POOL is None:
                     print("Conectando ao PostgreSQL com pool...")
-                    _POOL = _pg_pool.ThreadedConnectionPool(
-                        minconn=2, maxconn=20, dsn=DATABASE_URL,
-                        keepalives=1,
-                        keepalives_idle=30,
-                        keepalives_interval=10,
-                        keepalives_count=3,
-                    )
+                    for attempt in range(5):
+                        try:
+                            _POOL = _pg_pool.ThreadedConnectionPool(
+                                minconn=1, maxconn=20, dsn=DATABASE_URL,
+                                keepalives=1,
+                                keepalives_idle=30,
+                                keepalives_interval=10,
+                                keepalives_count=3,
+                            )
+                            break
+                        except psycopg2.OperationalError as e:
+                            if attempt == 4:
+                                raise
+                            wait = 2 ** attempt
+                            print(f"PostgreSQL indisponível (tentativa {attempt+1}/5), retry em {wait}s: {e}")
+                            time.sleep(wait)
         return _POOL
 
     @contextmanager

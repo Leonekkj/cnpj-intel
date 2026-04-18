@@ -8,6 +8,15 @@ B2B SaaS brasileiro para busca e enriquecimento de dados de empresas via CNPJ.
 Permite pesquisar empresas por filtros (UF, porte, CNAE, data de abertura) e
 exportar listas com contatos (telefone, e-mail, Instagram, site).
 
+## Rate Limiting & Async Patterns
+- When adding delays/sleeps in concurrent code, ALWAYS place them INSIDE the semaphore block to prevent thundering herd effects
+- For external APIs with rate limits (BrasilAPI, etc.), use exponential backoff and verify with actual logs before declaring fixes complete
+
+## Before Refactoring
+- Do not refactor multiple concerns in one pass; make one change, verify it works with logs/tests, then proceed
+- When user reports logs/errors, ASK them to paste the actual log output rather than inferring from recent commits
+- If a fix doesn't work on the second attempt, propose reverting to last working commit rather than layering more changes
+
 ## Stack
 
 | Camada | Tecnologia |
@@ -18,6 +27,12 @@ exportar listas com contatos (telefone, e-mail, Instagram, site).
 | Frontend | HTML/CSS/JS vanilla em `app/index.html` |
 | Agente de scraping | asyncio + aiohttp + DuckDuckGo (`agent/agent.py`) |
 | Deploy | Railway (Nixpacks) |
+
+## Project Stack
+- Primary language: Python (async-heavy with asyncio)
+- Use `asyncio.to_thread` for wrapping blocking I/O in async contexts
+- Database: avoid N+1 queries; batch pre-filter before loops
+- Use Ruflo agents when available for specialized subtasks
 
 ## Comandos de Desenvolvimento
 
