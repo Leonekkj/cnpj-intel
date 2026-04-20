@@ -1,0 +1,7 @@
+{
+  "updated_at": "2026-04-20T22:07:54.386377+00:00",
+  "thresholds": {
+    "null_spike": 0.1,
+    "visual_diff": 0.05
+  }
+}

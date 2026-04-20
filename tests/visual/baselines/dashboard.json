@@ -1,0 +1,174 @@
+{
+  "stats": {
+    "total": 3659,
+    "com_telefone": 3143,
+    "com_email": 2200,
+    "com_instagram": 0,
+    "com_site": 1,
+    "por_uf": [
+      {
+        "uf": "SP",
+        "n": 952
+      },
+      {
+        "uf": "RS",
+        "n": 653
+      },
+      {
+        "uf": "MG",
+        "n": 330
+      },
+      {
+        "uf": "PR",
+        "n": 270
+      },
+      {
+        "uf": "RJ",
+        "n": 230
+      },
+      {
+        "uf": "SC",
+        "n": 184
+      },
+      {
+        "uf": "BA",
+        "n": 150
+      },
+      {
+        "uf": "GO",
+        "n": 137
+      },
+      {
+        "uf": "CE",
+        "n": 96
+      },
+      {
+        "uf": "PE",
+        "n": 80
+      }
+    ],
+    "por_porte": [
+      {
+        "porte": "MICRO EMPRESA",
+        "n": 1663
+      },
+      {
+        "porte": "DEMAIS",
+        "n": 969
+      },
+      {
+        "porte": "",
+        "n": 601
+      },
+      {
+        "porte": "EMPRESA DE PEQUENO PORTE",
+        "n": 426
+      }
+    ],
+    "progresso_agente": 0
+  },
+  "cnaes": [
+    "9430800",
+    "Condomínios prediais",
+    "Atividades de associações de defesa de direitos sociais",
+    "8112500",
+    "4781400",
+    "4530703",
+    "4712100",
+    "4930202",
+    "9491000",
+    "Comércio varejista de artigos do vestuário e acessórios",
+    "4120400",
+    "4731800",
+    "Comércio varejista de mercadorias em geral, com predominância de produtos alimentícios - minimercados, mercearias e armazéns",
+    "6920601",
+    "5611201",
+    "4789099",
+    "7020400",
+    "7112000",
+    "Comércio a varejo de peças e acessórios novos para veículos automotores",
+    "Atividades de organizações religiosas ou filosóficas",
+    "4619200",
+    "5611203",
+    "8630503",
+    "4751201",
+    "4744099",
+    "4744005",
+    "8299799",
+    "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional",
+    "4754701",
+    "4771701",
+    "8211300",
+    "Lanchonetes, casas de chá, de sucos e similares",
+    "4520001",
+    "3101200",
+    "6911701",
+    "6622300",
+    "Construção de edifícios",
+    "4110700",
+    "6810202",
+    "4782201",
+    "Atividades de contabilidade",
+    "Aluguel de imóveis próprios",
+    "1412601",
+    "8299706",
+    "4744001",
+    "6810201",
+    "4721102",
+    "8513900",
+    "7911200",
+    "4723700",
+    "Atividade médica ambulatorial restrita a consultas",
+    "4618499",
+    "Confecção de peças de vestuário, exceto roupas íntimas e as confeccionadas sob medida",
+    "4761003",
+    "Comércio varejista de produtos farmacêuticos, sem manipulação de fórmulas",
+    "4711302",
+    "Comércio varejista de outros produtos não especificados anteriormente",
+    "4753900",
+    "6209100",
+    "4774100",
+    "Comércio varejista especializado de equipamentos e suprimentos de informática",
+    "9420100",
+    "4772500",
+    "4729699",
+    "6462000",
+    "Incorporação de empreendimentos imobiliários",
+    "Atividades de consultoria em gestão empresarial, exceto consultoria técnica específica",
+    "4930201",
+    "4755502",
+    "Comércio varejista de cosméticos, produtos de perfumaria e de higiene pessoal",
+    "4771704",
+    "8512100",
+    "4530701",
+    "4789004",
+    "Comércio varejista de ferragens e ferramentas",
+    "Clubes sociais, esportivos e similares",
+    "Comércio varejista especializado de eletrodomésticos e equipamentos de áudio e vídeo",
+    "Restaurantes e similares",
+    "Serviços combinados de escritório e apoio administrativo",
+    "9312300",
+    "8599601",
+    "8219999",
+    "Serviços de manutenção e reparação mecânica de veículos automotores",
+    "Comércio varejista de móveis",
+    "6204000",
+    "Serviços advocatícios",
+    "4722901",
+    "6201501",
+    "8650004",
+    "Ensino fundamental",
+    "9521500",
+    "Atividades de organizações sindicais",
+    "4742300",
+    "4759899",
+    "Representantes comerciais e agentes do comércio de mercadorias em geral não especializado",
+    "Comércio varejista de materiais de construção não especificados anteriormente",
+    "Casas lotéricas",
+    "Corretores e agentes de seguros, de planos de previdência complementar e de saúde",
+    "4741500",
+    "9511800"
+  ],
+  "cnaes_count": 100,
+  "fill_rates": {}
+}
