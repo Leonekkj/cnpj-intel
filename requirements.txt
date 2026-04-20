@@ -3,3 +3,7 @@ uvicorn
 aiohttp
 python-multipart
 psycopg2-binary
+requests
+pillow>=10.0.0
+anthropic>=0.25.0
+playwright>=1.44.0
