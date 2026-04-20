@@ -15,7 +15,8 @@ THRESHOLDS = {
 def save_data_baseline(snapshot: dict) -> None:
     BASELINES_DIR.mkdir(parents=True, exist_ok=True)
     (BASELINES_DIR / "dashboard.json").write_text(
-        json.dumps(snapshot, indent=2, ensure_ascii=False)
+        json.dumps(snapshot, indent=2, ensure_ascii=False),
+        encoding="utf-8",
     )
     _update_meta()
 
@@ -24,7 +25,7 @@ def load_data_baseline() -> dict | None:
     p = BASELINES_DIR / "dashboard.json"
     if not p.exists():
         return None
-    return json.loads(p.read_text())
+    return json.loads(p.read_text(encoding="utf-8"))
 
 
 def save_screenshot_baseline(src_path: str, name: str) -> None:
@@ -43,7 +44,7 @@ def _update_meta() -> None:
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "thresholds": THRESHOLDS,
     }
-    META_FILE.write_text(json.dumps(meta, indent=2))
+    META_FILE.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
 def baselines_exist() -> bool:

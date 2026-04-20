@@ -1,60 +1,60 @@
 {
   "stats": {
-    "total": 3659,
-    "com_telefone": 3143,
-    "com_email": 2200,
-    "com_instagram": 0,
-    "com_site": 1,
+    "total": 4367,
+    "com_telefone": 3146,
+    "com_email": 2215,
+    "com_instagram": 1,
+    "com_site": 2,
     "por_uf": [
       {
         "uf": "SP",
-        "n": 952
+        "n": 1056
       },
       {
         "uf": "RS",
-        "n": 653
+        "n": 836
       },
       {
         "uf": "MG",
-        "n": 330
+        "n": 368
       },
       {
         "uf": "PR",
-        "n": 270
+        "n": 325
       },
       {
         "uf": "RJ",
-        "n": 230
+        "n": 303
       },
       {
         "uf": "SC",
-        "n": 184
+        "n": 220
       },
       {
         "uf": "BA",
-        "n": 150
+        "n": 189
       },
       {
         "uf": "GO",
-        "n": 137
+        "n": 170
       },
       {
         "uf": "CE",
-        "n": 96
+        "n": 122
       },
       {
         "uf": "PE",
-        "n": 80
+        "n": 95
       }
     ],
     "por_porte": [
       {
         "porte": "MICRO EMPRESA",
-        "n": 1663
+        "n": 2034
       },
       {
         "porte": "DEMAIS",
-        "n": 969
+        "n": 1273
       },
       {
         "porte": "",
@@ -62,112 +62,112 @@
       },
       {
         "porte": "EMPRESA DE PEQUENO PORTE",
-        "n": 426
+        "n": 459
       }
     ],
-    "progresso_agente": 0
+    "progresso_agente": 5000
   },
   "cnaes": [
+    "Condom√≠nios prediais",
+    "Atividades de associa√ß√µes de defesa de direitos sociais",
     "9430800",
-    "CondomÌnios prediais",
-    "Atividades de associaÁıes de defesa de direitos sociais",
     "8112500",
     "4781400",
+    "Com√©rcio varejista de artigos do vestu√°rio e acess√≥rios",
+    "Com√©rcio varejista de mercadorias em geral, com predomin√¢ncia de produtos aliment√≠cios - minimercados, mercearias e armaz√©ns",
     "4530703",
     "4712100",
     "4930202",
     "9491000",
-    "ComÈrcio varejista de artigos do vestu·rio e acessÛrios",
     "4120400",
+    "Atividades de organiza√ß√µes religiosas ou filos√≥ficas",
     "4731800",
-    "ComÈrcio varejista de mercadorias em geral, com predomin‚ncia de produtos alimentÌcios - minimercados, mercearias e armazÈns",
-    "6920601",
-    "5611201",
-    "4789099",
+    "Com√©rcio a varejo de pe√ßas e acess√≥rios novos para ve√≠culos automotores",
     "7020400",
-    "7112000",
-    "ComÈrcio a varejo de peÁas e acessÛrios novos para veÌculos automotores",
-    "Atividades de organizaÁıes religiosas ou filosÛficas",
+    "4789099",
     "4619200",
+    "6920601",
+    "Lanchonetes, casas de ch√°, de sucos e similares",
+    "Transporte rodovi√°rio de carga, exceto produtos perigosos e mudan√ßas, intermunicipal, interestadual e internacional",
+    "5611201",
     "5611203",
-    "8630503",
-    "4751201",
-    "4744099",
-    "4744005",
+    "7112000",
     "8299799",
-    "Transporte rodovi·rio de carga, exceto produtos perigosos e mudanÁas, intermunicipal, interestadual e internacional",
-    "4754701",
-    "4771701",
-    "8211300",
-    "Lanchonetes, casas de ch·, de sucos e similares",
-    "4520001",
-    "3101200",
-    "6911701",
-    "6622300",
-    "ConstruÁ„o de edifÌcios",
+    "4744099",
+    "Constru√ß√£o de edif√≠cios",
+    "4744005",
+    "4751201",
+    "8630503",
     "4110700",
-    "6810202",
-    "4782201",
-    "Atividades de contabilidade",
-    "Aluguel de imÛveis prÛprios",
-    "1412601",
+    "8211300",
+    "Com√©rcio varejista de produtos farmac√™uticos, sem manipula√ß√£o de f√≥rmulas",
+    "4771701",
+    "Com√©rcio varejista de outros produtos n√£o especificados anteriormente",
     "8299706",
-    "4744001",
-    "6810201",
+    "4520001",
+    "Confec√ß√£o de pe√ßas de vestu√°rio, exceto roupas √≠ntimas e as confeccionadas sob medida",
+    "Atividades de contabilidade",
+    "4754701",
+    "3101200",
+    "6810202",
+    "1412601",
+    "6911701",
     "4721102",
+    "4930201",
+    "Atividades de organiza√ß√µes sindicais",
+    "4744001",
+    "6622300",
+    "4782201",
+    "Aluguel de im√≥veis pr√≥prios",
+    "Com√©rcio varejista de materiais de constru√ß√£o n√£o especificados anteriormente",
+    "Restaurantes e similares",
+    "Com√©rcio varejista especializado de equipamentos e suprimentos de inform√°tica",
+    "Atividade m√©dica ambulatorial restrita a consultas",
+    "6810201",
     "8513900",
+    "Com√©rcio varejista de ferragens e ferramentas",
     "7911200",
     "4723700",
-    "Atividade mÈdica ambulatorial restrita a consultas",
-    "4618499",
-    "ConfecÁ„o de peÁas de vestu·rio, exceto roupas Ìntimas e as confeccionadas sob medida",
+    "Representantes comerciais e agentes do com√©rcio de mercadorias em geral n√£o especializado",
     "4761003",
-    "ComÈrcio varejista de produtos farmacÍuticos, sem manipulaÁ„o de fÛrmulas",
-    "4711302",
-    "ComÈrcio varejista de outros produtos n„o especificados anteriormente",
-    "4753900",
-    "6209100",
-    "4774100",
-    "ComÈrcio varejista especializado de equipamentos e suprimentos de inform·tica",
-    "9420100",
-    "4772500",
-    "4729699",
-    "6462000",
-    "IncorporaÁ„o de empreendimentos imobili·rios",
-    "Atividades de consultoria em gest„o empresarial, exceto consultoria tÈcnica especÌfica",
-    "4930201",
-    "4755502",
-    "ComÈrcio varejista de cosmÈticos, produtos de perfumaria e de higiene pessoal",
-    "4771704",
-    "8512100",
-    "4530701",
-    "4789004",
-    "ComÈrcio varejista de ferragens e ferramentas",
-    "Clubes sociais, esportivos e similares",
-    "ComÈrcio varejista especializado de eletrodomÈsticos e equipamentos de ·udio e vÌdeo",
-    "Restaurantes e similares",
-    "ServiÁos combinados de escritÛrio e apoio administrativo",
-    "9312300",
-    "8599601",
-    "8219999",
-    "ServiÁos de manutenÁ„o e reparaÁ„o mec‚nica de veÌculos automotores",
-    "ComÈrcio varejista de mÛveis",
-    "6204000",
-    "ServiÁos advocatÌcios",
-    "4722901",
-    "6201501",
-    "8650004",
     "Ensino fundamental",
+    "Clubes sociais, esportivos e similares",
+    "4753900",
+    "4729699",
+    "Atividades de consultoria em gest√£o empresarial, exceto consultoria t√©cnica espec√≠fica",
+    "Com√©rcio varejista especializado de eletrodom√©sticos e equipamentos de √°udio e v√≠deo",
+    "4618499",
+    "Com√©rcio varejista de m√≥veis",
+    "9420100",
+    "4789004",
+    "4711302",
+    "Servi√ßos de manuten√ß√£o e repara√ß√£o mec√¢nica de ve√≠culos automotores",
+    "6209100",
+    "Padaria e confeitaria com predomin√¢ncia de revenda",
+    "4772500",
+    "Outras atividades de servi√ßos prestados principalmente √†s empresas n√£o especificadas anteriormente",
+    "Com√©rcio varejista de materiais de constru√ß√£o em geral",
+    "6462000",
+    "Incorpora√ß√£o de empreendimentos imobili√°rios",
+    "8512100",
+    "4774100",
+    "Com√©rcio varejista de combust√≠veis para ve√≠culos automotores",
+    "4755502",
+    "5510801",
+    "Com√©rcio varejista de cosm√©ticos, produtos de perfumaria e de higiene pessoal",
+    "Servi√ßos combinados de escrit√≥rio e apoio administrativo",
+    "4722901",
+    "Corretores e agentes de seguros, de planos de previd√™ncia complementar e de sa√∫de",
+    "Suporte t√©cnico, manuten√ß√£o e outros servi√ßos em tecnologia da informa√ß√£o",
     "9521500",
-    "Atividades de organizaÁıes sindicais",
-    "4742300",
-    "4759899",
-    "Representantes comerciais e agentes do comÈrcio de mercadorias em geral n„o especializado",
-    "ComÈrcio varejista de materiais de construÁ„o n„o especificados anteriormente",
-    "Casas lotÈricas",
-    "Corretores e agentes de seguros, de planos de previdÍncia complementar e de sa˙de",
-    "4741500",
-    "9511800"
+    "4771704",
+    "Com√©rcio varejista de artigos de √≥ptica",
+    "Com√©rcio varejista de artigos de papelaria",
+    "Servi√ßos advocat√≠cios",
+    "4530701",
+    "Com√©rcio varejista de carnes - a√ßougues",
+    "8219999",
+    "8599601"
   ],
   "cnaes_count": 100,
   "fill_rates": {}
