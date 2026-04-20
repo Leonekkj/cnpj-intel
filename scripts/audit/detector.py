@@ -26,7 +26,7 @@ def detect_null_spikes(snapshot: dict, baseline: dict) -> list[Anomaly]:
     current = snapshot.get("fill_rates", {})
     reference = baseline.get("fill_rates", {})
     for field, ref_rate in reference.items():
-        curr_rate = current.get(field, ref_rate)
+        curr_rate = current.get(field, 0.0)
         drop = ref_rate - curr_rate
         if drop > threshold:
             anomalies.append(Anomaly(

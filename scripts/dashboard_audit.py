@@ -8,6 +8,7 @@ Uso:
 """
 import sys
 import argparse
+import tempfile
 from pathlib import Path
 
 # Garante que o root do projeto está no path

@@ -7,7 +7,6 @@ import anthropic
 from scripts.audit.detector import Anomaly
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-REPO = os.environ.get("GITHUB_REPOSITORY", "")  # "owner/repo" — injetado pelo Actions
 
 
 def _build_diagnosis_prompt(anomalies: list[Anomaly]) -> str:
