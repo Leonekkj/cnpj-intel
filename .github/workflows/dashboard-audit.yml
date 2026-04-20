@@ -3,13 +3,18 @@ name: Dashboard Audit
 on:
   schedule:
     - cron: '0 2 * * *'   # 02:00 UTC diário
-  workflow_dispatch:        # trigger manual pela UI do GitHub
+  workflow_dispatch:
+    inputs:
+      update_baselines:
+        description: 'Atualizar baselines (true/false)'
+        default: 'false'
 
 jobs:
   audit:
     runs-on: ubuntu-latest
     permissions:
-      issues: write         # necessário para gh issue create
+      issues: write
+      contents: write
 
     steps:
       - name: Checkout
@@ -27,7 +32,24 @@ jobs:
       - name: Install Playwright browser
         run: playwright install --with-deps chromium
 
+      - name: Update baselines
+        if: github.event.inputs.update_baselines == 'true'
+        env:
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: python scripts/dashboard_audit.py --update-baselines
+
+      - name: Commit updated baselines
+        if: github.event.inputs.update_baselines == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tests/visual/baselines/
+          git diff --cached --quiet || git commit -m "chore(audit): atualiza baselines [skip ci]"
+          git push
+
       - name: Run dashboard audit
+        if: github.event.inputs.update_baselines != 'true'
         env:
           DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}

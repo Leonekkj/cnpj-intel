@@ -32,13 +32,18 @@ Responda em português. Seja direto e técnico."""
 
 def diagnose_with_claude(anomalies: list[Anomaly]) -> str:
     """Invoca a Anthropic API para diagnóstico. Retorna análise como string."""
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": _build_diagnosis_prompt(anomalies)}],
-    )
-    return message.content[0].text
+    if not ANTHROPIC_API_KEY:
+        return "_Diagnóstico indisponível: ANTHROPIC_API_KEY não configurada._"
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": _build_diagnosis_prompt(anomalies)}],
+        )
+        return message.content[0].text
+    except Exception as e:
+        return f"_Diagnóstico indisponível: {e}_"
 
 
 def create_github_issue(anomalies: list[Anomaly], diagnosis: str) -> str:
