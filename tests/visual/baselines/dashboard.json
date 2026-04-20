@@ -1,173 +1,173 @@
 {
   "stats": {
-    "total": 4367,
-    "com_telefone": 3146,
-    "com_email": 2215,
-    "com_instagram": 1,
-    "com_site": 2,
+    "total": 7563,
+    "com_telefone": 6242,
+    "com_email": 4370,
+    "com_instagram": 3,
+    "com_site": 4,
     "por_uf": [
       {
         "uf": "SP",
-        "n": 1056
+        "n": 1922
       },
       {
         "uf": "RS",
-        "n": 836
+        "n": 1338
       },
       {
         "uf": "MG",
-        "n": 368
+        "n": 652
       },
       {
         "uf": "PR",
-        "n": 325
+        "n": 590
       },
       {
         "uf": "RJ",
-        "n": 303
+        "n": 509
       },
       {
         "uf": "SC",
-        "n": 220
+        "n": 405
       },
       {
         "uf": "BA",
-        "n": 189
+        "n": 313
       },
       {
         "uf": "GO",
-        "n": 170
+        "n": 283
       },
       {
         "uf": "CE",
-        "n": 122
+        "n": 206
       },
       {
         "uf": "PE",
-        "n": 95
+        "n": 166
       }
     ],
     "por_porte": [
       {
         "porte": "MICRO EMPRESA",
-        "n": 2034
+        "n": 3496
       },
       {
         "porte": "DEMAIS",
-        "n": 1273
+        "n": 2003
       },
       {
         "porte": "",
-        "n": 601
+        "n": 1197
       },
       {
         "porte": "EMPRESA DE PEQUENO PORTE",
-        "n": 459
+        "n": 867
       }
     ],
     "progresso_agente": 5000
   },
   "cnaes": [
+    "9430800",
     "Condomínios prediais",
     "Atividades de associações de defesa de direitos sociais",
-    "9430800",
     "8112500",
     "4781400",
-    "Comércio varejista de artigos do vestuário e acessórios",
-    "Comércio varejista de mercadorias em geral, com predominância de produtos alimentícios - minimercados, mercearias e armazéns",
-    "4530703",
     "4712100",
+    "4530703",
+    "Comércio varejista de artigos do vestuário e acessórios",
+    "4120400",
     "4930202",
     "9491000",
-    "4120400",
-    "Atividades de organizações religiosas ou filosóficas",
+    "Comércio varejista de mercadorias em geral, com predominância de produtos alimentícios - minimercados, mercearias e armazéns",
     "4731800",
-    "Comércio a varejo de peças e acessórios novos para veículos automotores",
-    "7020400",
-    "4789099",
-    "4619200",
     "6920601",
-    "Lanchonetes, casas de chá, de sucos e similares",
-    "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional",
+    "8299799",
+    "4789099",
+    "7020400",
     "5611201",
     "5611203",
+    "Atividades de organizações religiosas ou filosóficas",
     "7112000",
-    "8299799",
     "4744099",
-    "Construção de edifícios",
-    "4744005",
-    "4751201",
-    "8630503",
-    "4110700",
     "8211300",
-    "Comércio varejista de produtos farmacêuticos, sem manipulação de fórmulas",
-    "4771701",
-    "Comércio varejista de outros produtos não especificados anteriormente",
-    "8299706",
+    "Comércio a varejo de peças e acessórios novos para veículos automotores",
+    "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional",
+    "4619200",
+    "Lanchonetes, casas de chá, de sucos e similares",
+    "4744005",
     "4520001",
-    "Confecção de peças de vestuário, exceto roupas íntimas e as confeccionadas sob medida",
-    "Atividades de contabilidade",
+    "4110700",
+    "4751201",
+    "4771701",
+    "Construção de edifícios",
     "4754701",
-    "3101200",
     "6810202",
-    "1412601",
-    "6911701",
-    "4721102",
-    "4930201",
-    "Atividades de organizações sindicais",
-    "4744001",
+    "8630503",
     "6622300",
-    "4782201",
+    "Atividades de contabilidade",
+    "Comércio varejista de outros produtos não especificados anteriormente",
+    "4744001",
+    "3101200",
+    "6911701",
+    "Comércio varejista de produtos farmacêuticos, sem manipulação de fórmulas",
     "Aluguel de imóveis próprios",
-    "Comércio varejista de materiais de construção não especificados anteriormente",
-    "Restaurantes e similares",
-    "Comércio varejista especializado de equipamentos e suprimentos de informática",
-    "Atividade médica ambulatorial restrita a consultas",
+    "1412601",
     "6810201",
-    "8513900",
-    "Comércio varejista de ferragens e ferramentas",
-    "7911200",
-    "4723700",
-    "Representantes comerciais e agentes do comércio de mercadorias em geral não especializado",
+    "4930201",
+    "4721102",
+    "4782201",
     "4761003",
-    "Ensino fundamental",
-    "Clubes sociais, esportivos e similares",
-    "4753900",
-    "4729699",
+    "8513900",
     "Atividades de consultoria em gestão empresarial, exceto consultoria técnica específica",
-    "Comércio varejista especializado de eletrodomésticos e equipamentos de áudio e vídeo",
-    "4618499",
-    "Comércio varejista de móveis",
-    "9420100",
-    "4789004",
-    "4711302",
-    "Serviços de manutenção e reparação mecânica de veículos automotores",
-    "6209100",
-    "Padaria e confeitaria com predominância de revenda",
-    "4772500",
     "Outras atividades de serviços prestados principalmente às empresas não especificadas anteriormente",
-    "Comércio varejista de materiais de construção em geral",
-    "6462000",
-    "Incorporação de empreendimentos imobiliários",
-    "8512100",
     "4774100",
-    "Comércio varejista de combustíveis para veículos automotores",
-    "4755502",
+    "4711302",
+    "7911200",
+    "4729699",
     "5510801",
-    "Comércio varejista de cosméticos, produtos de perfumaria e de higiene pessoal",
-    "Serviços combinados de escritório e apoio administrativo",
-    "4722901",
-    "Corretores e agentes de seguros, de planos de previdência complementar e de saúde",
-    "Suporte técnico, manutenção e outros serviços em tecnologia da informação",
-    "9521500",
-    "4771704",
-    "Comércio varejista de artigos de óptica",
-    "Comércio varejista de artigos de papelaria",
-    "Serviços advocatícios",
-    "4530701",
-    "Comércio varejista de carnes - açougues",
+    "Representantes comerciais e agentes do comércio de mercadorias em geral não especializado",
+    "6462000",
+    "Comércio varejista especializado de equipamentos e suprimentos de informática",
+    "8299706",
+    "Confecção de peças de vestuário, exceto roupas íntimas e as confeccionadas sob medida",
+    "Atividade médica ambulatorial restrita a consultas",
+    "6209100",
+    "9420100",
+    "4723700",
+    "4772500",
+    "Restaurantes e similares",
+    "4753900",
+    "8512100",
+    "Ensino fundamental",
+    "Comércio varejista de materiais de construção não especificados anteriormente",
     "8219999",
-    "8599601"
+    "4789004",
+    "Serviços de manutenção e reparação mecânica de veículos automotores",
+    "Comércio varejista de ferragens e ferramentas",
+    "Atividades de organizações sindicais",
+    "4742300",
+    "Comércio varejista de materiais de construção em geral",
+    "9492800",
+    "4755502",
+    "4784900",
+    "9602501",
+    "8599601",
+    "Incorporação de empreendimentos imobiliários",
+    "8550301",
+    "Serviços combinados de escritório e apoio administrativo",
+    "Comércio varejista de móveis",
+    "Clubes sociais, esportivos e similares",
+    "1091102",
+    "4789001",
+    "4511102",
+    "9511800",
+    "Corretores e agentes de seguros, de planos de previdência complementar e de saúde",
+    "Casas lotéricas",
+    "Comércio varejista de artigos de óptica",
+    "8411600",
+    "Padaria e confeitaria com predominância de revenda",
+    "Serviços advocatícios"
   ],
   "cnaes_count": 100,
   "fill_rates": {}
