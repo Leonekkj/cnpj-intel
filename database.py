@@ -291,15 +291,21 @@ class Database:
                 "limite_atingido": limite is not None and cnpjs_hoje >= limite,
             }
 
-    def consumir_quota(self, token: str, quantidade: int = 1):
-        """Incrementa o contador diário do token."""
+    def consumir_quota_atomico(self, token: str, quantidade: int, limite) -> bool:
+        """Incrementa o contador diário apenas se ainda dentro do limite.
+
+        Retorna True se consumido, False se o limite já foi atingido.
+        A verificação e o incremento ocorrem na mesma operação SQL — sem race condition.
+        """
         with _conn() as conn:
             cur = conn.cursor()
             cur.execute(
-                f"UPDATE tokens SET cnpjs_hoje = cnpjs_hoje + {PH} WHERE token = {PH}",
-                (quantidade, token)
+                f"UPDATE tokens SET cnpjs_hoje = cnpjs_hoje + {PH} "
+                f"WHERE token = {PH} AND ({PH} IS NULL OR cnpjs_hoje + {PH} <= {PH})",
+                (quantidade, token, limite, quantidade, limite),
             )
             conn.commit()
+            return cur.rowcount > 0
 
     def listar_tokens(self) -> list:
         """Lista todos os tokens (painel admin)."""

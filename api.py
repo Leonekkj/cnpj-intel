@@ -62,6 +62,8 @@ for _t in [t.strip() for t in _tokens_legados.split(",") if t.strip()]:
     if _t != ADMIN_TOKEN:
         db.criar_token(_t, "pro")  # tokens antigos viram pro por padrão
 
+_agente_proc: subprocess.Popen | None = None
+
 security = HTTPBearer(auto_error=False)
 
 
@@ -204,10 +206,13 @@ def listar_empresas(
         pagina=pagina, por_pagina=por_pagina,
     )
 
-    # Básico: consome quota com base nas linhas retornadas
+    # Básico: consome quota com base nas linhas retornadas (atômico — sem race)
     retornados = len(resultado.get("dados", []))
     if plano == "basico" and retornados > 0 and not info.get("is_admin"):
-        db.consumir_quota(info["token"], retornados)
+        if not db.consumir_quota_atomico(info["token"], retornados, info["limite_dia"]):
+            raise HTTPException(status_code=429,
+                                detail=f"Limite diário do plano {info['nome_plano']} atingido "
+                                       f"({info['limite_dia']} CNPJs/dia). Renova amanhã ou faça upgrade.")
 
     # Free: oculta contatos na listagem (revelados via ver+)
     if plano == "free":
@@ -252,7 +257,10 @@ def detalhe_empresa(cnpj: str, info: dict = Depends(get_token_info)):
     # Quota: só o plano free consome ao abrir detalhe (ver+)
     # Básico consome no export, Pro é ilimitado
     if not info.get("is_admin") and info["plano"] == "free":
-        db.consumir_quota(info["token"], 1)
+        if not db.consumir_quota_atomico(info["token"], 1, info["limite_dia"]):
+            raise HTTPException(status_code=429,
+                                detail=f"Limite diário do plano {info['nome_plano']} atingido "
+                                       f"({info['limite_dia']} CNPJs/dia). Renova amanhã ou faça upgrade.")
 
     return result
 
@@ -340,8 +348,11 @@ def reset_database(_: str = Depends(require_admin)):
 
 @app.post("/api/admin/agente")
 def iniciar_agente(_: str = Depends(require_admin)):
-    subprocess.Popen([sys.executable, "agent/agent.py"])
-    return {"status": "Agente iniciado"}
+    global _agente_proc
+    if _agente_proc is not None and _agente_proc.poll() is None:
+        return {"status": "Agente já está rodando", "pid": _agente_proc.pid}
+    _agente_proc = subprocess.Popen([sys.executable, "agent/agent.py"])
+    return {"status": "Agente iniciado", "pid": _agente_proc.pid}
 
 
 @app.post("/api/admin/limpar-sites")
