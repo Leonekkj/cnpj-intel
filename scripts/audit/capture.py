@@ -2,6 +2,8 @@ import os
 import json
 import requests
 from dataclasses import dataclass, field
+from pathlib import Path
+from playwright.sync_api import sync_playwright
 
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "").rstrip("/")
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
@@ -62,3 +64,47 @@ def collect_data_snapshot() -> dict:
         "cnaes_count": len(cnaes),
         "fill_rates": fill_rates,
     }
+
+
+def capture_screenshots(output_dir: str) -> dict[str, str]:
+    """
+    Captura screenshots do dashboard e retorna {nome: caminho}.
+    Autentica injetando o token no localStorage (padrão do app/index.html).
+    """
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    paths: dict[str, str] = {}
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+        page = ctx.new_page()
+
+        # Injeta token antes do primeiro request para evitar redirect
+        page.goto(DASHBOARD_URL)
+        page.evaluate(f"localStorage.setItem('cnpj_token', '{ADMIN_TOKEN}')")
+
+        # Dashboard principal
+        page.goto(f"{DASHBOARD_URL}/")
+        page.wait_for_load_state("networkidle", timeout=15000)
+        # Aguarda a tabela de empresas renderizar
+        try:
+            page.wait_for_selector("table tbody tr", timeout=10000)
+        except Exception:
+            pass  # dashboard pode estar vazio em ambiente de teste
+        path = str(Path(output_dir) / "dashboard.png")
+        page.screenshot(path=path)
+        paths["dashboard"] = path
+
+        # Busca avançada (segunda aba)
+        try:
+            page.click("text=Busca Avançada")
+            page.wait_for_load_state("networkidle", timeout=8000)
+            path_adv = str(Path(output_dir) / "advanced_search.png")
+            page.screenshot(path=path_adv)
+            paths["advanced_search"] = path_adv
+        except Exception:
+            pass
+
+        browser.close()
+
+    return paths
