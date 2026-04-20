@@ -1,7 +1,5 @@
 import os
-import json
 import requests
-from dataclasses import dataclass, field
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
