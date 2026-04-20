@@ -8,7 +8,6 @@ Uso:
 """
 import sys
 import argparse
-import tempfile
 from pathlib import Path
 
 # Garante que o root do projeto está no path
@@ -52,9 +51,10 @@ def run_audit() -> int:
     baseline = load_data_baseline()
     snapshot = collect_data_snapshot()
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        screenshots = capture_screenshots(tmpdir)
-        anomalies = detect_all(snapshot, baseline, screenshots)
+    latest_dir = Path("tests/visual/latest")
+    latest_dir.mkdir(parents=True, exist_ok=True)
+    screenshots = capture_screenshots(str(latest_dir))
+    anomalies = detect_all(snapshot, baseline, screenshots)
 
     if not anomalies:
         print("[audit] Nenhuma anomalia detectada. Dashboard OK.")

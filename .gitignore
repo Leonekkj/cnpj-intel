@@ -6,3 +6,4 @@ __pycache__/
 
 cnpjs_seed.txt
 cnpjs_seed.txt.gz
+tests/visual/latest/
