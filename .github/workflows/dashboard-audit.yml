@@ -1,0 +1,45 @@
+name: Dashboard Audit
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC diário
+  workflow_dispatch:        # trigger manual pela UI do GitHub
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write         # necessário para gh issue create
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright browser
+        run: playwright install --with-deps chromium
+
+      - name: Run dashboard audit
+        env:
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python scripts/dashboard_audit.py
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-screenshots-${{ github.run_id }}
+          path: tests/visual/baselines/*.png
+          retention-days: 7
