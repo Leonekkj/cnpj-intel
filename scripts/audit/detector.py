@@ -31,7 +31,7 @@ def detect_null_spikes(snapshot: dict, baseline: dict) -> list[Anomaly]:
         if drop > threshold:
             anomalies.append(Anomaly(
                 type="null_spike",
-                severity="critical" if drop >= 0.19 else "warning",
+                severity="critical" if drop > 0.20 else "warning",
                 description=(
                     f"Campo '{field}': fill rate caiu de {ref_rate:.1%} para {curr_rate:.1%} "
                     f"(queda de {drop:.1%}, limiar: {threshold:.1%})"
