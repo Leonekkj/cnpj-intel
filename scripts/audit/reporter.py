@@ -79,8 +79,7 @@ def create_github_issue(anomalies: list[Anomaly], diagnosis: str) -> str:
     result = subprocess.run(
         ["gh", "issue", "create",
          "--title", title,
-         "--body", body,
-         "--label", "audit,bug"],
+         "--body", body],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
