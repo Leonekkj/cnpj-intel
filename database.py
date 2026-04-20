@@ -33,7 +33,8 @@ if USE_POSTGRES:
             with _POOL_LOCK:
                 if _POOL is None:
                     print("Conectando ao PostgreSQL com pool...")
-                    for attempt in range(15):
+                    attempt = 0
+                    while True:
                         try:
                             _POOL = _pg_pool.ThreadedConnectionPool(
                                 minconn=1, maxconn=20, dsn=DATABASE_URL,
@@ -44,10 +45,13 @@ if USE_POSTGRES:
                             )
                             break
                         except psycopg2.OperationalError as e:
-                            if attempt == 14:
-                                raise
                             wait = min(2 ** attempt, 30)
-                            print(f"PostgreSQL indisponível (tentativa {attempt+1}/15), retry em {wait}s: {e}")
+                            attempt += 1
+                            if attempt <= 15:
+                                label = f"tentativa {attempt}"
+                            else:
+                                label = f"tentativa {attempt} (DB ainda indisponível, aguardando)"
+                            print(f"PostgreSQL indisponível ({label}), retry em {wait}s: {e}")
                             time.sleep(wait)
         return _POOL
 

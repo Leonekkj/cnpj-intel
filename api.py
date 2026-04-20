@@ -2,20 +2,62 @@
 API REST — serve dados do banco + dashboard web.
 """
 
+import asyncio
 import os
 import re
 import subprocess
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Query, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from database import Database
 import csv
 import io
 
-app = FastAPI(title="CNPJ Intel API", version="3.0")
+import logging as _logging
+_log_api = _logging.getLogger("api")
+
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+if not ADMIN_TOKEN:
+    import warnings
+    warnings.warn("⚠️  ADMIN_TOKEN não configurado!")
+
+db = Database()
+_db_ready = asyncio.Event()
+
+
+def _run_db_init():
+    db.criar_tabelas()
+    db.criar_tabela_tokens()
+    n = db.migrar_telefones_invalidos()
+    if n > 0:
+        _log_api.info(f"🧹 {n} telefones inválidos convertidos para NULL")
+    n = db.migrar_categorias_faltantes()
+    if n > 0:
+        _log_api.info(f"🏷️  {n} categorias recomputadas")
+    n = db.limpar_sites_diretorio()
+    if n > 0:
+        _log_api.info(f"🧹 {n} sites de diretório removidos do banco")
+    for _t in [t.strip() for t in os.environ.get("TOKENS", "").split(",") if t.strip()]:
+        if _t != ADMIN_TOKEN:
+            db.criar_token(_t, "pro")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async def _init_db():
+        await asyncio.to_thread(_run_db_init)
+        _db_ready.set()
+        _log_api.info("DB pronto — API totalmente operacional")
+
+    asyncio.create_task(_init_db())
+    yield
+
+
+app = FastAPI(title="CNPJ Intel API", version="3.0", lifespan=lifespan)
 
 ALLOWED_ORIGINS = [
     o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()
@@ -28,39 +70,12 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
-if not ADMIN_TOKEN:
-    import warnings
-    warnings.warn("⚠️  ADMIN_TOKEN não configurado!")
 
-import logging as _logging
-_log_api = _logging.getLogger("api")
-
-db = Database()
-db.criar_tabelas()
-db.criar_tabela_tokens()
-
-# Converte telefones inválidos (' ', 'N/A', 'None', etc.) para NULL
-_tel_limpos = db.migrar_telefones_invalidos()
-if _tel_limpos > 0:
-    _log_api.info(f"🧹 {_tel_limpos} telefones inválidos convertidos para NULL")
-
-# Recomputa categoria_padrao usando normalização de acentos (corrige ~82k registros)
-_cat_migradas = db.migrar_categorias_faltantes()
-if _cat_migradas > 0:
-    _log_api.info(f"🏷️  {_cat_migradas} categorias recomputadas")
-
-# Limpa sites de diretório que foram salvos erroneamente pelo agente
-_sites_limpos = db.limpar_sites_diretorio()
-if _sites_limpos > 0:
-    _log_api.info(f"🧹 {_sites_limpos} sites de diretório removidos do banco")
-
-# Migra tokens da variável de ambiente TOKENS para o banco como plano "pro"
-# (compatibilidade com tokens já em uso)
-_tokens_legados = os.environ.get("TOKENS", "")
-for _t in [t.strip() for t in _tokens_legados.split(",") if t.strip()]:
-    if _t != ADMIN_TOKEN:
-        db.criar_token(_t, "pro")  # tokens antigos viram pro por padrão
+@app.middleware("http")
+async def db_readiness_gate(request: Request, call_next):
+    if not _db_ready.is_set() and request.url.path not in ("/health", "/"):
+        return JSONResponse(status_code=503, content={"detail": "Service starting, DB not ready yet"})
+    return await call_next(request)
 
 _agente_proc: subprocess.Popen | None = None
 
