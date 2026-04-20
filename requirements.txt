@@ -3,3 +3,4 @@ uvicorn
 aiohttp
 python-multipart
 psycopg2-binary
+numpy>=1.24.0
