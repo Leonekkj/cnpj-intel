@@ -235,68 +235,6 @@ tr:hover td{background:rgba(255,255,255,0.02)}
             <div class="field-label">Setor / Nicho</div>
             <select id="adv-cnae">
               <option value="">Todos os setores</option>
-              <optgroup label="Alimentação">
-                <option value="Restaurantes">🍽️ Restaurantes e similares</option>
-                <option value="Padaria">🥖 Padarias e confeitarias</option>
-                <option value="Lanchonetes">🍔 Lanchonetes e fast food</option>
-                <option value="Mercearia">🛒 Mercearias e minimercados</option>
-                <option value="Supermercado">🏪 Supermercados</option>
-                <option value="Açougue">🥩 Açougues e frigoríficos</option>
-              </optgroup>
-              <optgroup label="Saúde">
-                <option value="Odontologia">🦷 Clínicas odontológicas</option>
-                <option value="Saúde">🏥 Clínicas médicas e saúde</option>
-                <option value="Farmácias">💊 Farmácias e drogarias</option>
-                <option value="Veterinária">🐾 Clínicas veterinárias</option>
-                <option value="Fisioterapia">🏃 Fisioterapia e reabilitação</option>
-                <option value="Psicologia">🧠 Psicologia e saúde mental</option>
-              </optgroup>
-              <optgroup label="Beleza e Estética">
-                <option value="Salão de Beleza">💈 Salões de beleza</option>
-                <option value="Barbearia">✂️ Barbearias</option>
-                <option value="Estética">💅 Clínicas estéticas</option>
-                <option value="Academia">🏋️ Academias e fitness</option>
-              </optgroup>
-              <optgroup label="Tecnologia">
-                <option value="Software">💻 Desenvolvimento de software</option>
-                <option value="Informática">🖥️ Informática e TI</option>
-                <option value="Telecomunicações">📡 Telecomunicações</option>
-              </optgroup>
-              <optgroup label="Educação">
-                <option value="Educação">📚 Escolas e colégios</option>
-                <option value="Cursos e Treinamentos">🎓 Cursos e treinamentos</option>
-                <option value="Idiomas">🌍 Escolas de idiomas</option>
-              </optgroup>
-              <optgroup label="Serviços Profissionais">
-                <option value="Advocacia">⚖️ Advocacia e jurídico</option>
-                <option value="Contabilidade">📊 Contabilidade</option>
-                <option value="Imobiliária">🏠 Imobiliárias</option>
-                <option value="Engenharia">🔧 Engenharia e projetos</option>
-                <option value="Consultoria">💼 Consultorias</option>
-              </optgroup>
-              <optgroup label="Construção">
-                <option value="Construção">🏗️ Construtoras e obras</option>
-                <option value="Elétrica">⚡ Serviços elétricos</option>
-                <option value="Hidráulica">🔩 Serviços hidráulicos</option>
-              </optgroup>
-              <optgroup label="Comércio">
-                <option value="Vestuário">👕 Roupas e vestuário</option>
-                <option value="Calçados">👟 Calçados</option>
-                <option value="Móveis">🛋️ Móveis e decoração</option>
-                <option value="Eletrodomésticos">📺 Eletrodomésticos</option>
-                <option value="Automóveis">🚗 Automóveis e peças</option>
-                <option value="Combustível">⛽ Postos de combustível</option>
-              </optgroup>
-              <optgroup label="Transporte e Logística">
-                <option value="Transporte de Carga">🚛 Transporte de carga</option>
-                <option value="Transporte de Passageiros">🚌 Transporte de passageiros</option>
-                <option value="Logística">📦 Logística e armazéns</option>
-              </optgroup>
-              <optgroup label="Agropecuária">
-                <option value="Agricultura">🌱 Agricultura</option>
-                <option value="Pecuária">🐄 Pecuária</option>
-                <option value="Pesca">🐟 Pesca e aquicultura</option>
-              </optgroup>
             </select>
           </div>
           <div class="field-group">
@@ -961,8 +899,24 @@ function verificarAdmin() {
   }
 }
 
+async function carregarCategorias() {
+  try {
+    const r = await fetch(API + "/api/categorias", {headers: H});
+    if (!r.ok) return;
+    const cats = await r.json();
+    const sel = document.getElementById("adv-cnae");
+    sel.innerHTML = '<option value="">Todos os setores</option>';
+    cats.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.categoria;
+      opt.textContent = c.categoria;
+      sel.appendChild(opt);
+    });
+  } catch(e) {}
+}
+
 carregarStats();
-carregarPlano().then(verificarAdmin);
+carregarPlano().then(verificarAdmin).then(carregarCategorias);
 buscar();
 setInterval(carregarStats, 15000);
 setInterval(carregarPlano, 60000);

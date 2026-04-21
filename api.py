@@ -38,6 +38,9 @@ def _run_db_init():
     n = db.migrar_categorias_faltantes()
     if n > 0:
         _log_api.info(f"🏷️  {n} categorias recomputadas")
+    n = db.migrar_municipios()
+    if n > 0:
+        _log_api.info(f"🏙️  {n} municípios migrados de código IBGE para nome")
     n = db.limpar_sites_diretorio()
     if n > 0:
         _log_api.info(f"🧹 {n} sites de diretório removidos do banco")
@@ -260,6 +263,12 @@ def estatisticas(info: dict = Depends(get_token_info)):
 def listar_cnaes(info: dict = Depends(get_token_info)):
     """Retorna os CNAEs mais frequentes para popular o filtro de nicho."""
     return db.listar_cnaes()
+
+
+@app.get("/api/categorias")
+def listar_categorias(info: dict = Depends(get_token_info)):
+    """Retorna macro-setores presentes no banco para popular o filtro de setor."""
+    return db.listar_categorias()
 
 
 @app.get("/api/empresa/{cnpj}")

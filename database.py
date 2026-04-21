@@ -106,102 +106,149 @@ def telefone_valido(tel) -> bool:
     return tel.strip().lower() not in _TELEFONES_INVALIDOS
 
 
-# ─── Mapeamento CNAE → categoria padronizada ──────────────────────────────────
-# Substring (lowercase) encontrado na descrição CNAE → nome da categoria.
-# A primeira correspondência vence — ordene do mais específico para o mais geral.
+# ─── Mapeamento CNAE → macro-setor ───────────────────────────────────────────
+# Nível 1: código numérico CNAE (7 dígitos) → macro-setor via divisões IBGE.
+# Os dois primeiros dígitos determinam a divisão; range-based lookup.
+_DIVISOES_CNAE = [
+    ((1,  3),  "Agropecuária"),
+    ((5,  9),  "Indústria Extrativa"),
+    ((10, 33), "Indústria de Transformação"),
+    ((35, 39), "Energia e Saneamento"),
+    ((41, 43), "Construção"),
+    ((45, 47), "Comércio"),
+    ((49, 53), "Transporte e Logística"),
+    ((55, 56), "Alimentação e Hospedagem"),
+    ((58, 63), "Informação e Tecnologia"),
+    ((64, 66), "Serviços Financeiros"),
+    ((68, 68), "Imobiliário"),
+    ((69, 75), "Serviços Profissionais"),
+    ((77, 82), "Serviços Administrativos"),
+    ((84, 84), "Administração Pública"),
+    ((85, 85), "Educação"),
+    ((86, 88), "Saúde"),
+    ((90, 93), "Arte e Entretenimento"),
+    ((94, 96), "Outros Serviços"),
+]
+
+# Nível 2: substring em descrições textuais (fallback quando CNAE vem do BrasilAPI).
+# Mapeado para os mesmos macro-setores do Nível 1 para consistência.
 CNAE_CATEGORIAS = {
-    "advocat":                  "Advocacia",
-    "contábi":                  "Contabilidade",
-    "restaurante":              "Restaurantes",
-    "padaria":                  "Padaria",
-    "confeitaria":              "Padaria",
-    "lanchonete":               "Lanchonetes",
-    "mercearia":                "Mercearia",
-    "minimercado":              "Mercearia",
-    "supermercad":              "Supermercado",
-    "hipermercad":              "Supermercado",
-    "açougue":                  "Açougue",
-    "abate":                    "Açougue",
-    "odontol":                  "Odontologia",
-    "farmáci":                  "Farmácias",
-    "farmaci":                  "Farmácias",
-    "drogari":                  "Farmácias",
-    "veterinári":               "Veterinária",
-    "veterinari":               "Veterinária",
-    "fisioterapia":             "Fisioterapia",
-    "psicolog":                 "Psicologia",
-    "cabeleireiro":             "Salão de Beleza",
-    "salão de beleza":          "Salão de Beleza",
-    "manicure":                 "Salão de Beleza",
-    "barbearia":                "Barbearia",
-    "estétic":                  "Estética",
-    "estetica":                 "Estética",
-    "condicionamento físico":   "Academia",
-    "academia":                 "Academia",
-    "ginástica":                "Academia",
-    "software":                 "Software",
-    "desenvolvimento de sistem":"Software",
-    "informátic":               "Informática",
-    "computador":               "Informática",
-    "telecomunicaç":            "Telecomunicações",
-    "telecom":                  "Telecomunicações",
-    "escola":                   "Educação",
-    "ensino fundament":         "Educação",
-    "ensino médio":             "Educação",
-    "ensino superior":          "Educação",
-    "curso":                    "Cursos e Treinamentos",
-    "treinamento":              "Cursos e Treinamentos",
-    "idioma":                   "Idiomas",
-    "língua":                   "Idiomas",
-    "imobiliár":                "Imobiliária",
-    "imobiliari":               "Imobiliária",
-    "engenhari":                "Engenharia",
-    "consultori":               "Consultoria",
-    "construtora":              "Construção",
-    "construção de edifíc":     "Construção",
-    "obras de albanearia":      "Construção",
-    "instalação elétric":       "Elétrica",
-    "eletricista":              "Elétrica",
-    "instalações hidráulic":    "Hidráulica",
-    "encanador":                "Hidráulica",
-    "vestuári":                 "Vestuário",
-    "confecç":                  "Vestuário",
-    "calçado":                  "Calçados",
-    "móveis":                   "Móveis",
-    "moveleiro":                "Móveis",
-    "eletrodoméstic":           "Eletrodomésticos",
-    "eletrodomestic":           "Eletrodomésticos",
-    "veículos automotores":     "Automóveis",
-    "automóvei":                "Automóveis",
-    "peças e acessórios":       "Automóveis",
-    "combustível":              "Combustível",
-    "posto de gasolina":        "Combustível",
-    "transporte rodoviário de carga": "Transporte de Carga",
-    "transporte de carga":      "Transporte de Carga",
-    "transporte rodoviário de passageiro": "Transporte de Passageiros",
-    "transporte de passageiro": "Transporte de Passageiros",
-    "logístic":                 "Logística",
-    "armazenamento":            "Logística",
-    "agricultur":               "Agricultura",
-    "pecuári":                  "Pecuária",
-    "criação de":               "Pecuária",
-    "pesca":                    "Pesca",
-    "aquicultur":               "Pesca",
-    # Saúde — genérico por último (após os específicos)
+    # Alimentação e Hospedagem (55-56)
+    "restaurante":              "Alimentação e Hospedagem",
+    "padaria":                  "Alimentação e Hospedagem",
+    "confeitaria":              "Alimentação e Hospedagem",
+    "lanchonete":               "Alimentação e Hospedagem",
+    "mercearia":                "Comércio",
+    "minimercado":              "Comércio",
+    "supermercad":              "Comércio",
+    "hipermercad":              "Comércio",
+    "açougue":                  "Alimentação e Hospedagem",
+    "abate":                    "Indústria de Transformação",
+    "hotel":                    "Alimentação e Hospedagem",
+    "pousada":                  "Alimentação e Hospedagem",
+    # Saúde (86-88)
+    "odontol":                  "Saúde",
+    "farmáci":                  "Saúde",
+    "farmaci":                  "Saúde",
+    "drogari":                  "Saúde",
+    "veterinári":               "Saúde",
+    "veterinari":               "Saúde",
+    "fisioterapia":             "Saúde",
+    "psicolog":                 "Saúde",
     "médico":                   "Saúde",
     "clínica":                  "Saúde",
     "hospital":                 "Saúde",
     "laboratori":               "Saúde",
+    # Outros Serviços (94-96)
+    "cabeleireiro":             "Outros Serviços",
+    "salão de beleza":          "Outros Serviços",
+    "manicure":                 "Outros Serviços",
+    "barbearia":                "Outros Serviços",
+    "estétic":                  "Outros Serviços",
+    "estetica":                 "Outros Serviços",
+    "condicionamento físico":   "Outros Serviços",
+    "academia":                 "Outros Serviços",
+    "ginástica":                "Outros Serviços",
+    # Informação e Tecnologia (58-63)
+    "software":                 "Informação e Tecnologia",
+    "desenvolvimento de sistem":"Informação e Tecnologia",
+    "informátic":               "Informação e Tecnologia",
+    "computador":               "Informação e Tecnologia",
+    "telecomunicaç":            "Informação e Tecnologia",
+    "telecom":                  "Informação e Tecnologia",
+    # Educação (85)
+    "escola":                   "Educação",
+    "ensino fundament":         "Educação",
+    "ensino médio":             "Educação",
+    "ensino superior":          "Educação",
+    "curso":                    "Educação",
+    "treinamento":              "Educação",
+    "idioma":                   "Educação",
+    "língua":                   "Educação",
+    # Serviços Profissionais (69-75)
+    "advocat":                  "Serviços Profissionais",
+    "contábi":                  "Serviços Profissionais",
+    "imobiliár":                "Serviços Profissionais",
+    "imobiliari":               "Serviços Profissionais",
+    "engenhari":                "Serviços Profissionais",
+    "consultori":               "Serviços Profissionais",
+    # Construção (41-43)
+    "construtora":              "Construção",
+    "construção de edifíc":     "Construção",
+    "obras de albanearia":      "Construção",
+    "instalação elétric":       "Construção",
+    "eletricista":              "Construção",
+    "instalações hidráulic":    "Construção",
+    "encanador":                "Construção",
+    # Comércio (45-47)
+    "vestuári":                 "Comércio",
+    "confecç":                  "Comércio",
+    "calçado":                  "Comércio",
+    "móveis":                   "Comércio",
+    "moveleiro":                "Comércio",
+    "eletrodoméstic":           "Comércio",
+    "eletrodomestic":           "Comércio",
+    "veículos automotores":     "Comércio",
+    "automóvei":                "Comércio",
+    "peças e acessórios":       "Comércio",
+    "combustível":              "Comércio",
+    "posto de gasolina":        "Comércio",
+    # Transporte e Logística (49-53)
+    "transporte rodoviário de carga": "Transporte e Logística",
+    "transporte de carga":      "Transporte e Logística",
+    "transporte rodoviário de passageiro": "Transporte e Logística",
+    "transporte de passageiro": "Transporte e Logística",
+    "logístic":                 "Transporte e Logística",
+    "armazenamento":            "Transporte e Logística",
+    # Agropecuária (01-03)
+    "agricultur":               "Agropecuária",
+    "pecuári":                  "Agropecuária",
+    "criação de":               "Agropecuária",
+    "pesca":                    "Agropecuária",
+    "aquicultur":               "Agropecuária",
 }
-
 
 # Dict com chaves normalizadas (sem acento) para matching robusto
 _CNAE_CATS_NORM = {_norm(k): v for k, v in CNAE_CATEGORIAS.items()}
 
 
 def cnae_para_categoria(cnae: str) -> str:
-    """Retorna a categoria padronizada a partir da descrição CNAE."""
-    cnae_norm = _norm(cnae or "")
+    """Retorna o macro-setor a partir do código CNAE numérico ou da descrição textual."""
+    cnae = (cnae or "").strip()
+    if not cnae:
+        return "Outros"
+    # Código numérico (ex: "5611201") — usa primeiros 2 dígitos para lookup por divisão
+    if len(cnae) >= 2 and cnae[:2].isdigit():
+        try:
+            div = int(cnae[:2])
+            for (lo, hi), setor in _DIVISOES_CNAE:
+                if lo <= div <= hi:
+                    return setor
+        except ValueError:
+            pass
+        return "Outros"
+    # Descrição textual — substring matching (fallback para seeds via BrasilAPI)
+    cnae_norm = _norm(cnae)
     for substr, cat in _CNAE_CATS_NORM.items():
         if substr in cnae_norm:
             return cat
@@ -714,16 +761,13 @@ class Database:
 
     def migrar_categorias_faltantes(self) -> int:
         """
-        Recomputa categoria_padrao para todos os registros sem categoria.
-        Usa normalização de acentos — corrige o matching que antes falhava.
+        Recomputa categoria_padrao para TODOS os registros.
+        Necessário após mudança de categorias específicas para macro-setores.
         """
         total = 0
         with _conn() as conn:
             cur = conn.cursor()
-            cur.execute(
-                "SELECT cnpj, cnae FROM empresas "
-                "WHERE categoria_padrao IS NULL OR categoria_padrao = '' OR categoria_padrao = 'Outros'"
-            )
+            cur.execute("SELECT cnpj, cnae FROM empresas")
             rows = cur.fetchall()
             updates = []
             for cnpj, cnae in rows:
@@ -737,6 +781,52 @@ class Database:
                 )
                 conn.commit()
         return total
+
+    def migrar_municipios(self) -> int:
+        """
+        Converte códigos IBGE numéricos de município para nomes de cidades.
+        Detecta valores de 7 dígitos e substitui pelo nome oficial.
+        Idempotente — seguro rodar múltiplas vezes.
+        """
+        from data.ibge_municipios import MUNICIPIOS
+        total = 0
+        with _conn() as conn:
+            cur = conn.cursor()
+            # Detecta municípios que parecem códigos numéricos (7 dígitos)
+            if USE_POSTGRES:
+                cur.execute(
+                    "SELECT cnpj, municipio FROM empresas "
+                    "WHERE municipio ~ '^[0-9]{7}$'"
+                )
+            else:
+                cur.execute(
+                    "SELECT cnpj, municipio FROM empresas "
+                    "WHERE municipio GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9]'"
+                )
+            rows = cur.fetchall()
+            updates = [(MUNICIPIOS.get(mun, mun), cnpj) for cnpj, mun in rows if mun]
+            if updates:
+                cur.executemany(
+                    f"UPDATE empresas SET municipio = {PH} WHERE cnpj = {PH}",
+                    updates,
+                )
+                conn.commit()
+                total = len(updates)
+        return total
+
+    def listar_categorias(self) -> list:
+        """Retorna macro-setores distintos presentes no banco (empresas com telefone)."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT categoria_padrao, COUNT(*) as n
+                FROM empresas
+                WHERE categoria_padrao IS NOT NULL AND categoria_padrao != ''
+                  AND telefone IS NOT NULL AND telefone != ''
+                GROUP BY categoria_padrao
+                ORDER BY n DESC
+            """)
+            return [{"categoria": r[0], "n": r[1]} for r in cur.fetchall()]
 
     # Lista unificada de domínios de diretórios / listagens de CNPJ.
     # Usada tanto na limpeza do banco quanto como referência para o agente.

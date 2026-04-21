@@ -24,6 +24,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import Database, telefone_valido
 from datetime import datetime
 
+try:
+    from data.ibge_municipios import MUNICIPIOS as _MUNICIPIOS_IBGE
+except ImportError:
+    _MUNICIPIOS_IBGE = {}
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [AGENTE] %(message)s")
 log = logging.getLogger(__name__)
 
@@ -425,6 +430,9 @@ async def _processar_rapido(session, seed_data, db):
         fantasia   = seed_data.get("nome_fantasia", "")
         uf_seed    = seed_data.get("uf", "")
         cidade_seed = seed_data.get("municipio", "")
+        # Converte código IBGE numérico (ex: "3106200") para nome da cidade
+        if cidade_seed and cidade_seed.isdigit():
+            cidade_seed = _MUNICIPIOS_IBGE.get(cidade_seed, cidade_seed)
         cnae_seed  = seed_data.get("cnae", "")
         abertura_seed = seed_data.get("abertura", "")
 
