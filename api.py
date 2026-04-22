@@ -29,9 +29,17 @@ db = Database()
 _db_ready = asyncio.Event()
 
 
-def _run_db_init():
+def _run_db_fast():
+    """Operações mínimas antes de liberar a API. Deve completar em < 1s."""
     db.criar_tabelas()
     db.criar_tabela_tokens()
+    for _t in [t.strip() for t in os.environ.get("TOKENS", "").split(",") if t.strip()]:
+        if _t != ADMIN_TOKEN:
+            db.criar_token(_t, "pro")
+
+
+def _run_db_migrations():
+    """Migrações pesadas — roda em background DEPOIS da API já estar servindo."""
     n = db.migrar_telefones_invalidos()
     if n > 0:
         _log_api.info(f"🧹 {n} telefones inválidos convertidos para NULL")
@@ -44,17 +52,15 @@ def _run_db_init():
     n = db.limpar_sites_diretorio()
     if n > 0:
         _log_api.info(f"🧹 {n} sites de diretório removidos do banco")
-    for _t in [t.strip() for t in os.environ.get("TOKENS", "").split(",") if t.strip()]:
-        if _t != ADMIN_TOKEN:
-            db.criar_token(_t, "pro")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async def _init_db():
-        await asyncio.to_thread(_run_db_init)
+        await asyncio.to_thread(_run_db_fast)
         _db_ready.set()
         _log_api.info("DB pronto — API totalmente operacional")
+        asyncio.create_task(asyncio.to_thread(_run_db_migrations))
 
     asyncio.create_task(_init_db())
     yield

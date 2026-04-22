@@ -255,6 +255,18 @@ def cnae_para_categoria(cnae: str) -> str:
     return "Outros"
 
 
+# Conjunto de macro-setores válidos da versão atual.
+# Usado por migrar_categorias_faltantes() para pular registros já corretos.
+_MACRO_SETORES_VALIDOS = frozenset({
+    "Agropecuária", "Indústria Extrativa", "Indústria de Transformação",
+    "Energia e Saneamento", "Construção", "Comércio", "Transporte e Logística",
+    "Alimentação e Hospedagem", "Informação e Tecnologia", "Serviços Financeiros",
+    "Imobiliário", "Serviços Profissionais", "Serviços Administrativos",
+    "Administração Pública", "Educação", "Saúde", "Arte e Entretenimento",
+    "Outros Serviços", "Outros",
+})
+
+
 class Database:
 
     # ─── Planos ────────────────────────────────────────────────────
@@ -761,57 +773,65 @@ class Database:
 
     def migrar_categorias_faltantes(self) -> int:
         """
-        Recomputa categoria_padrao para TODOS os registros.
-        Necessário após mudança de categorias específicas para macro-setores.
+        Reclassifica apenas registros com categorias antigas ou inválidas.
+        Processa em batches de 5.000 para não crashar o PostgreSQL.
+        Idempotente: na segunda execução encontra 0 registros e retorna 0.
         """
+        placeholders = ",".join([PH] * len(_MACRO_SETORES_VALIDOS))
+        sql_select = (
+            f"SELECT cnpj, cnae FROM empresas "
+            f"WHERE categoria_padrao IS NULL OR categoria_padrao = '' "
+            f"OR categoria_padrao NOT IN ({placeholders}) "
+            f"LIMIT 5000"
+        )
+        sql_update = f"UPDATE empresas SET categoria_padrao = {PH} WHERE cnpj = {PH}"
         total = 0
-        with _conn() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT cnpj, cnae FROM empresas")
-            rows = cur.fetchall()
-            updates = []
-            for cnpj, cnae in rows:
-                cat = cnae_para_categoria(cnae)
-                updates.append((cat, cnpj))
-                total += 1
-            if updates:
-                cur.executemany(
-                    f"UPDATE empresas SET categoria_padrao = {PH} WHERE cnpj = {PH}",
-                    updates,
-                )
+        while True:
+            with _conn() as conn:
+                cur = conn.cursor()
+                cur.execute(sql_select, tuple(_MACRO_SETORES_VALIDOS))
+                rows = cur.fetchall()
+                if not rows:
+                    break
+                updates = [(cnae_para_categoria(cnae), cnpj) for cnpj, cnae in rows]
+                cur.executemany(sql_update, updates)
                 conn.commit()
+                total += len(updates)
         return total
 
     def migrar_municipios(self) -> int:
         """
         Converte códigos IBGE numéricos de município para nomes de cidades.
-        Detecta valores de 7 dígitos e substitui pelo nome oficial.
+        Processa em batches de 5.000 para não crashar o PostgreSQL.
         Idempotente — seguro rodar múltiplas vezes.
         """
         from data.ibge_municipios import MUNICIPIOS
+        if USE_POSTGRES:
+            sql_select = (
+                "SELECT cnpj, municipio FROM empresas "
+                "WHERE municipio ~ '^[0-9]{7}$' LIMIT 5000"
+            )
+        else:
+            sql_select = (
+                "SELECT cnpj, municipio FROM empresas "
+                "WHERE municipio GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9]' LIMIT 5000"
+            )
+        sql_update = f"UPDATE empresas SET municipio = {PH} WHERE cnpj = {PH}"
         total = 0
-        with _conn() as conn:
-            cur = conn.cursor()
-            # Detecta municípios que parecem códigos numéricos (7 dígitos)
-            if USE_POSTGRES:
-                cur.execute(
-                    "SELECT cnpj, municipio FROM empresas "
-                    "WHERE municipio ~ '^[0-9]{7}$'"
-                )
-            else:
-                cur.execute(
-                    "SELECT cnpj, municipio FROM empresas "
-                    "WHERE municipio GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9]'"
-                )
-            rows = cur.fetchall()
-            updates = [(MUNICIPIOS.get(mun, mun), cnpj) for cnpj, mun in rows if mun]
-            if updates:
-                cur.executemany(
-                    f"UPDATE empresas SET municipio = {PH} WHERE cnpj = {PH}",
-                    updates,
-                )
-                conn.commit()
-                total = len(updates)
+        while True:
+            with _conn() as conn:
+                cur = conn.cursor()
+                cur.execute(sql_select)
+                rows = cur.fetchall()
+                if not rows:
+                    break
+                updates = [(MUNICIPIOS.get(mun, mun), cnpj) for cnpj, mun in rows if mun]
+                if updates:
+                    cur.executemany(sql_update, updates)
+                    conn.commit()
+                    total += len(updates)
+                else:
+                    break
         return total
 
     def listar_categorias(self) -> list:
