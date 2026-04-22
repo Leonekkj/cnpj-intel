@@ -801,20 +801,26 @@ class Database:
 
     def migrar_municipios(self) -> int:
         """
-        Converte códigos IBGE numéricos de município para nomes de cidades.
-        Processa em batches de 5.000 para não crashar o PostgreSQL.
+        Converte códigos numéricos de município (IBGE 7 dígitos ou RF CDUM 4 dígitos)
+        para nomes de cidades. Processa em batches de 5.000.
         Idempotente — seguro rodar múltiplas vezes.
         """
         from data.ibge_municipios import MUNICIPIOS
+        try:
+            from data.rf_municipios import RF_MUNICIPIOS
+        except ImportError:
+            RF_MUNICIPIOS = {}
+        # Combina os dois dicts; IBGE tem prioridade em caso de colisão
+        combined = {**RF_MUNICIPIOS, **MUNICIPIOS}
         if USE_POSTGRES:
             sql_select = (
                 "SELECT cnpj, municipio FROM empresas "
-                "WHERE municipio ~ '^[0-9]{7}$' LIMIT 5000"
+                "WHERE municipio ~ '^[0-9]{1,7}$' LIMIT 5000"
             )
         else:
             sql_select = (
                 "SELECT cnpj, municipio FROM empresas "
-                "WHERE municipio GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9]' LIMIT 5000"
+                "WHERE municipio GLOB '[0-9]*' AND LENGTH(municipio) <= 7 LIMIT 5000"
             )
         sql_update = f"UPDATE empresas SET municipio = {PH} WHERE cnpj = {PH}"
         total = 0
@@ -825,7 +831,53 @@ class Database:
                 rows = cur.fetchall()
                 if not rows:
                     break
-                updates = [(MUNICIPIOS.get(mun, mun), cnpj) for cnpj, mun in rows if mun]
+                updates = [
+                    (combined.get(mun, mun), cnpj)
+                    for cnpj, mun in rows
+                    if mun and combined.get(mun, mun) != mun
+                ]
+                if updates:
+                    cur.executemany(sql_update, updates)
+                    conn.commit()
+                    total += len(updates)
+                else:
+                    break
+        return total
+
+    def migrar_cnae(self) -> int:
+        """
+        Converte códigos CNAE numéricos brutos (ex: "1411801") para descrições
+        textuais (ex: "CONFECÇÃO DE ROUPAS ÍNTIMAS"). Processa em batches de 5.000.
+        Idempotente — seguro rodar múltiplas vezes.
+        """
+        try:
+            from data.cnae_descricoes import CNAE_DESCRICOES
+        except ImportError:
+            return 0
+        if USE_POSTGRES:
+            sql_select = (
+                "SELECT cnpj, cnae FROM empresas "
+                "WHERE cnae ~ '^[0-9]{4,9}$' LIMIT 5000"
+            )
+        else:
+            sql_select = (
+                "SELECT cnpj, cnae FROM empresas "
+                "WHERE cnae GLOB '[0-9]*' AND LENGTH(cnae) BETWEEN 4 AND 9 LIMIT 5000"
+            )
+        sql_update = f"UPDATE empresas SET cnae = {PH} WHERE cnpj = {PH}"
+        total = 0
+        while True:
+            with _conn() as conn:
+                cur = conn.cursor()
+                cur.execute(sql_select)
+                rows = cur.fetchall()
+                if not rows:
+                    break
+                updates = [
+                    (CNAE_DESCRICOES[cnae], cnpj)
+                    for cnpj, cnae in rows
+                    if cnae and cnae in CNAE_DESCRICOES
+                ]
                 if updates:
                     cur.executemany(sql_update, updates)
                     conn.commit()

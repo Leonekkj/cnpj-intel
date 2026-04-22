@@ -19,6 +19,16 @@ import os
 import zipfile
 import sys
 
+try:
+    from data.rf_municipios import RF_MUNICIPIOS as _MUNICIPIOS_RF
+except ImportError:
+    _MUNICIPIOS_RF = {}
+
+try:
+    from data.cnae_descricoes import CNAE_DESCRICOES as _CNAE_DESC
+except ImportError:
+    _CNAE_DESC = {}
+
 # ─── Colunas do arquivo de Estabelecimentos da Receita Federal ────
 # Ordem oficial do layout (sem cabeçalho no arquivo)
 COLUNAS = [
@@ -321,6 +331,9 @@ def extrair_cnpjs(
             if len(linha) >= 28:
                 nome_fantasia = linha[4].strip()
                 municipio     = linha[20].strip()
+                # Converte código RF CDUM → nome da cidade
+                if municipio and municipio.isdigit():
+                    municipio = _MUNICIPIOS_RF.get(municipio, municipio)
                 raw_data      = linha[10].strip()
                 if len(raw_data) == 8 and raw_data.isdigit():
                     data_inicio = f"{raw_data[:4]}-{raw_data[4:6]}-{raw_data[6:]}"
@@ -352,8 +365,10 @@ def extrair_cnpjs(
             def _clean(s):
                 return s.replace("\t", " ").replace("\n", " ").replace("\r", " ")
 
+            # Converte código CNAE para descrição textual (após filtragem, que usa código)
+            cnae_display = _CNAE_DESC.get(cnae, cnae)
             # TSV: cnpj\tnome_fantasia\tuf\tmunicipio\tcnae\tabertura\ttelefone1\ttelefone2\temail\trazao_social\tporte\tsocio_principal
-            campos = [cnpj, nome_fantasia, uf, municipio, cnae, data_inicio,
+            campos = [cnpj, nome_fantasia, uf, municipio, cnae_display, data_inicio,
                       telefone1, telefone2, email,
                       _clean(razao_social), porte_txt, _clean(socio_princ)]
             f_out.write("\t".join(campos) + "\n")

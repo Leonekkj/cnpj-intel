@@ -48,7 +48,10 @@ def _run_db_migrations():
         _log_api.info(f"🏷️  {n} categorias recomputadas")
     n = db.migrar_municipios()
     if n > 0:
-        _log_api.info(f"🏙️  {n} municípios migrados de código IBGE para nome")
+        _log_api.info(f"🏙️  {n} municípios migrados de código numérico para nome")
+    n = db.migrar_cnae()
+    if n > 0:
+        _log_api.info(f"🏭 {n} CNAEs migrados de código numérico para descrição")
     n = db.limpar_sites_diretorio()
     if n > 0:
         _log_api.info(f"🧹 {n} sites de diretório removidos do banco")
