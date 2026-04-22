@@ -18,22 +18,29 @@ import zipfile
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
 
-def gerar_rf_municipios(zip_path: str) -> dict[str, str]:
-    """Lê Municipios.zip da RF e retorna {codigo: nome}."""
+def _iter_linhas_municipios(path: str):
+    """Itera linhas do arquivo de municípios (zip ou CSV extraído)."""
+    if zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as z:
+            for fname in z.namelist():
+                with z.open(fname) as f:
+                    yield from io.TextIOWrapper(f, encoding="latin-1")
+    else:
+        with open(path, encoding="latin-1") as f:
+            yield from f
+
+
+def gerar_rf_municipios(path: str) -> dict[str, str]:
+    """Lê Municipios.zip ou CSV extraído da RF e retorna {codigo: nome}."""
     municipios = {}
-    with zipfile.ZipFile(zip_path) as z:
-        for fname in z.namelist():
-            with z.open(fname) as f:
-                for line in io.TextIOWrapper(f, encoding="latin-1"):
-                    parts = line.strip().split(";")
-                    if len(parts) < 2:
-                        continue
-                    codigo = parts[0].strip().strip('"').lstrip("0").zfill(1)
-                    nome = parts[1].strip().strip('"').upper()
-                    if codigo and nome:
-                        # Armazena tanto com zeros à esquerda quanto sem
-                        municipios[codigo] = nome
-                        municipios[parts[0].strip().strip('"')] = nome
+    for line in _iter_linhas_municipios(path):
+        parts = line.strip().split(";")
+        if len(parts) < 2:
+            continue
+        codigo = parts[0].strip().strip('"')
+        nome = parts[1].strip().strip('"').upper()
+        if codigo and nome:
+            municipios[codigo] = nome
     return municipios
 
 
