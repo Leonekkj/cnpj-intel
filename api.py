@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi import FastAPI, Query, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from database import Database
 import csv
@@ -408,6 +409,9 @@ def vacuum_banco(_: str = Depends(require_admin)):
     """Executa VACUUM ANALYZE no Postgres para liberar espaço após DELETE em massa."""
     db.vacuum()
     return {"status": "ok", "mensagem": "VACUUM ANALYZE executado"}
+
+
+app.mount("/app", StaticFiles(directory="app"), name="app_static")
 
 
 if __name__ == "__main__":

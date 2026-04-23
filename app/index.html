@@ -4,922 +4,149 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CNPJ Intel — Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;700&display=swap" rel="stylesheet">
-<style>
-:root{--bg:#0d0f14;--surface:#161a23;--card:#1e2330;--border:#2a3045;--accent:#1D9E75;--accent2:#5DCAA5;--text:#e8eaf0;--muted:#7a8399;--info:#378ADD;--warn:#EF9F27;--danger:#E24B4A;--purple:#7F77DD}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-.mono{font-family:'DM Mono',monospace}
-.layout{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
-.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:1.5rem 1rem;display:flex;flex-direction:column;gap:1.5rem;position:sticky;top:0;height:100vh;overflow-y:auto}
-.main{padding:2rem;overflow-x:hidden}
-.logo{font-size:20px;font-weight:700;letter-spacing:-0.3px}
-.logo span{color:var(--accent)}
-.nav-section{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px}
-.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:13px;color:var(--muted);cursor:pointer;transition:all 0.15s}
-.nav-item:hover,.nav-item.active{background:rgba(29,158,117,0.1);color:var(--accent2)}
-.nav-item svg{width:15px;height:15px;flex-shrink:0}
-.agent-box{margin-top:auto;background:rgba(29,158,117,0.07);border:1px solid rgba(29,158,117,0.15);border-radius:10px;padding:12px}
-.agent-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:blink 1.5s infinite;display:inline-block;margin-right:6px}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
-.agent-label{font-size:12px;color:var(--accent2);font-weight:500}
-.agent-sub{font-size:11px;color:var(--muted);margin-top:4px}
-.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem}
-.metric{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.1rem}
-.metric-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px}
-.metric-val{font-size:26px;font-weight:700;font-family:'DM Mono',monospace}
-.metric-val.green{color:var(--accent2)}.metric-val.blue{color:var(--info)}.metric-val.amber{color:var(--warn)}.metric-val.pink{color:#e88ab0}
-.metric-sub{font-size:11px;color:var(--muted);margin-top:3px}
-.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:1.5rem}
-.tab{padding:10px 20px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.2s}
-.tab.active{color:var(--accent2);border-bottom-color:var(--accent)}
-.tab-content{display:none}
-.tab-content.active{display:block}
-.search-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.25rem;margin-bottom:1.5rem}
-.search-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:12px}
-.adv-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}
-.field-group{display:flex;flex-direction:column;gap:4px}
-.field-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px}
-input[type=text],input[type=date],select{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:'Syne',sans-serif;width:100%;transition:border-color 0.2s}
-input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-color:var(--accent)}
-input::placeholder{color:var(--muted)}
-.toggles{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.toggle-btn{font-size:12px;padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;transition:all 0.15s}
-.toggle-btn.on-blue{border-color:var(--info);color:#7bbef0;background:rgba(55,138,221,0.08)}
-.toggle-btn.on-amber{border-color:var(--warn);color:#f0b96e;background:rgba(239,159,39,0.08)}
-.toggle-btn.on-green{border-color:var(--accent);color:var(--accent2);background:rgba(29,158,117,0.08)}
-.toggle-btn.on-purple{border-color:var(--purple);color:#aaa5e8;background:rgba(127,119,221,0.08)}
-.search-actions{display:flex;gap:8px;align-items:center}
-.btn-search{background:var(--accent);color:#000;padding:9px 24px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif}
-.btn-search:hover{background:var(--accent2)}
-.btn-clear{background:transparent;color:var(--muted);padding:9px 16px;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;font-family:'Syne',sans-serif}
-.btn-clear:hover{color:var(--text);border-color:var(--muted)}
-.result-count{font-size:12px;color:var(--muted);margin-left:auto}
-.table-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
-.table-header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.table-title{font-size:14px;font-weight:500}
-.btn-export{padding:7px 16px;background:var(--accent);color:#000;border:none;border-radius:7px;font-size:12px;font-family:'Syne',sans-serif;font-weight:500;cursor:pointer}
-.table-wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;font-weight:500}
-td{padding:10px 14px;border-bottom:1px solid rgba(42,48,69,0.5);vertical-align:middle}
-tr:last-child td{border-bottom:none}
-tr:hover td{background:rgba(255,255,255,0.02)}
-.co-name{font-weight:500;font-size:13px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.co-cnae{font-size:11px;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;font-family:'DM Mono',monospace}
-.b-mei{background:rgba(55,138,221,0.12);color:#7bbef0;border:1px solid rgba(55,138,221,0.15)}
-.b-me{background:rgba(212,83,126,0.12);color:#e88ab0;border:1px solid rgba(212,83,126,0.15)}
-.b-epp{background:rgba(127,119,221,0.12);color:#aaa5e8;border:1px solid rgba(127,119,221,0.15)}
-.b-ep{background:rgba(239,159,39,0.12);color:#f0b96e;border:1px solid rgba(239,159,39,0.15)}
-.b-de{background:rgba(90,100,120,0.2);color:var(--muted);border:1px solid var(--border)}
-.tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;margin-right:3px}
-.tag-email{background:rgba(55,138,221,0.1);color:#7bbef0;border:1px solid rgba(55,138,221,0.12)}
-.tag-insta{background:rgba(212,83,126,0.1);color:#e88ab0;border:1px solid rgba(212,83,126,0.12)}
-.tag-site{background:rgba(29,158,117,0.1);color:var(--accent2);border:1px solid rgba(29,158,117,0.12)}
-.btn-ver{font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s}
-.btn-ver:hover{border-color:var(--accent);color:var(--accent2)}
-.pagination{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
-.page-btns{display:flex;gap:4px}
-.page-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px}
-.page-btn.active{background:var(--accent);color:#000;border-color:var(--accent)}
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:100;align-items:center;justify-content:center;padding:2rem}
-.modal-bg.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:2rem;max-width:580px;width:100%;max-height:90vh;overflow-y:auto}
-.modal-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.5rem}
-.modal-title{font-size:17px;font-weight:700}
-.modal-sub{font-size:12px;color:var(--muted);margin-top:4px}
-.modal-close{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer}
-.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.modal-field .lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:4px}
-.modal-field .val{font-size:14px;font-weight:500;word-break:break-all}
-.modal-actions{display:flex;gap:8px;margin-top:1.5rem;flex-wrap:wrap}
-.modal-btn{flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:12px;font-family:'Syne',sans-serif;cursor:pointer;min-width:100px}
-.modal-btn:hover{border-color:var(--accent);color:var(--accent2)}
-@media(max-width:900px){.layout{grid-template-columns:1fr}.sidebar{display:none}.metrics{grid-template-columns:repeat(2,1fr)}.search-grid,.adv-grid{grid-template-columns:1fr}}
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app/styles.css">
 </head>
 <body>
-<div class="layout">
+<div class="app">
+
+  <!-- SIDEBAR -->
   <aside class="sidebar">
-    <div class="logo">CNPJ<span>Intel</span></div>
-    <div>
-      <div class="nav-section">Navegação</div>
-      <div class="nav-item active" onclick="showTab('dashboard')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 8L12 4L20 8V16L12 20L4 16V8Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 12L20 8M12 12V20M12 12L4 8" stroke="currentColor" stroke-width="1.5"/></svg>
       </div>
-      <div class="nav-item" onclick="showTab('busca')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Busca avançada
+      <div class="brand-text">
+        <div class="brand-name">CNPJ Intel</div>
+        <div class="brand-sub">Prospecção B2B</div>
       </div>
-      <div class="nav-item" id="nav-export" onclick="exportarCSV()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar CSV
-      </div>
-      <div class="nav-item" id="nav-admin" style="display:none" onclick="showTab('admin')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Clientes
-      </div>
-    </div>
-    <div class="agent-box">
-      <div><span class="agent-dot"></span><span class="agent-label">Agente ativo</span></div>
-      <div class="agent-sub">coletando dados...</div>
     </div>
 
-    <!-- Plano do usuário -->
-    <div id="plano-box" style="background:rgba(29,158,117,0.07);border:1px solid rgba(29,158,117,0.15);border-radius:10px;padding:12px;margin-top:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-size:11px;color:var(--muted)">Plano</span>
-        <span id="plano-badge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(29,158,117,0.2);color:var(--accent2)">—</span>
-      </div>
-      <div id="quota-wrap" style="display:none">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-          <span style="font-size:10px;color:var(--muted)">CNPJs hoje</span>
-          <span id="quota-txt" style="font-size:10px;color:var(--text);font-family:'DM Mono',monospace">—</span>
+    <nav class="nav">
+      <div class="nav-label">Workspace</div>
+      <a class="nav-item active" data-tab="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <span>Visão geral</span>
+      </a>
+      <a class="nav-item" data-tab="empresas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h6M9 14h6M9 18h6"/></svg>
+        <span>Empresas</span>
+        <span class="nav-tag" id="nav-total">—</span>
+      </a>
+      <a class="nav-item" data-tab="busca">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <span>Busca avançada</span>
+      </a>
+      <a class="nav-item" data-tab="listas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        <span>Minhas listas</span>
+      </a>
+
+      <div class="nav-label">Dados</div>
+      <a class="nav-item" data-tab="exportar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+        <span>Exportar CSV</span>
+      </a>
+      <a class="nav-item" data-tab="api">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+        <span>API & Webhooks</span>
+      </a>
+
+      <div class="nav-label" id="admin-section" style="display:none">Admin</div>
+      <a class="nav-item" data-tab="clientes" id="nav-clientes" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>
+        <span>Clientes</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="plan-card">
+        <div class="plan-row">
+          <div class="plan-name" id="plan-name">Carregando…</div>
+          <span class="plan-badge" id="plan-badge">—</span>
         </div>
-        <div style="height:4px;background:var(--border);border-radius:4px;overflow:hidden">
-          <div id="quota-bar" style="height:100%;background:var(--accent);border-radius:4px;width:0%;transition:width 0.4s"></div>
+        <div class="plan-meter">
+          <div class="plan-meter-bar" id="plan-meter-bar" style="width:0%"></div>
+        </div>
+        <div class="plan-stats" id="plan-stats">
+          <span>—</span>
         </div>
       </div>
-      <div id="upgrade-cta" style="display:none;margin-top:8px;font-size:10px;color:var(--warn);text-align:center">
-        ⚡ <a href="#" style="color:var(--warn);text-decoration:underline" onclick="abrirUpgrade()">Fazer upgrade</a>
+      <div class="agent-row">
+        <span class="agent-pulse"></span>
+        <div class="agent-text">
+          <div class="agent-label">Agente coletor</div>
+          <div class="agent-sub" id="agent-sub">Processando…</div>
+        </div>
       </div>
     </div>
   </aside>
 
+  <!-- MAIN -->
   <main class="main">
-    <div class="metrics">
-      <div class="metric"><div class="metric-lbl">Total CNPJs</div><div class="metric-val green" id="m-total">—</div><div class="metric-sub">empresas ativas</div></div>
-      <div class="metric"><div class="metric-lbl">Com telefone</div><div class="metric-val blue" id="m-tel">—</div><div class="metric-sub">contatos diretos</div></div>
-      <div class="metric"><div class="metric-lbl">Com e-mail</div><div class="metric-val amber" id="m-site2">—</div><div class="metric-sub">contatos por email</div></div>
-    </div>
-
-    <div class="tabs">
-      <div class="tab active" id="tab-dashboard" onclick="showTab('dashboard')">Empresas</div>
-      <div class="tab" id="tab-busca" onclick="showTab('busca')">Busca avançada</div>
-      <div class="tab" id="tab-admin" style="display:none" onclick="showTab('admin')">👥 Clientes</div>
-    </div>
-
-    <!-- Aba: Empresas (SEM nichos) -->
-    <div class="tab-content active" id="content-dashboard">
-      <div class="search-panel">
-        <div class="search-grid">
-          <div class="field-group">
-            <div class="field-label">Buscar</div>
-            <input type="text" id="q" placeholder="Empresa, CNPJ, cidade..." oninput="debounce(buscar,400)()">
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="crumbs">
+        <span class="crumb-muted">Workspace</span>
+        <span class="crumb-sep">/</span>
+        <span class="crumb-current" id="crumb-current">Visão geral</span>
+      </div>
+      <div class="topbar-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="14" height="14"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" placeholder="Pesquisar empresa, CNPJ, sócio…" id="global-search">
+        <kbd>⌘K</kbd>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" title="Ajuda">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 1 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg>
+        </button>
+        <div class="user-chip" onclick="openTweaks()" title="Preferências">
+          <div class="avatar" id="user-avatar">?</div>
+          <div class="user-txt">
+            <div class="user-name" id="user-name">—</div>
+            <div class="user-sub" id="user-sub">—</div>
           </div>
-          <div class="field-group">
-            <div class="field-label">Estado</div>
-            <select id="uf" onchange="buscar()">
-              <option value="">Todos</option>
-              <option>AC</option><option>AL</option><option>AM</option><option>AP</option>
-              <option>BA</option><option>CE</option><option>DF</option><option>ES</option>
-              <option>GO</option><option>MA</option><option>MG</option><option>MS</option>
-              <option>MT</option><option>PA</option><option>PB</option><option>PE</option>
-              <option>PI</option><option>PR</option><option>RJ</option><option>RN</option>
-              <option>RO</option><option>RR</option><option>RS</option><option>SC</option>
-              <option>SE</option><option>SP</option><option>TO</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <div class="field-label">Porte</div>
-            <select id="porte" onchange="buscar()">
-              <option value="">Todos</option>
-              <option value="MEI">MEI</option>
-              <option value="MICRO EMPRESA">Micro empresa</option>
-              <option value="EMPRESA DE PEQUENO PORTE">Pequeno porte</option>
-              <option value="DEMAIS">Demais</option>
-            </select>
-          </div>
-        </div>
-        <div class="toggles">
-          <button class="toggle-btn" id="t-tel"   onclick="toggleFiltro('tel')"  >📞 Com telefone</button>
-          <button class="toggle-btn" id="t-email" onclick="toggleFiltro('email')">✉️ Com e-mail</button>
-          <button class="toggle-btn" id="t-site"  onclick="toggleFiltro('site')" style="display:none">🌐 Com site</button>
-          <button class="toggle-btn" id="t-insta" onclick="toggleFiltro('insta')" style="display:none">📸 Com Instagram</button>
-          <button class="toggle-btn on-gray" id="t-sem-contato" onclick="toggleSemContato()" title="Clique para incluir empresas sem nenhum contato" style="border-color:#555;color:#888;background:rgba(255,255,255,0.04)">✅ Com contato</button>
-        </div>
-        <div class="search-actions">
-          <button class="btn-clear" onclick="limparFiltros()">Limpar</button>
-          <span class="result-count" id="result-count">—</span>
         </div>
       </div>
+    </header>
 
-      <div class="table-card">
-        <div class="table-header">
-          <span class="table-title">Empresas enriquecidas</span>
-          <button class="btn-export" onclick="exportarCSV()">Exportar CSV</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Empresa / Setor</th><th>CNPJ</th><th>Porte</th><th>Cidade / UF</th>
-              <th>Abertura</th><th>Sócio</th><th>Telefone</th><th>E-mail</th><th></th>
-            </tr></thead>
-            <tbody id="tbody"></tbody>
-          </table>
-        </div>
-        <div class="pagination">
-          <span id="page-info">—</span>
-          <div class="page-btns" id="page-btns"></div>
-        </div>
+    <!-- CONTENT -->
+    <div class="content" id="content">
+      <div class="empty-state" style="padding:80px 20px">
+        <div class="big">Carregando…</div>
       </div>
     </div>
-
-    <!-- Aba: Busca Avançada -->
-    <div class="tab-content" id="content-busca">
-      <div class="search-panel">
-        <div class="adv-grid">
-          <div class="field-group">
-            <div class="field-label">Palavra-chave / Empresa</div>
-            <input type="text" id="adv-q" placeholder="Nome, CNPJ, cidade...">
-          </div>
-          <div class="field-group">
-            <div class="field-label">Setor / Nicho</div>
-            <select id="adv-cnae">
-              <option value="">Todos os setores</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <div class="field-label">Estado</div>
-            <select id="adv-uf">
-              <option value="">Todos os estados</option>
-              <option>AC</option><option>AL</option><option>AM</option><option>AP</option>
-              <option>BA</option><option>CE</option><option>DF</option><option>ES</option>
-              <option>GO</option><option>MA</option><option>MG</option><option>MS</option>
-              <option>MT</option><option>PA</option><option>PB</option><option>PE</option>
-              <option>PI</option><option>PR</option><option>RJ</option><option>RN</option>
-              <option>RO</option><option>RR</option><option>RS</option><option>SC</option>
-              <option>SE</option><option>SP</option><option>TO</option>
-            </select>
-          </div>
-        </div>
-        <div class="adv-grid">
-          <div class="field-group">
-            <div class="field-label">Porte da empresa</div>
-            <select id="adv-porte">
-              <option value="">Todos os portes</option>
-              <option value="MEI">MEI — Microempreendedor Individual</option>
-              <option value="MICRO EMPRESA">Micro Empresa</option>
-              <option value="EMPRESA DE PEQUENO PORTE">Empresa de Pequeno Porte</option>
-              <option value="DEMAIS">Demais (médio/grande)</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <div class="field-label">Aberta a partir de</div>
-            <input type="date" id="adv-de">
-          </div>
-          <div class="field-group">
-            <div class="field-label">Aberta até</div>
-            <input type="date" id="adv-ate">
-          </div>
-        </div>
-        <div class="toggles">
-          <button class="toggle-btn" id="adv-t-tel"   onclick="toggleAdv('tel')"  >📞 Com telefone</button>
-          <button class="toggle-btn" id="adv-t-site"  onclick="toggleAdv('site')" >🌐 Com site</button>
-          <button class="toggle-btn" id="adv-t-email" onclick="toggleAdv('email')">✉️ Com e-mail</button>
-          <button class="toggle-btn" id="adv-t-insta" onclick="toggleAdv('insta')" style="display:none">📸 Com Instagram</button>
-        </div>
-        <div class="search-actions">
-          <button class="btn-search" onclick="buscarAvancado()">Buscar →</button>
-          <button class="btn-clear" onclick="limparAvancado()">Limpar</button>
-          <span class="result-count" id="adv-count">—</span>
-        </div>
-      </div>
-
-      <div class="table-card">
-        <div class="table-header">
-          <span class="table-title">Resultados</span>
-          <button class="btn-export" onclick="exportarCSVAdv()">Exportar lista</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Empresa / Setor</th><th>CNPJ</th><th>Porte</th><th>Cidade / UF</th>
-              <th>Abertura</th><th>Sócio</th><th>Telefone</th><th>E-mail</th><th></th>
-            </tr></thead>
-            <tbody id="adv-tbody"></tbody>
-          </table>
-        </div>
-        <div class="pagination">
-          <span id="adv-page-info">Faça uma busca</span>
-          <div class="page-btns" id="adv-page-btns"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Aba: Admin (só aparece para token admin) -->
-    <div class="tab-content" id="content-admin">
-
-      <!-- Criar novo token -->
-      <div class="search-panel" style="margin-bottom:1.5rem">
-        <div style="font-size:14px;font-weight:600;margin-bottom:16px">Novo cliente</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end">
-          <div class="field-group">
-            <div class="field-label">Nome do cliente</div>
-            <input type="text" id="novo-nome" placeholder="Ex: joao_silva" oninput="gerarTokenSugestao()">
-          </div>
-          <div class="field-group">
-            <div class="field-label">Plano</div>
-            <select id="novo-plano">
-              <option value="free">Gratuito — 10 CNPJs/dia</option>
-              <option value="basico">Básico R$60 — 500 CNPJs/dia</option>
-              <option value="pro">Pro R$100 — Ilimitado</option>
-            </select>
-          </div>
-          <button class="btn-search" onclick="criarToken()" style="white-space:nowrap">Criar acesso →</button>
-        </div>
-        <div id="token-gerado" style="display:none;margin-top:16px;background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:16px">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:8px">✅ Token criado! Envie este link para o cliente:</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <code id="link-cliente" style="flex:1;background:var(--bg);padding:8px 12px;border-radius:6px;font-size:12px;color:var(--accent2);border:1px solid var(--border);word-break:break-all"></code>
-            <button onclick="copiarLink()" style="padding:8px 14px;background:var(--accent);color:#000;border:none;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;font-weight:600">Copiar</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Lista de clientes -->
-      <div class="table-card">
-        <div class="table-header">
-          <span class="table-title">Clientes ativos</span>
-          <button class="btn-export" onclick="carregarTokens()">↻ Atualizar</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Token / Cliente</th>
-              <th>Plano</th>
-              <th>Uso hoje</th>
-              <th>Criado em</th>
-              <th>Status</th>
-              <th></th>
-            </tr></thead>
-            <tbody id="tokens-tbody">
-              <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">Carregando...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
   </main>
 </div>
 
-<!-- Modal -->
-<div class="modal-bg" id="modal" onclick="if(event.target===this)fecharModal()">
-  <div class="modal" id="modal-content"></div>
+<!-- Tweaks panel (densidade da tabela e preferências) -->
+<div class="tweaks-panel" id="tweaks-panel">
+  <div class="tweaks-header">
+    <span>Preferências</span>
+    <button class="tweaks-close" onclick="closeTweaks()">×</button>
+  </div>
+  <div class="tweaks-body">
+    <div class="tweak-group">
+      <label>Densidade da tabela</label>
+      <div class="tweak-segments" id="tw-density">
+        <button data-val="comfort">Confortável</button>
+        <button data-val="normal" class="on">Normal</button>
+        <button data-val="compact">Compacta</button>
+      </div>
+    </div>
+    <div class="tweak-group">
+      <label>Raio das bordas</label>
+      <div class="tweak-segments" id="tw-radius">
+        <button data-val="sharp">Reto</button>
+        <button data-val="soft" class="on">Suave</button>
+        <button data-val="round">Arredondado</button>
+      </div>
+    </div>
+  </div>
 </div>
 
-<script>
-const API = window.location.hostname === "localhost" ? "http://localhost:8000" : "";
-const p = new URLSearchParams(window.location.search);
-const TOKEN = p.get("token") || localStorage.getItem("cnpj_token") || "";
-if(p.get("token")) localStorage.setItem("cnpj_token", TOKEN);
-const H = {"Authorization": "Bearer " + TOKEN};
-
-let pagina = 1, advPagina = 1;
-let dados = [], advDados = [];
-let filtros = {tel:false, email:false, insta:false, site:false, comContato:false};
-let advFiltros = {tel:false, email:false, insta:false, site:false};
-let planoInfo = null;
-
-// ─── Plano & quota ────────────────────────────────────────────────
-async function carregarPlano() {
-  try {
-    const r = await fetch(API + "/api/meu-plano", {headers: H});
-    if (!r.ok) return;
-    const d = await r.json();
-    planoInfo = d;
-    atualizarPlanoUI(d);
-  } catch(e) {}
-  return planoInfo;
-}
-
-function atualizarPlanoUI(d) {
-  const badge = document.getElementById("plano-badge");
-  const quotaWrap = document.getElementById("quota-wrap");
-  const quotaTxt = document.getElementById("quota-txt");
-  const quotaBar = document.getElementById("quota-bar");
-  const upgradeCta = document.getElementById("upgrade-cta");
-  const navExport = document.getElementById("nav-export");
-
-  // Badge do plano
-  const cores = {free:"#EF9F27", basico:"#378ADD", pro:"#1D9E75", admin:"#7F77DD"};
-  badge.textContent = d.nome_plano || d.plano;
-  badge.style.background = (cores[d.plano] || "#7a8399") + "22";
-  badge.style.color = cores[d.plano] || "#7a8399";
-
-  // Quota bar (só para planos com limite)
-  if (d.limite_dia !== null) {
-    quotaWrap.style.display = "block";
-    const usado = d.cnpjs_hoje || 0;
-    const pct = Math.min(100, Math.round((usado / d.limite_dia) * 100));
-    quotaTxt.textContent = `${usado} / ${d.limite_dia}`;
-    quotaBar.style.width = pct + "%";
-    quotaBar.style.background = pct >= 90 ? "var(--danger)" : pct >= 70 ? "var(--warn)" : "var(--accent)";
-  }
-
-  // Bloquear export no free
-  if (!d.export) {
-    navExport.style.opacity = "0.4";
-    navExport.style.cursor = "not-allowed";
-    navExport.title = "Disponível no plano Básico ou Pro";
-    upgradeCta.style.display = "block";
-  }
-}
-
-function abrirUpgrade() {
-  _abrirModalHtml(`
-    <h3 style="margin-bottom:16px">Fazer upgrade</h3>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:20px">
-      Escolha o plano que melhor se encaixa na sua necessidade:
-    </p>
-    <div style="display:grid;gap:12px">
-      <div style="border:1px solid var(--warn);border-radius:10px;padding:16px">
-        <div style="font-weight:700;color:var(--warn);margin-bottom:4px">Básico — R$60/mês</div>
-        <div style="font-size:12px;color:var(--muted)">✓ 500 CNPJs/dia &nbsp; ✓ Export CSV</div>
-      </div>
-      <div style="border:1px solid var(--accent);border-radius:10px;padding:16px">
-        <div style="font-weight:700;color:var(--accent2);margin-bottom:4px">Pro — R$100/mês</div>
-        <div style="font-size:12px;color:var(--muted)">✓ Ilimitado &nbsp; ✓ Export CSV &nbsp; ✓ Acesso à API</div>
-      </div>
-    </div>
-    <p style="font-size:12px;color:var(--muted);margin-top:16px;text-align:center">
-      Entre em contato para fazer upgrade do seu plano.
-    </p>
-  `);
-}
-
-function showTab(t) {
-  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
-  document.getElementById('content-' + t).classList.add('active');
-  document.getElementById('tab-' + t).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
-  const navItem = document.getElementById('nav-' + t) || document.querySelector(`.nav-item[onclick*="'${t}'"]`);
-  if (navItem) navItem.classList.add('active');
-  if(t === 'busca' && advDados.length === 0) buscarAvancado();
-  if(t === 'admin') carregarTokens();
-}
-
-async function carregarStats() {
-  try {
-    const r = await fetch(API + "/api/stats", {headers: H});
-    const d = await r.json();
-    document.getElementById("m-total").textContent = (d.total||0).toLocaleString("pt-BR");
-    document.getElementById("m-tel").textContent = (d.com_telefone||0).toLocaleString("pt-BR");
-    document.getElementById("m-site2").textContent = (d.com_email||0).toLocaleString("pt-BR");
-  } catch(e) {
-    document.getElementById("m-total").textContent = "offline";
-  }
-}
-
-async function buscar() {
-  const params = new URLSearchParams({
-    q: document.getElementById("q").value,
-    uf: document.getElementById("uf").value,
-    porte: document.getElementById("porte").value,
-    com_telefone: filtros.tel,
-    com_email: filtros.email,
-    com_instagram: filtros.insta,
-    com_site: filtros.site,
-    com_contato: filtros.comContato,
-    pagina, por_pagina: 20
-  });
-  try {
-    const r = await fetch(API + "/api/empresas?" + params, {headers: H});
-    const d = await r.json();
-    dados = d.dados || [];
-    renderTabela(d, "tbody", "page-info", "page-btns", "result-count", pagina, (pg) => { pagina = pg; buscar(); });
-  } catch(e) {
-    document.getElementById("tbody").innerHTML = `<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--muted)">Erro ao conectar</td></tr>`;
-  }
-}
-
-async function buscarAvancado() {
-  const categoria = document.getElementById("adv-cnae").value;
-  const params = new URLSearchParams({
-    q: document.getElementById("adv-q").value,
-    uf: document.getElementById("adv-uf").value,
-    porte: document.getElementById("adv-porte").value,
-    categoria: categoria,
-    abertura_de: document.getElementById("adv-de").value,
-    abertura_ate: document.getElementById("adv-ate").value,
-    com_telefone: advFiltros.tel,
-    com_email: advFiltros.email,
-    com_instagram: advFiltros.insta,
-    com_site: advFiltros.site,
-    com_contato: filtros.comContato,
-    pagina: advPagina, por_pagina: 20
-  });
-  try {
-    const r = await fetch(API + "/api/empresas?" + params, {headers: H});
-    const d = await r.json();
-    advDados = d.dados || [];
-    renderTabela(d, "adv-tbody", "adv-page-info", "adv-page-btns", "adv-count", advPagina, (pg) => { advPagina = pg; buscarAvancado(); });
-  } catch(e) {}
-}
-
-function _celTelefone(e) {
-  const isFree = planoInfo.plano === "free";
-  if (isFree) return '<span style="color:var(--muted);font-size:11px">🔒 ver+</span>';
-  if (e.telefone) return '<span style="color:var(--accent2)">' + e.telefone + '</span>';
-  return '<span style="color:var(--muted)">—</span>';
-}
-function _celEmail(e) {
-  const isFree = planoInfo.plano === "free";
-  if (isFree) return '<span style="color:var(--muted);font-size:11px">🔒 ver+</span>';
-  if (e.email) return '<span class="tag tag-email" title="' + e.email + '">✉️ ' + e.email + '</span>';
-  return '<span style="color:var(--muted)">—</span>';
-}
-
-function renderTabela(d, tbodyId, pageInfoId, pageBtnsId, countId, paginaAtual, onPage) {
-  const tbody = document.getElementById(tbodyId);
-  const lista = d.dados || [];
-  if(!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--muted)">Nenhum registro encontrado</td></tr>`;
-  } else {
-    tbody.innerHTML = lista.map((e, i) => `
-      <tr>
-        <td><div class="co-name">${e.nome_fantasia || e.razao_social || "—"}</div><div class="co-cnae">${(e.cnae||"").substring(0,45)}</div></td>
-        <td class="mono" style="font-size:11px">${fmtCNPJ(e.cnpj)}</td>
-        <td>${porteBadge(e.porte)}</td>
-        <td style="font-size:12px">${e.municipio||"—"}<br><span style="color:var(--muted)">${e.uf||""}</span></td>
-        <td style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">${e.abertura||"—"}</td>
-        <td style="font-size:12px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.socio_principal||"—"}</td>
-        <td class="mono" style="font-size:11px">${_celTelefone(e)}</td>
-        <td>${_celEmail(e)}</td>
-        <td><button class="btn-ver" onclick="abrirModal(${i},'${tbodyId}')">ver +</button></td>
-      </tr>`).join("");
-  }
-  const total = d.total || 0;
-  const pages = Math.ceil(total / (d.por_pagina || 20));
-  document.getElementById(countId).textContent = `${total.toLocaleString("pt-BR")} resultados`;
-  document.getElementById(pageInfoId).textContent = `Página ${paginaAtual} de ${Math.max(1,pages)}`;
-  const pb = document.getElementById(pageBtnsId);
-  pb.innerHTML = "";
-
-  // ← Anterior (sempre visível se não está na pág 1)
-  const btnPrev = document.createElement("button");
-  btnPrev.className = "page-btn";
-  btnPrev.textContent = "← Ant";
-  btnPrev.disabled = paginaAtual <= 1;
-  btnPrev.style.opacity = paginaAtual <= 1 ? "0.3" : "1";
-  btnPrev.onclick = () => { if(paginaAtual > 1) onPage(paginaAtual - 1); };
-  pb.appendChild(btnPrev);
-
-  // Páginas numeradas com elipse
-  const startPg = Math.max(1, paginaAtual - 2);
-  const endPg   = Math.min(pages, paginaAtual + 2);
-  if(startPg > 1) {
-    const b1 = document.createElement("button");
-    b1.className = "page-btn"; b1.textContent = "1";
-    b1.onclick = () => onPage(1); pb.appendChild(b1);
-    if(startPg > 2) { const dots = document.createElement("span"); dots.textContent = "…"; dots.style.padding = "0 4px"; pb.appendChild(dots); }
-  }
-  for(let pg = startPg; pg <= endPg; pg++) {
-    const b = document.createElement("button");
-    b.className = "page-btn" + (pg === paginaAtual ? " active" : "");
-    b.textContent = pg;
-    b.onclick = () => onPage(pg);
-    pb.appendChild(b);
-  }
-  if(endPg < pages) {
-    if(endPg < pages - 1) { const dots = document.createElement("span"); dots.textContent = "…"; dots.style.padding = "0 4px"; pb.appendChild(dots); }
-    const bLast = document.createElement("button");
-    bLast.className = "page-btn"; bLast.textContent = pages;
-    bLast.onclick = () => onPage(pages); pb.appendChild(bLast);
-  }
-
-  // Próxima → (sempre visível se não está na última pág)
-  const btnNext = document.createElement("button");
-  btnNext.className = "page-btn";
-  btnNext.textContent = "Próx →";
-  btnNext.disabled = paginaAtual >= pages;
-  btnNext.style.opacity = paginaAtual >= pages ? "0.3" : "1";
-  btnNext.onclick = () => { if(paginaAtual < pages) onPage(paginaAtual + 1); };
-  pb.appendChild(btnNext);
-}
-
-async function abrirModal(i, tbodyId) {
-  const arr = tbodyId === "tbody" ? dados : advDados;
-  const base = arr[i]; if(!base) return;
-
-  // Mostra modal de loading imediatamente
-  document.getElementById("modal-content").innerHTML = `
-    <div class="modal-top">
-      <div>
-        <div class="modal-title">${base.razao_social||"—"}</div>
-        <div class="modal-sub">${fmtCNPJ(base.cnpj)}</div>
-      </div>
-      <button class="modal-close" onclick="fecharModal()">×</button>
-    </div>
-    <div style="text-align:center;padding:2rem;color:var(--muted)">Carregando detalhes...</div>`;
-  document.getElementById("modal").className = "modal-bg open";
-
-  // Chama API para consumir quota e obter dados completos
-  let e = base;
-  try {
-    const r = await fetch(API + "/api/empresa/" + base.cnpj, {headers: H});
-    if (r.status === 429) {
-      document.getElementById("modal-content").innerHTML = `
-        <div class="modal-top"><div><div class="modal-title">Limite diário atingido</div></div>
-          <button class="modal-close" onclick="fecharModal()">×</button></div>
-        <div style="padding:1.5rem;color:var(--muted);text-align:center">
-          <div style="font-size:2rem;margin-bottom:12px">🔒</div>
-          <p>Você atingiu o limite de <strong>${planoInfo.limite_dia} CNPJs/dia</strong> do plano Free.</p>
-          <button class="modal-btn" style="margin-top:16px" onclick="fecharModal();abrirUpgrade()">Ver planos</button>
-        </div>`;
-      return;
-    }
-    if (r.ok) {
-      e = await r.json();
-      // Atualiza quota na barra lateral
-      carregarPlano();
-    }
-  } catch(err) { /* usa dados locais como fallback */ }
-
-  document.getElementById("modal-content").innerHTML = `
-    <div class="modal-top">
-      <div>
-        <div class="modal-title">${e.razao_social||"—"}</div>
-        <div class="modal-sub">${fmtCNPJ(e.cnpj)} · Aberta em ${e.abertura||"—"} · <span style="color:var(--accent2)">${e.situacao||"ATIVA"}</span></div>
-      </div>
-      <button class="modal-close" onclick="fecharModal()">×</button>
-    </div>
-    <div class="modal-grid">
-      <div class="modal-field"><div class="lbl">Nome fantasia</div><div class="val">${e.nome_fantasia||"—"}</div></div>
-      <div class="modal-field"><div class="lbl">Porte</div><div class="val">${e.porte||"—"}</div></div>
-      <div class="modal-field"><div class="lbl">Sócio principal</div><div class="val">${e.socio_principal||"—"}</div></div>
-      <div class="modal-field"><div class="lbl">Cidade / UF</div><div class="val">${e.municipio||"—"} — ${e.uf||"—"}</div></div>
-      <div class="modal-field"><div class="lbl">Telefone</div><div class="val" style="color:var(--accent2)">${e.telefone||"Não encontrado"}</div></div>
-      <div class="modal-field"><div class="lbl">E-mail</div><div class="val" style="font-size:12px;color:#7bbef0">${e.email||"—"}</div></div>
-      <div class="modal-field"><div class="lbl">Site</div><div class="val" style="font-size:12px">${e.site||"—"}</div></div>
-      <div class="modal-field" style="grid-column:span 2"><div class="lbl">Setor / CNAE</div><div class="val" style="font-size:13px">${e.cnae||"—"}</div></div>
-    </div>
-    <div class="modal-actions">
-      ${e.telefone ? `<button class="modal-btn" onclick="window.open('https://wa.me/55${(e.telefone||"").replace(/\D/g,"")}','_blank')">💬 WhatsApp</button>` : ""}
-      ${e.email ? `<button class="modal-btn" onclick="window.open('mailto:${e.email}','_blank')">✉️ E-mail</button>` : ""}
-      ${e.site ? `<button class="modal-btn" onclick="window.open('https://${(e.site||"").replace(/https?:\/\//,"")}','_blank')">🌐 Site</button>` : ""}
-    </div>`;
-}
-function fecharModal() { document.getElementById("modal").className = "modal-bg"; }
-
-function toggleFiltro(t) {
-  filtros[t] = !filtros[t];
-  const cls = {tel:"on-blue", email:"on-amber", insta:"on-green", site:"on-purple"};
-  document.getElementById("t-" + t).className = "toggle-btn" + (filtros[t] ? " " + cls[t] : "");
-  pagina = 1; buscar();
-}
-function toggleSemContato() {
-  filtros.comContato = !filtros.comContato;
-  const btn = document.getElementById("t-sem-contato");
-  if (filtros.comContato) {
-    btn.textContent = "✅ Com contato";
-    btn.style.cssText = "border-color:#555;color:#888;background:rgba(255,255,255,0.04)";
-    btn.title = "Clique para incluir empresas sem nenhum contato";
-  } else {
-    btn.textContent = "⬜ Todos (incl. sem contato)";
-    btn.style.cssText = "border-color:var(--warn);color:#f0b96e;background:rgba(239,159,39,0.08)";
-    btn.title = "Mostrando todas as empresas, inclusive sem contato";
-  }
-  pagina = 1; buscar();
-}
-function toggleAdv(t) {
-  advFiltros[t] = !advFiltros[t];
-  const cls = {tel:"on-blue", email:"on-amber", insta:"on-green", site:"on-purple"};
-  document.getElementById("adv-t-" + t).className = "toggle-btn" + (advFiltros[t] ? " " + cls[t] : "");
-}
-
-function limparFiltros() {
-  document.getElementById("q").value = "";
-  document.getElementById("uf").value = "";
-  document.getElementById("porte").value = "";
-  filtros = {tel:false, email:false, insta:false, site:false, comContato:false};
-  ["tel","email","insta","site"].forEach(t => document.getElementById("t-"+t).className = "toggle-btn");
-  const btnSC = document.getElementById("t-sem-contato");
-  if(btnSC) { btnSC.classList.remove("on-gray"); btnSC.title = "Clique para incluir empresas sem contato"; }
-  pagina = 1; buscar();
-}
-function limparAvancado() {
-  ["adv-q"].forEach(id => document.getElementById(id).value = "");
-  ["adv-cnae","adv-uf","adv-porte"].forEach(id => document.getElementById(id).value = "");
-  ["adv-de","adv-ate"].forEach(id => document.getElementById(id).value = "");
-  advFiltros = {tel:false, email:false, insta:false, site:false};
-  ["tel","email","insta","site"].forEach(t => document.getElementById("adv-t-"+t).className = "toggle-btn");
-  advPagina = 1;
-}
-
-function exportarCSV() {
-  if (planoInfo && !planoInfo.export) {
-    abrirUpgrade();
-    return;
-  }
-  // Usa o endpoint /api/export que aplica os limites do plano no servidor
-  const params = new URLSearchParams({
-    q: document.getElementById("q")?.value || "",
-    uf: document.getElementById("uf")?.value || "",
-    porte: document.getElementById("porte")?.value || "",
-    com_telefone: filtros.tel,
-    com_email: filtros.email,
-    com_instagram: filtros.insta,
-    com_site: filtros.site,
-  });
-  const url = API + "/api/export?" + params;
-  const a = document.createElement("a");
-  a.href = url;
-  // Passa o token como parâmetro já que download não suporta headers
-  a.href = url + "&_token=" + TOKEN;
-  fetch(url, {headers: H})
-    .then(r => {
-      if (!r.ok) return r.json().then(e => { throw new Error(e.detail || "Erro no export"); });
-      return r.blob();
-    })
-    .then(blob => {
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = "cnpj_intel_" + new Date().toISOString().slice(0,10) + ".csv";
-      link.click();
-    })
-    .catch(e => alert("Erro ao exportar: " + e.message));
-}
-
-function exportarCSVAdv() {
-  if (planoInfo && !planoInfo.export) { abrirUpgrade(); return; }
-  // Export dos resultados da busca avançada (mesma lógica com filtros adv)
-  const params = new URLSearchParams({
-    q: document.getElementById("adv-q")?.value || "",
-    uf: document.getElementById("adv-uf")?.value || "",
-    porte: document.getElementById("adv-porte")?.value || "",
-    categoria: document.getElementById("adv-cnae")?.value || "",
-    abertura_de: document.getElementById("adv-de")?.value || "",
-    abertura_ate: document.getElementById("adv-ate")?.value || "",
-    com_telefone: advFiltros.tel,
-    com_email: advFiltros.email,
-    com_instagram: advFiltros.insta,
-    com_site: advFiltros.site,
-  });
-  fetch(API + "/api/export?" + params, {headers: H})
-    .then(r => {
-      if (!r.ok) return r.json().then(e => { throw new Error(e.detail || "Erro"); });
-      return r.blob();
-    })
-    .then(blob => {
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = "cnpj_busca_" + new Date().toISOString().slice(0,10) + ".csv";
-      link.click();
-    })
-    .catch(e => alert("Erro ao exportar: " + e.message));
-}
-
-function _abrirModalHtml(html) {
-  document.getElementById("modal-content").innerHTML = html;
-  document.getElementById("modal").className = "modal-bg open";
-}
-
-function porteBadge(p) {
-  if(!p) return `<span class="badge b-de">—</span>`;
-  if(p==="MEI") return `<span class="badge b-mei">MEI</span>`;
-  if(p.includes("MICRO")) return `<span class="badge b-me">ME</span>`;
-  if(p.includes("PEQUENO")) return `<span class="badge b-epp">EPP</span>`;
-  return `<span class="badge b-de">${p.substring(0,6)}</span>`;
-}
-function fmtCNPJ(c) {
-  if(!c || c.length < 14) return c || "—";
-  return c.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-}
-function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
-
-// ─── Admin ───────────────────────────────────────────────────────
-let _urlBase = window.location.origin;
-
-function gerarTokenSugestao() {
-  // Só gera sugestão visual, o token real é criado no servidor
-}
-
-async function criarToken() {
-  const nome  = document.getElementById("novo-nome").value.trim();
-  const plano = document.getElementById("novo-plano").value;
-  if (!nome) { alert("Digite um nome para o cliente."); return; }
-
-  // Token = nome_slug + número aleatório
-  const slug  = nome.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-  const token = slug + "_" + Math.random().toString(36).slice(2, 8);
-
-  try {
-    const r = await fetch(
-      `${API}/api/admin/tokens?token=${encodeURIComponent(token)}&plano=${plano}`,
-      { method: "POST", headers: H }
-    );
-    if (!r.ok) { const e = await r.json(); alert("Erro: " + e.detail); return; }
-
-    const link = `${_urlBase}?token=${token}`;
-    document.getElementById("link-cliente").textContent = link;
-    document.getElementById("token-gerado").style.display = "block";
-    document.getElementById("novo-nome").value = "";
-    carregarTokens();
-  } catch(e) {
-    alert("Erro ao criar token: " + e.message);
-  }
-}
-
-function copiarLink() {
-  const txt = document.getElementById("link-cliente").textContent;
-  navigator.clipboard.writeText(txt).then(() => {
-    const btn = event.target;
-    btn.textContent = "Copiado!";
-    setTimeout(() => btn.textContent = "Copiar", 2000);
-  });
-}
-
-async function carregarTokens() {
-  try {
-    const r = await fetch(API + "/api/admin/tokens", { headers: H });
-    if (!r.ok) return;
-    const lista = await r.json();
-    const tbody = document.getElementById("tokens-tbody");
-
-    if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">Nenhum cliente ainda</td></tr>`;
-      return;
-    }
-
-    const planoLabel = { free: "Gratuito", basico: "Básico R$60", pro: "Pro R$100" };
-    const planoCor   = { free: "var(--warn)", basico: "var(--info)", pro: "var(--accent2)" };
-
-    tbody.innerHTML = lista.map(t => {
-      const limite   = t.limite_dia ?? "∞";
-      const usado    = t.cnpjs_hoje || 0;
-      const pct      = t.limite_dia ? Math.round((usado / t.limite_dia) * 100) : 0;
-      const barCor   = pct >= 90 ? "var(--danger)" : pct >= 70 ? "var(--warn)" : "var(--accent)";
-      const ativo    = t.ativo || t.ativo === 1 || t.ativo === true;
-      const criadoEm = t.criado_em ? t.criado_em.slice(0,10) : "—";
-      const link     = `${_urlBase}?token=${t.token}`;
-
-      return `<tr>
-        <td>
-          <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text)">${t.token}</div>
-          <div style="font-size:10px;margin-top:3px">
-            <a href="${link}" target="_blank" style="color:var(--muted);text-decoration:none;font-size:10px">🔗 link de acesso</a>
-            &nbsp;·&nbsp;
-            <span style="cursor:pointer;color:var(--muted)" onclick="navigator.clipboard.writeText('${link}').then(()=>alert('Link copiado!'))">copiar</span>
-          </div>
-        </td>
-        <td><span style="font-size:11px;font-weight:600;color:${planoCor[t.plano] || 'var(--muted)'}">${planoLabel[t.plano] || t.plano}</span></td>
-        <td>
-          <div style="font-size:11px;font-family:'DM Mono',monospace;margin-bottom:4px">${usado} / ${limite}</div>
-          ${t.limite_dia ? `<div style="height:3px;background:var(--border);border-radius:4px;width:80px"><div style="height:100%;width:${pct}%;background:${barCor};border-radius:4px"></div></div>` : '<div style="font-size:10px;color:var(--accent2)">ilimitado</div>'}
-        </td>
-        <td style="font-size:11px;color:var(--muted)">${criadoEm}</td>
-        <td><span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${ativo ? 'rgba(29,158,117,0.15)' : 'rgba(226,75,74,0.15)'};color:${ativo ? 'var(--accent2)' : 'var(--danger)'}">${ativo ? 'Ativo' : 'Inativo'}</span></td>
-        <td>${ativo ? `<button onclick="desativarToken('${t.token}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--danger);background:transparent;color:var(--danger);cursor:pointer">Desativar</button>` : '—'}</td>
-      </tr>`;
-    }).join("");
-
-  } catch(e) {
-    console.error("Erro ao carregar tokens:", e);
-  }
-}
-
-async function desativarToken(token) {
-  if (!confirm(`Desativar o acesso do token "${token}"?\nO cliente perderá o acesso imediatamente.`)) return;
-  try {
-    const r = await fetch(`${API}/api/admin/tokens/${encodeURIComponent(token)}`, { method: "DELETE", headers: H });
-    if (r.ok) carregarTokens();
-    else { const e = await r.json(); alert("Erro: " + e.detail); }
-  } catch(e) {
-    alert("Erro: " + e.message);
-  }
-}
-
-// Mostra aba admin só para token admin
-function verificarAdmin() {
-  if (!planoInfo) return;
-  if (planoInfo.plano === "admin") {
-    document.getElementById("nav-admin").style.display = "flex";
-    document.getElementById("tab-admin").style.display = "block";
-  }
-}
-
-async function carregarCategorias() {
-  try {
-    const r = await fetch(API + "/api/categorias", {headers: H});
-    if (!r.ok) return;
-    const cats = await r.json();
-    const sel = document.getElementById("adv-cnae");
-    sel.innerHTML = '<option value="">Todos os setores</option>';
-    cats.forEach(c => {
-      const opt = document.createElement("option");
-      opt.value = c.categoria;
-      opt.textContent = c.categoria;
-      sel.appendChild(opt);
-    });
-  } catch(e) {}
-}
-
-carregarStats();
-carregarPlano().then(verificarAdmin).then(carregarCategorias);
-buscar();
-setInterval(carregarStats, 15000);
-setInterval(carregarPlano, 60000);
-</script>
+<script src="/app/app.js" defer></script>
 </body>
 </html>
