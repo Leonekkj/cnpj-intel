@@ -44,9 +44,12 @@ def _run_db_migrations():
     n = db.migrar_telefones_invalidos()
     if n > 0:
         _log_api.info(f"🧹 {n} telefones inválidos convertidos para NULL")
+    n = db.remigrar_departamentos()
+    if n > 0:
+        _log_api.info(f"🏷️  {n} registros reclassificados (setor + departamento)")
     n = db.migrar_categorias_faltantes()
     if n > 0:
-        _log_api.info(f"🏷️  {n} categorias recomputadas")
+        _log_api.info(f"🏷️  {n} categorias/departamentos preenchidos")
     n = db.migrar_municipios()
     if n > 0:
         _log_api.info(f"🏙️  {n} municípios migrados de código numérico para nome")
@@ -193,7 +196,8 @@ def listar_empresas(
     uf:            str  = Query(""),
     porte:         str  = Query(""),
     cnae:          str  = Query("", description="Filtro livre por descrição CNAE"),
-    categoria:     str  = Query("", description="Filtro por categoria padronizada (ex: Advocacia, Saúde)"),
+    categoria:     str  = Query("", description="Filtro por macro setor (ex: Saúde e Bem-estar)"),
+    departamento:  str  = Query("", description="Filtro por departamento (ex: Odontologia)"),
     abertura_de:   str  = Query("", description="Data de abertura inicial YYYY-MM-DD"),
     abertura_ate:  str  = Query("", description="Data de abertura final YYYY-MM-DD"),
     com_email:     bool = Query(False),
@@ -226,7 +230,7 @@ def listar_empresas(
                         "plano": info["nome_plano"], "restante": 0}
 
     resultado = db.buscar_empresas(
-        q=q, uf=uf, porte=porte, cnae=cnae, categoria=categoria,
+        q=q, uf=uf, porte=porte, cnae=cnae, categoria=categoria, departamento=departamento,
         abertura_de=abertura_de, abertura_ate=abertura_ate,
         com_email=com_email, com_instagram=com_instagram,
         com_telefone=com_telefone, com_site=com_site,
@@ -281,6 +285,12 @@ def listar_categorias(info: dict = Depends(get_token_info)):
     return db.listar_categorias()
 
 
+@app.get("/api/departamentos")
+def listar_departamentos(info: dict = Depends(get_token_info)):
+    """Retorna hierarquia macro_setor → departamentos com contagem."""
+    return db.listar_departamentos()
+
+
 @app.get("/api/empresa/{cnpj}")
 def detalhe_empresa(cnpj: str, info: dict = Depends(get_token_info)):
     cnpj_limpo = re.sub(r"\D", "", cnpj)
@@ -308,6 +318,7 @@ def exportar_csv(
     porte:         str  = Query(""),
     cnae:          str  = Query(""),
     categoria:     str  = Query(""),
+    departamento:  str  = Query(""),
     abertura_de:   str  = Query(""),
     abertura_ate:  str  = Query(""),
     com_email:     bool = Query(False),
@@ -319,7 +330,7 @@ def exportar_csv(
     """Exporta resultados como CSV. Requer plano Básico ou Pro."""
     limite_export = 500 if info["plano"] == "basico" else 5000
     resultado = db.buscar_empresas(
-        q=q, uf=uf, porte=porte, cnae=cnae, categoria=categoria,
+        q=q, uf=uf, porte=porte, cnae=cnae, categoria=categoria, departamento=departamento,
         abertura_de=abertura_de, abertura_ate=abertura_ate,
         com_email=com_email, com_instagram=com_instagram,
         com_telefone=com_telefone, com_site=com_site,

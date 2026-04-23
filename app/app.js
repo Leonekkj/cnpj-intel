@@ -55,9 +55,10 @@ const state = {
   totalDados: 0,
   loading: false,
   categories: [],
+  departamentos: [],
   tokens: [],
   tokensLoading: false,
-  filters: { q: "", uf: "", porte: "", categoria: "", tel: false, email: false, site: false, insta: false, abertura_de: "", abertura_ate: "" },
+  filters: { q: "", uf: "", porte: "", categoria: "", departamento: "", tel: false, email: false, site: false, insta: false, abertura_de: "", abertura_ate: "" },
   sort: { key: null, dir: "asc" },
   page: 1,
   perPage: 14,
@@ -176,7 +177,8 @@ async function loadEmpresas() {
   if (f.q)          params.set("q", f.q);
   if (f.uf)         params.set("uf", f.uf);
   if (f.porte)      params.set("porte", f.porte);
-  if (f.categoria)  params.set("categoria", f.categoria);
+  if (f.departamento) params.set("departamento", f.departamento);
+  else if (f.categoria) params.set("categoria", f.categoria);
   if (f.tel)        params.set("com_telefone", "true");
   if (f.email)      params.set("com_email", "true");
   if (f.site)       params.set("com_site", "true");
@@ -205,9 +207,15 @@ async function loadDetail(cnpj) {
 }
 
 async function loadCategories() {
-  const data = await apiFetch("/api/categorias");
-  if (data && !data._err && Array.isArray(data)) {
-    state.categories = data.map(d => d.categoria || d).filter(Boolean);
+  const [cats, deptos] = await Promise.all([
+    apiFetch("/api/categorias"),
+    apiFetch("/api/departamentos"),
+  ]);
+  if (cats && !cats._err && Array.isArray(cats)) {
+    state.categories = cats.map(d => d.categoria || d).filter(Boolean);
+  }
+  if (deptos && !deptos._err && Array.isArray(deptos)) {
+    state.departamentos = deptos;
   }
 }
 
@@ -221,7 +229,8 @@ async function exportCSV() {
   if (f.q)          params.set("q", f.q);
   if (f.uf)         params.set("uf", f.uf);
   if (f.porte)      params.set("porte", f.porte);
-  if (f.categoria)  params.set("categoria", f.categoria);
+  if (f.departamento) params.set("departamento", f.departamento);
+  else if (f.categoria) params.set("categoria", f.categoria);
   if (f.tel)        params.set("com_telefone", "true");
   if (f.email)      params.set("com_email", "true");
   if (f.site)       params.set("com_site", "true");
@@ -631,11 +640,23 @@ function filterBar(showDates = false) {
         </select>
       </div>
       <div class="chip select">
-        <select onchange="updateFilter('categoria', this.value)">
+        <select onchange="onSetorChange(this.value)">
           <option value="">Setor</option>
           ${cats.map(c => `<option ${f.categoria===c?"selected":""}>${c}</option>`).join("")}
         </select>
       </div>
+      ${(() => {
+        const setorSel = f.categoria;
+        const deptoGroup = state.departamentos.find(g => g.setor === setorSel);
+        const deptos = deptoGroup ? deptoGroup.departamentos : [];
+        if (!setorSel || deptos.length === 0) return "";
+        return `<div class="chip select">
+          <select onchange="updateFilter('departamento', this.value)">
+            <option value="">Departamento</option>
+            ${deptos.map(d => `<option ${f.departamento===d.departamento?"selected":""}>${d.departamento}</option>`).join("")}
+          </select>
+        </div>`;
+      })()}
       <div class="chip-sep"></div>
       <button class="chip ${f.tel?"on":""}"   onclick="toggleF('tel')">${ICONS.phone}Com telefone</button>
       <button class="chip ${f.email?"on in":""}" onclick="toggleF('email')">${ICONS.mail}Com e-mail</button>
@@ -970,13 +991,19 @@ function updateFilter(k, v) {
   state.page = 1;
   loadEmpresas();
 }
+function onSetorChange(v) {
+  state.filters.categoria = v;
+  state.filters.departamento = "";
+  state.page = 1;
+  loadEmpresas();
+}
 function toggleF(k) {
   state.filters[k] = !state.filters[k];
   state.page = 1;
   loadEmpresas();
 }
 function clearFilters() {
-  state.filters = { q:"", uf:"", porte:"", categoria:"", tel:false, email:false, site:false, insta:false, abertura_de:"", abertura_ate:"" };
+  state.filters = { q:"", uf:"", porte:"", categoria:"", departamento:"", tel:false, email:false, site:false, insta:false, abertura_de:"", abertura_ate:"" };
   state.page = 1;
   loadEmpresas();
 }

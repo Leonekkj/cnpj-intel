@@ -106,164 +106,475 @@ def telefone_valido(tel) -> bool:
     return tel.strip().lower() not in _TELEFONES_INVALIDOS
 
 
-# ─── Mapeamento CNAE → macro-setor ───────────────────────────────────────────
-# Nível 1: código numérico CNAE (7 dígitos) → macro-setor via divisões IBGE.
-# Os dois primeiros dígitos determinam a divisão; range-based lookup.
-_DIVISOES_CNAE = [
-    ((1,  3),  "Agropecuária"),
-    ((5,  9),  "Indústria Extrativa"),
-    ((10, 33), "Indústria de Transformação"),
-    ((35, 39), "Energia e Saneamento"),
-    ((41, 43), "Construção"),
-    ((45, 47), "Comércio"),
-    ((49, 53), "Transporte e Logística"),
-    ((55, 56), "Alimentação e Hospedagem"),
-    ((58, 63), "Informação e Tecnologia"),
-    ((64, 66), "Serviços Financeiros"),
-    ((68, 68), "Imobiliário"),
-    ((69, 75), "Serviços Profissionais"),
-    ((77, 82), "Serviços Administrativos"),
-    ((84, 84), "Administração Pública"),
-    ((85, 85), "Educação"),
-    ((86, 88), "Saúde"),
-    ((90, 93), "Arte e Entretenimento"),
-    ((94, 96), "Outros Serviços"),
-]
-
-# Nível 2: substring em descrições textuais (fallback quando CNAE vem do BrasilAPI).
-# Mapeado para os mesmos macro-setores do Nível 1 para consistência.
-CNAE_CATEGORIAS = {
-    # Alimentação e Hospedagem (55-56)
-    "restaurante":              "Alimentação e Hospedagem",
-    "padaria":                  "Alimentação e Hospedagem",
-    "confeitaria":              "Alimentação e Hospedagem",
-    "lanchonete":               "Alimentação e Hospedagem",
-    "mercearia":                "Comércio",
-    "minimercado":              "Comércio",
-    "supermercad":              "Comércio",
-    "hipermercad":              "Comércio",
-    "açougue":                  "Alimentação e Hospedagem",
-    "abate":                    "Indústria de Transformação",
-    "hotel":                    "Alimentação e Hospedagem",
-    "pousada":                  "Alimentação e Hospedagem",
-    # Saúde (86-88)
-    "odontol":                  "Saúde",
-    "farmáci":                  "Saúde",
-    "farmaci":                  "Saúde",
-    "drogari":                  "Saúde",
-    "veterinári":               "Saúde",
-    "veterinari":               "Saúde",
-    "fisioterapia":             "Saúde",
-    "psicolog":                 "Saúde",
-    "médico":                   "Saúde",
-    "clínica":                  "Saúde",
-    "hospital":                 "Saúde",
-    "laboratori":               "Saúde",
-    # Outros Serviços (94-96)
-    "cabeleireiro":             "Outros Serviços",
-    "salão de beleza":          "Outros Serviços",
-    "manicure":                 "Outros Serviços",
-    "barbearia":                "Outros Serviços",
-    "estétic":                  "Outros Serviços",
-    "estetica":                 "Outros Serviços",
-    "condicionamento físico":   "Outros Serviços",
-    "academia":                 "Outros Serviços",
-    "ginástica":                "Outros Serviços",
-    # Informação e Tecnologia (58-63)
-    "software":                 "Informação e Tecnologia",
-    "desenvolvimento de sistem":"Informação e Tecnologia",
-    "informátic":               "Informação e Tecnologia",
-    "computador":               "Informação e Tecnologia",
-    "telecomunicaç":            "Informação e Tecnologia",
-    "telecom":                  "Informação e Tecnologia",
-    # Educação (85)
-    "escola":                   "Educação",
-    "ensino fundament":         "Educação",
-    "ensino médio":             "Educação",
-    "ensino superior":          "Educação",
-    "curso":                    "Educação",
-    "treinamento":              "Educação",
-    "idioma":                   "Educação",
-    "língua":                   "Educação",
-    # Serviços Profissionais (69-75)
-    "advocat":                  "Serviços Profissionais",
-    "contábi":                  "Serviços Profissionais",
-    "imobiliár":                "Serviços Profissionais",
-    "imobiliari":               "Serviços Profissionais",
-    "engenhari":                "Serviços Profissionais",
-    "consultori":               "Serviços Profissionais",
-    # Construção (41-43)
-    "construtora":              "Construção",
-    "construção de edifíc":     "Construção",
-    "obras de albanearia":      "Construção",
-    "instalação elétric":       "Construção",
-    "eletricista":              "Construção",
-    "instalações hidráulic":    "Construção",
-    "encanador":                "Construção",
-    # Comércio (45-47)
-    "vestuári":                 "Comércio",
-    "confecç":                  "Comércio",
-    "calçado":                  "Comércio",
-    "móveis":                   "Comércio",
-    "moveleiro":                "Comércio",
-    "eletrodoméstic":           "Comércio",
-    "eletrodomestic":           "Comércio",
-    "veículos automotores":     "Comércio",
-    "automóvei":                "Comércio",
-    "peças e acessórios":       "Comércio",
-    "combustível":              "Comércio",
-    "posto de gasolina":        "Comércio",
-    # Transporte e Logística (49-53)
-    "transporte rodoviário de carga": "Transporte e Logística",
-    "transporte de carga":      "Transporte e Logística",
-    "transporte rodoviário de passageiro": "Transporte e Logística",
-    "transporte de passageiro": "Transporte e Logística",
-    "logístic":                 "Transporte e Logística",
-    "armazenamento":            "Transporte e Logística",
-    # Agropecuária (01-03)
-    "agricultur":               "Agropecuária",
-    "pecuári":                  "Agropecuária",
-    "criação de":               "Agropecuária",
-    "pesca":                    "Agropecuária",
-    "aquicultur":               "Agropecuária",
+# ─── Mapeamento CNAE → Departamento + Macro Setor ────────────────────────────
+# Método primário: prefixo de 3 dígitos do código CNAE → (departamento, macro_setor).
+# Cobre ~95% dos casos (seeds com código numérico de 7 dígitos da Receita Federal).
+_CNAE_GRUPOS = {
+    # Agro e Agronegócio (01-03, 75)
+    "011": ("Agricultura e Cultivos",           "Agro e Agronegócio"),
+    "012": ("Agricultura e Cultivos",           "Agro e Agronegócio"),
+    "013": ("Pecuária",                         "Agro e Agronegócio"),
+    "014": ("Pecuária",                         "Agro e Agronegócio"),
+    "015": ("Pecuária",                         "Agro e Agronegócio"),
+    "016": ("Agricultura e Cultivos",           "Agro e Agronegócio"),
+    "021": ("Silvicultura e Floresta",          "Agro e Agronegócio"),
+    "022": ("Silvicultura e Floresta",          "Agro e Agronegócio"),
+    "023": ("Silvicultura e Floresta",          "Agro e Agronegócio"),
+    "024": ("Silvicultura e Floresta",          "Agro e Agronegócio"),
+    "031": ("Pesca e Aquicultura",              "Agro e Agronegócio"),
+    "032": ("Pesca e Aquicultura",              "Agro e Agronegócio"),
+    "750": ("Veterinária",                      "Agro e Agronegócio"),
+    # Indústria e Produção — Mineração e Extração (05-09)
+    "051": ("Mineração e Extração",             "Indústria e Produção"),
+    "052": ("Mineração e Extração",             "Indústria e Produção"),
+    "061": ("Mineração e Extração",             "Indústria e Produção"),
+    "062": ("Mineração e Extração",             "Indústria e Produção"),
+    "071": ("Mineração e Extração",             "Indústria e Produção"),
+    "072": ("Mineração e Extração",             "Indústria e Produção"),
+    "081": ("Mineração e Extração",             "Indústria e Produção"),
+    "089": ("Mineração e Extração",             "Indústria e Produção"),
+    "091": ("Mineração e Extração",             "Indústria e Produção"),
+    "099": ("Mineração e Extração",             "Indústria e Produção"),
+    # Indústria e Produção — Alimentícia (10-12)
+    "101": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "102": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "103": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "104": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "105": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "106": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "107": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "108": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "109": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "110": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "111": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "112": ("Indústria Alimentícia",            "Indústria e Produção"),
+    "120": ("Indústria Alimentícia",            "Indústria e Produção"),
+    # Indústria e Produção — Têxtil e Vestuário (13-15)
+    "131": ("Indústria Têxtil e Vestuário",     "Indústria e Produção"),
+    "132": ("Indústria Têxtil e Vestuário",     "Indústria e Produção"),
+    "133": ("Indústria Têxtil e Vestuário",     "Indústria e Produção"),
+    "134": ("Indústria Têxtil e Vestuário",     "Indústria e Produção"),
+    "135": ("Indústria Têxtil e Vestuário",     "Indústria e Produção"),
+    "139": ("Indústria Têxtil e Vestuário",     "Indústria e Produção"),
+    "141": ("Indústria Têxtil e Vestuário",     "Indústria e Produção"),
+    "142": ("Indústria Têxtil e Vestuário",     "Indústria e Produção"),
+    "151": ("Indústria Têxtil e Vestuário",     "Indústria e Produção"),
+    "152": ("Indústria Têxtil e Vestuário",     "Indústria e Produção"),
+    # Indústria e Produção — Papel, Madeira e Móveis (16-18, 31)
+    "161": ("Papel, Madeira e Móveis",          "Indústria e Produção"),
+    "162": ("Papel, Madeira e Móveis",          "Indústria e Produção"),
+    "170": ("Papel, Madeira e Móveis",          "Indústria e Produção"),
+    "171": ("Papel, Madeira e Móveis",          "Indústria e Produção"),
+    "172": ("Papel, Madeira e Móveis",          "Indústria e Produção"),
+    "181": ("Papel, Madeira e Móveis",          "Indústria e Produção"),
+    "182": ("Papel, Madeira e Móveis",          "Indústria e Produção"),
+    "310": ("Papel, Madeira e Móveis",          "Indústria e Produção"),
+    # Indústria e Produção — Química e Farmacêutica (19-21)
+    "191": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    "192": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    "201": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    "202": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    "203": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    "204": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    "205": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    "206": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    "211": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    "212": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    # Indústria e Produção — Outros (22-23, 32-33)
+    "221": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "222": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "231": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "232": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "233": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "234": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "235": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "239": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "321": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "322": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "323": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "324": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "325": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "329": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "331": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    "332": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    # Indústria e Produção — Metalurgia (24-25)
+    "241": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    "242": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    "243": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    "244": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    "245": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    "246": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    "251": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    "252": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    "253": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    "254": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    "255": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    "259": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
+    # Indústria e Produção — Eletrônica e Equipamentos (26-28)
+    "261": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "262": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "263": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "264": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "265": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "266": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "267": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "268": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "271": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "272": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "273": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "274": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "275": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "279": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "281": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "282": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "283": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "284": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    "289": ("Eletrônica e Equipamentos",        "Indústria e Produção"),
+    # Indústria e Produção — Automotivo (29-30)
+    "291": ("Automotivo",                       "Indústria e Produção"),
+    "292": ("Automotivo",                       "Indústria e Produção"),
+    "293": ("Automotivo",                       "Indústria e Produção"),
+    "301": ("Automotivo",                       "Indústria e Produção"),
+    "302": ("Automotivo",                       "Indústria e Produção"),
+    "303": ("Automotivo",                       "Indústria e Produção"),
+    "304": ("Automotivo",                       "Indústria e Produção"),
+    "309": ("Automotivo",                       "Indústria e Produção"),
+    # Energia e Utilities (35-39)
+    "351": ("Energia Elétrica e Gás",           "Energia e Utilities"),
+    "352": ("Energia Elétrica e Gás",           "Energia e Utilities"),
+    "353": ("Energia Elétrica e Gás",           "Energia e Utilities"),
+    "360": ("Água e Saneamento",                "Energia e Utilities"),
+    "370": ("Água e Saneamento",                "Energia e Utilities"),
+    "381": ("Gestão de Resíduos",               "Energia e Utilities"),
+    "382": ("Gestão de Resíduos",               "Energia e Utilities"),
+    "383": ("Gestão de Resíduos",               "Energia e Utilities"),
+    "390": ("Gestão de Resíduos",               "Energia e Utilities"),
+    # Construção e Infraestrutura (41-43)
+    "411": ("Construção Civil e Edifícios",          "Construção e Infraestrutura"),
+    "412": ("Construção Civil e Edifícios",          "Construção e Infraestrutura"),
+    "421": ("Obras de Infraestrutura",               "Construção e Infraestrutura"),
+    "422": ("Obras de Infraestrutura",               "Construção e Infraestrutura"),
+    "429": ("Obras de Infraestrutura",               "Construção e Infraestrutura"),
+    "431": ("Serviços Especializados de Construção", "Construção e Infraestrutura"),
+    "432": ("Serviços Especializados de Construção", "Construção e Infraestrutura"),
+    "433": ("Serviços Especializados de Construção", "Construção e Infraestrutura"),
+    "439": ("Serviços Especializados de Construção", "Construção e Infraestrutura"),
+    # Comércio Atacado e Varejo (45-47)
+    "451": ("Comércio de Veículos e Peças",          "Comércio Atacado e Varejo"),
+    "452": ("Comércio de Veículos e Peças",          "Comércio Atacado e Varejo"),
+    "453": ("Comércio de Veículos e Peças",          "Comércio Atacado e Varejo"),
+    "454": ("Comércio de Veículos e Peças",          "Comércio Atacado e Varejo"),
+    "461": ("Atacado de Alimentos e Bebidas",        "Comércio Atacado e Varejo"),
+    "462": ("Atacado de Alimentos e Bebidas",        "Comércio Atacado e Varejo"),
+    "463": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
+    "464": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
+    "465": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
+    "466": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
+    "467": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
+    "469": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
+    "471": ("Varejo de Alimentos e Supermercados",   "Comércio Atacado e Varejo"),
+    "472": ("Varejo de Alimentos e Supermercados",   "Comércio Atacado e Varejo"),
+    "473": ("Comércio de Veículos e Peças",          "Comércio Atacado e Varejo"),
+    "474": ("Varejo de Casa e Decoração",            "Comércio Atacado e Varejo"),
+    "475": ("Varejo de Casa e Decoração",            "Comércio Atacado e Varejo"),
+    "476": ("Varejo de Eletrônicos e Informática",   "Comércio Atacado e Varejo"),
+    "477": ("Varejo de Saúde e Farmácias",           "Comércio Atacado e Varejo"),
+    "478": ("Varejo de Vestuário e Calçados",        "Comércio Atacado e Varejo"),
+    "479": ("Outros Comércios Varejistas",           "Comércio Atacado e Varejo"),
+    # Logística e Transporte (49-53)
+    "491": ("Transporte Rodoviário de Cargas",       "Logística e Transporte"),
+    "492": ("Transporte Rodoviário de Passageiros",  "Logística e Transporte"),
+    "493": ("Transporte Rodoviário de Passageiros",  "Logística e Transporte"),
+    "494": ("Transporte Rodoviário de Cargas",       "Logística e Transporte"),
+    "495": ("Transporte Rodoviário de Cargas",       "Logística e Transporte"),
+    "501": ("Transporte Aquaviário",                 "Logística e Transporte"),
+    "502": ("Transporte Aquaviário",                 "Logística e Transporte"),
+    "503": ("Transporte Aquaviário",                 "Logística e Transporte"),
+    "504": ("Transporte Aquaviário",                 "Logística e Transporte"),
+    "511": ("Transporte Aéreo",                      "Logística e Transporte"),
+    "512": ("Transporte Aéreo",                      "Logística e Transporte"),
+    "521": ("Armazenagem e Logística",               "Logística e Transporte"),
+    "522": ("Armazenagem e Logística",               "Logística e Transporte"),
+    "531": ("Correio e Entregas",                    "Logística e Transporte"),
+    "532": ("Correio e Entregas",                    "Logística e Transporte"),
+    # Alimentação e Hospitalidade (55-56)
+    "551": ("Hotéis e Pousadas",                     "Alimentação e Hospitalidade"),
+    "552": ("Hostels e Hospedagem Alternativa",      "Alimentação e Hospitalidade"),
+    "559": ("Hotéis e Pousadas",                     "Alimentação e Hospitalidade"),
+    "561": ("Restaurantes e Lanchonetes",            "Alimentação e Hospitalidade"),
+    "562": ("Delivery e Catering",                   "Alimentação e Hospitalidade"),
+    "563": ("Bares e Entretenimento Noturno",        "Alimentação e Hospitalidade"),
+    # Tecnologia e Marketing (58-63, 73-74)
+    "581": ("Mídia e Conteúdo",                      "Tecnologia e Marketing"),
+    "582": ("Mídia e Conteúdo",                      "Tecnologia e Marketing"),
+    "591": ("Criação e Design",                      "Tecnologia e Marketing"),
+    "592": ("Mídia e Conteúdo",                      "Tecnologia e Marketing"),
+    "601": ("Mídia e Conteúdo",                      "Tecnologia e Marketing"),
+    "602": ("Mídia e Conteúdo",                      "Tecnologia e Marketing"),
+    "611": ("Telecomunicações",                      "Tecnologia e Marketing"),
+    "612": ("Telecomunicações",                      "Tecnologia e Marketing"),
+    "613": ("Telecomunicações",                      "Tecnologia e Marketing"),
+    "619": ("Telecomunicações",                      "Tecnologia e Marketing"),
+    "620": ("Desenvolvimento de Software",           "Tecnologia e Marketing"),
+    "621": ("Desenvolvimento de Software",           "Tecnologia e Marketing"),
+    "622": ("Desenvolvimento de Software",           "Tecnologia e Marketing"),
+    "631": ("Infraestrutura e Cloud",                "Tecnologia e Marketing"),
+    "639": ("Pesquisa e Dados",                      "Tecnologia e Marketing"),
+    "731": ("Marketing e Publicidade",               "Tecnologia e Marketing"),
+    "732": ("Pesquisa e Dados",                      "Tecnologia e Marketing"),
+    "741": ("Criação e Design",                      "Tecnologia e Marketing"),
+    "742": ("Criação e Design",                      "Tecnologia e Marketing"),
+    "743": ("Pesquisa e Dados",                      "Tecnologia e Marketing"),
+    # Financeiro (64-66)
+    "641": ("Bancos e Crédito",                      "Financeiro"),
+    "642": ("Bancos e Crédito",                      "Financeiro"),
+    "643": ("Bancos e Crédito",                      "Financeiro"),
+    "649": ("Correspondentes e Serviços Financeiros","Financeiro"),
+    "651": ("Seguros e Previdência",                 "Financeiro"),
+    "652": ("Seguros e Previdência",                 "Financeiro"),
+    "661": ("Investimentos e Mercado de Capitais",   "Financeiro"),
+    "662": ("Seguros e Previdência",                 "Financeiro"),
+    "663": ("Investimentos e Mercado de Capitais",   "Financeiro"),
+    # Imobiliário (68)
+    "681": ("Incorporação Imobiliária",              "Imobiliário"),
+    "682": ("Locação e Gestão de Imóveis",           "Imobiliário"),
+    # Jurídico (69)
+    "691": ("Advogados e Escritórios Jurídicos",     "Jurídico"),
+    "692": ("Contabilidade e Auditoria",             "Jurídico"),
+    "693": ("Cartórios e Registros",                 "Jurídico"),
+    # Serviços Profissionais (70-72, 749)
+    "701": ("Consultoria Empresarial e Gestão",      "Serviços Profissionais"),
+    "702": ("Consultoria Empresarial e Gestão",      "Serviços Profissionais"),
+    "711": ("Arquitetura e Engenharia",              "Serviços Profissionais"),
+    "712": ("Arquitetura e Engenharia",              "Serviços Profissionais"),
+    "713": ("Arquitetura e Engenharia",              "Serviços Profissionais"),
+    "721": ("Pesquisa e Desenvolvimento",            "Serviços Profissionais"),
+    "722": ("Pesquisa e Desenvolvimento",            "Serviços Profissionais"),
+    "749": ("Outros Serviços Profissionais",         "Serviços Profissionais"),
+    # Serviços Profissionais — RH (78)
+    "781": ("Recursos Humanos",                      "Serviços Profissionais"),
+    "782": ("Recursos Humanos",                      "Serviços Profissionais"),
+    "783": ("Recursos Humanos",                      "Serviços Profissionais"),
+    # Serviços Locais (77, 79-82)
+    "771": ("Serviços de Apoio Administrativo",      "Serviços Locais"),
+    "772": ("Reparação e Manutenção",                "Serviços Locais"),
+    "773": ("Serviços de Apoio Administrativo",      "Serviços Locais"),
+    "774": ("Serviços de Apoio Administrativo",      "Serviços Locais"),
+    "775": ("Serviços de Apoio Administrativo",      "Serviços Locais"),
+    "791": ("Agências de Viagem e Turismo",          "Serviços Locais"),
+    "799": ("Agências de Viagem e Turismo",          "Serviços Locais"),
+    "801": ("Segurança Privada",                     "Serviços Locais"),
+    "802": ("Segurança Privada",                     "Serviços Locais"),
+    "803": ("Segurança Privada",                     "Serviços Locais"),
+    "811": ("Limpeza e Higienização",                "Serviços Locais"),
+    "812": ("Limpeza e Higienização",                "Serviços Locais"),
+    "813": ("Limpeza e Higienização",                "Serviços Locais"),
+    "821": ("Serviços de Apoio Administrativo",      "Serviços Locais"),
+    "822": ("Serviços de Apoio Administrativo",      "Serviços Locais"),
+    "823": ("Serviços de Apoio Administrativo",      "Serviços Locais"),
+    "829": ("Serviços de Apoio Administrativo",      "Serviços Locais"),
+    # Setor Público e Associações (84, 94)
+    "841": ("Administração Pública",                 "Setor Público e Associações"),
+    "842": ("Administração Pública",                 "Setor Público e Associações"),
+    "843": ("Administração Pública",                 "Setor Público e Associações"),
+    "941": ("Associações e Sindicatos",              "Setor Público e Associações"),
+    "942": ("Associações e Sindicatos",              "Setor Público e Associações"),
+    "943": ("ONGs e Fundações",                      "Setor Público e Associações"),
+    "944": ("Organizações Religiosas",               "Setor Público e Associações"),
+    "949": ("ONGs e Fundações",                      "Setor Público e Associações"),
+    # Educação e Treinamento (85)
+    "851": ("Ensino Básico",                         "Educação e Treinamento"),
+    "852": ("Ensino Básico",                         "Educação e Treinamento"),
+    "853": ("Ensino Básico",                         "Educação e Treinamento"),
+    "854": ("Ensino Superior",                       "Educação e Treinamento"),
+    "855": ("Ensino Profissionalizante e Cursos",    "Educação e Treinamento"),
+    "856": ("Treinamento Corporativo",               "Educação e Treinamento"),
+    "859": ("Cursos Livres e Idiomas",               "Educação e Treinamento"),
+    # Saúde e Bem-estar (86-88)
+    "861": ("Hospitais e Clínicas Gerais",           "Saúde e Bem-estar"),
+    "862": ("Hospitais e Clínicas Gerais",           "Saúde e Bem-estar"),
+    "863": ("Consultórios Médicos",                  "Saúde e Bem-estar"),
+    "864": ("Laboratórios e Diagnóstico",            "Saúde e Bem-estar"),
+    "865": ("Fisioterapia e Reabilitação",           "Saúde e Bem-estar"),
+    "869": ("Consultórios Médicos",                  "Saúde e Bem-estar"),
+    "871": ("Assistência Social",                    "Saúde e Bem-estar"),
+    "872": ("Saúde Mental",                          "Saúde e Bem-estar"),
+    "873": ("Assistência Social",                    "Saúde e Bem-estar"),
+    "879": ("Assistência Social",                    "Saúde e Bem-estar"),
+    "881": ("Assistência Social",                    "Saúde e Bem-estar"),
+    "889": ("Assistência Social",                    "Saúde e Bem-estar"),
+    # Serviços Locais — Arte, Esportes e Entretenimento (90-93)
+    "900": ("Arte e Cultura",                        "Serviços Locais"),
+    "910": ("Arte e Cultura",                        "Serviços Locais"),
+    "911": ("Arte e Cultura",                        "Serviços Locais"),
+    "912": ("Arte e Cultura",                        "Serviços Locais"),
+    "920": ("Apostas e Loteria",                     "Serviços Locais"),
+    "931": ("Academias e Esportes",                  "Serviços Locais"),
+    "932": ("Entretenimento e Lazer",                "Serviços Locais"),
+    "933": ("Academias e Esportes",                  "Serviços Locais"),
+    "939": ("Entretenimento e Lazer",                "Serviços Locais"),
+    # Serviços Locais — Reparação e Serviços Pessoais (95-96)
+    "951": ("Reparação e Manutenção",                "Serviços Locais"),
+    "952": ("Reparação e Manutenção",                "Serviços Locais"),
+    "960": ("Beleza e Estética",                     "Serviços Locais"),
+    "961": ("Beleza e Estética",                     "Serviços Locais"),
+    "962": ("Beleza e Estética",                     "Serviços Locais"),
+    "963": ("Beleza e Estética",                     "Serviços Locais"),
+    "969": ("Beleza e Estética",                     "Serviços Locais"),
 }
 
-# Dict com chaves normalizadas (sem acento) para matching robusto
-_CNAE_CATS_NORM = {_norm(k): v for k, v in CNAE_CATEGORIAS.items()}
+# Método fallback: padrões de raiz textual para CNAEs salvos como descrição.
+# Ordem importa: mais específicos primeiro para evitar falso-positivo.
+# Cada entrada: (padrão_raiz_lowercase, (departamento, macro_setor))
+_DEPARTAMENTOS_TEXTO = [
+    # Jurídico
+    ("advoca",         ("Advogados e Escritórios Jurídicos",  "Jurídico")),
+    ("juridic",        ("Advogados e Escritórios Jurídicos",  "Jurídico")),
+    ("cartório",       ("Cartórios e Registros",              "Jurídico")),
+    ("cartorio",       ("Cartórios e Registros",              "Jurídico")),
+    ("contab",         ("Contabilidade e Auditoria",          "Jurídico")),
+    ("auditoria",      ("Contabilidade e Auditoria",          "Jurídico")),
+    ("escrit",         ("Contabilidade e Auditoria",          "Jurídico")),
+    # Saúde e Bem-estar
+    ("hospital",       ("Hospitais e Clínicas Gerais",        "Saúde e Bem-estar")),
+    ("clinica",        ("Hospitais e Clínicas Gerais",        "Saúde e Bem-estar")),
+    ("odontol",        ("Odontologia",                        "Saúde e Bem-estar")),
+    ("dentar",         ("Odontologia",                        "Saúde e Bem-estar")),
+    ("laborat",        ("Laboratórios e Diagnóstico",         "Saúde e Bem-estar")),
+    ("fisioter",       ("Fisioterapia e Reabilitação",        "Saúde e Bem-estar")),
+    ("psicolog",       ("Saúde Mental",                       "Saúde e Bem-estar")),
+    ("medic",          ("Consultórios Médicos",               "Saúde e Bem-estar")),
+    ("assist social",  ("Assistência Social",                 "Saúde e Bem-estar")),
+    # Varejo de Saúde e Farmácias (47) — antes de "saude" genérico
+    ("farmac",         ("Varejo de Saúde e Farmácias",        "Comércio Atacado e Varejo")),
+    ("drogari",        ("Varejo de Saúde e Farmácias",        "Comércio Atacado e Varejo")),
+    # Alimentação e Hospitalidade
+    ("restaur",        ("Restaurantes e Lanchonetes",         "Alimentação e Hospitalidade")),
+    ("lanchon",        ("Restaurantes e Lanchonetes",         "Alimentação e Hospitalidade")),
+    ("padaria",        ("Restaurantes e Lanchonetes",         "Alimentação e Hospitalidade")),
+    ("pizzar",         ("Restaurantes e Lanchonetes",         "Alimentação e Hospitalidade")),
+    ("churrascar",     ("Restaurantes e Lanchonetes",         "Alimentação e Hospitalidade")),
+    ("buffet",         ("Delivery e Catering",                "Alimentação e Hospitalidade")),
+    ("catering",       ("Delivery e Catering",                "Alimentação e Hospitalidade")),
+    ("hotel",          ("Hotéis e Pousadas",                  "Alimentação e Hospitalidade")),
+    ("pousada",        ("Hostels e Hospedagem Alternativa",   "Alimentação e Hospitalidade")),
+    ("alojament",      ("Hostels e Hospedagem Alternativa",   "Alimentação e Hospitalidade")),
+    # Tecnologia e Marketing
+    ("softwar",        ("Desenvolvimento de Software",        "Tecnologia e Marketing")),
+    ("sistem",         ("Desenvolvimento de Software",        "Tecnologia e Marketing")),
+    ("tecnolog",       ("Infraestrutura e Cloud",             "Tecnologia e Marketing")),
+    ("internet",       ("Telecomunicações",                   "Tecnologia e Marketing")),
+    ("telecom",        ("Telecomunicações",                   "Tecnologia e Marketing")),
+    ("publicidad",     ("Marketing e Publicidade",            "Tecnologia e Marketing")),
+    ("marketing",      ("Marketing e Publicidade",            "Tecnologia e Marketing")),
+    ("design",         ("Criação e Design",                   "Tecnologia e Marketing")),
+    ("fotograf",       ("Criação e Design",                   "Tecnologia e Marketing")),
+    ("audiovisual",    ("Criação e Design",                   "Tecnologia e Marketing")),
+    # Educação e Treinamento
+    ("escola",         ("Ensino Básico",                      "Educação e Treinamento")),
+    ("colegio",        ("Ensino Básico",                      "Educação e Treinamento")),
+    ("faculdad",       ("Ensino Superior",                    "Educação e Treinamento")),
+    ("universid",      ("Ensino Superior",                    "Educação e Treinamento")),
+    ("curso",          ("Cursos Livres e Idiomas",            "Educação e Treinamento")),
+    ("treinam",        ("Treinamento Corporativo",            "Educação e Treinamento")),
+    ("idioma",         ("Cursos Livres e Idiomas",            "Educação e Treinamento")),
+    # Construção e Infraestrutura
+    ("constru",        ("Construção Civil e Edifícios",       "Construção e Infraestrutura")),
+    ("incorpor",       ("Construção Civil e Edifícios",       "Construção e Infraestrutura")),
+    ("reform",         ("Serviços Especializados de Construção","Construção e Infraestrutura")),
+    ("instalac",       ("Serviços Especializados de Construção","Construção e Infraestrutura")),
+    ("eletricist",     ("Serviços Especializados de Construção","Construção e Infraestrutura")),
+    ("encanador",      ("Serviços Especializados de Construção","Construção e Infraestrutura")),
+    # Imobiliário
+    ("imobiliar",      ("Locação e Gestão de Imóveis",        "Imobiliário")),
+    ("imovel",         ("Locação e Gestão de Imóveis",        "Imobiliário")),
+    ("locac",          ("Locação e Gestão de Imóveis",        "Imobiliário")),
+    # Financeiro
+    ("banco",          ("Bancos e Crédito",                   "Financeiro")),
+    ("financ",         ("Bancos e Crédito",                   "Financeiro")),
+    ("seguro",         ("Seguros e Previdência",              "Financeiro")),
+    ("corretora",      ("Investimentos e Mercado de Capitais","Financeiro")),
+    ("previdenc",      ("Seguros e Previdência",              "Financeiro")),
+    # Logística e Transporte
+    ("transpor",       ("Transporte Rodoviário de Cargas",    "Logística e Transporte")),
+    ("logistic",       ("Armazenagem e Logística",            "Logística e Transporte")),
+    ("frete",          ("Transporte Rodoviário de Cargas",    "Logística e Transporte")),
+    ("entrega",        ("Correio e Entregas",                 "Logística e Transporte")),
+    ("armazen",        ("Armazenagem e Logística",            "Logística e Transporte")),
+    # Serviços Profissionais
+    ("engenhari",      ("Arquitetura e Engenharia",           "Serviços Profissionais")),
+    ("arquitet",       ("Arquitetura e Engenharia",           "Serviços Profissionais")),
+    ("consultori",     ("Consultoria Empresarial e Gestão",   "Serviços Profissionais")),
+    ("recrutam",       ("Recursos Humanos",                   "Serviços Profissionais")),
+    ("selecao",        ("Recursos Humanos",                   "Serviços Profissionais")),
+    # Serviços Locais
+    ("beleza",         ("Beleza e Estética",                  "Serviços Locais")),
+    ("estetica",       ("Beleza e Estética",                  "Serviços Locais")),
+    ("salao",          ("Beleza e Estética",                  "Serviços Locais")),
+    ("barbearia",      ("Beleza e Estética",                  "Serviços Locais")),
+    ("academia",       ("Academias e Esportes",               "Serviços Locais")),
+    ("limpeza",        ("Limpeza e Higienização",             "Serviços Locais")),
+    ("vigilanc",       ("Segurança Privada",                  "Serviços Locais")),
+    ("seguranca",      ("Segurança Privada",                  "Serviços Locais")),
+    ("viagem",         ("Agências de Viagem e Turismo",       "Serviços Locais")),
+    ("turism",         ("Agências de Viagem e Turismo",       "Serviços Locais")),
+    ("manutenc",       ("Reparação e Manutenção",             "Serviços Locais")),
+    ("reparo",         ("Reparação e Manutenção",             "Serviços Locais")),
+    # Agro e Agronegócio
+    ("agricol",        ("Agricultura e Cultivos",             "Agro e Agronegócio")),
+    ("agropecuar",     ("Pecuária",                          "Agro e Agronegócio")),
+    ("pecuar",         ("Pecuária",                          "Agro e Agronegócio")),
+    ("veterinar",      ("Veterinária",                       "Agro e Agronegócio")),
+    ("pet shop",       ("Veterinária",                       "Agro e Agronegócio")),
+    ("pesca",          ("Pesca e Aquicultura",               "Agro e Agronegócio")),
+    # Setor Público e Associações
+    ("associac",       ("Associações e Sindicatos",           "Setor Público e Associações")),
+    ("sindicat",       ("Associações e Sindicatos",           "Setor Público e Associações")),
+    ("fundacao",       ("ONGs e Fundações",                   "Setor Público e Associações")),
+    ("igreja",         ("Organizações Religiosas",            "Setor Público e Associações")),
+    ("templo",         ("Organizações Religiosas",            "Setor Público e Associações")),
+    # Comércio Atacado e Varejo (genérico — deve vir por último)
+    ("supermercad",    ("Varejo de Alimentos e Supermercados","Comércio Atacado e Varejo")),
+    ("comercio",       ("Outros Comércios Varejistas",        "Comércio Atacado e Varejo")),
+    ("atacado",        ("Atacado de Outros Produtos",         "Comércio Atacado e Varejo")),
+]
+
+
+def cnae_para_departamento(cnae: str) -> tuple:
+    """
+    Retorna (departamento, macro_setor) a partir do código CNAE.
+    Método primário: prefixo de 3 dígitos → _CNAE_GRUPOS.
+    Fallback: padrões textuais normalizados → _DEPARTAMENTOS_TEXTO.
+    """
+    cnae = (cnae or "").strip()
+    if not cnae:
+        return ("Outros", "Outros")
+    if len(cnae) >= 3 and cnae[:3].isdigit():
+        resultado = _CNAE_GRUPOS.get(cnae[:3])
+        if resultado:
+            return resultado
+        return ("Outros", "Outros")
+    cnae_norm = _norm(cnae)
+    for padrao, resultado in _DEPARTAMENTOS_TEXTO:
+        if padrao in cnae_norm:
+            return resultado
+    return ("Outros", "Outros")
 
 
 def cnae_para_categoria(cnae: str) -> str:
-    """Retorna o macro-setor a partir do código CNAE numérico ou da descrição textual."""
-    cnae = (cnae or "").strip()
-    if not cnae:
-        return "Outros"
-    # Código numérico (ex: "5611201") — usa primeiros 2 dígitos para lookup por divisão
-    if len(cnae) >= 2 and cnae[:2].isdigit():
-        try:
-            div = int(cnae[:2])
-            for (lo, hi), setor in _DIVISOES_CNAE:
-                if lo <= div <= hi:
-                    return setor
-        except ValueError:
-            pass
-        return "Outros"
-    # Descrição textual — substring matching (fallback para seeds via BrasilAPI)
-    cnae_norm = _norm(cnae)
-    for substr, cat in _CNAE_CATS_NORM.items():
-        if substr in cnae_norm:
-            return cat
-    return "Outros"
+    """Retorna o macro-setor a partir do código CNAE. Wrapper de cnae_para_departamento."""
+    return cnae_para_departamento(cnae)[1]
 
 
 # Conjunto de macro-setores válidos da versão atual.
 # Usado por migrar_categorias_faltantes() para pular registros já corretos.
 _MACRO_SETORES_VALIDOS = frozenset({
-    "Agropecuária", "Indústria Extrativa", "Indústria de Transformação",
-    "Energia e Saneamento", "Construção", "Comércio", "Transporte e Logística",
-    "Alimentação e Hospedagem", "Informação e Tecnologia", "Serviços Financeiros",
-    "Imobiliário", "Serviços Profissionais", "Serviços Administrativos",
-    "Administração Pública", "Educação", "Saúde", "Arte e Entretenimento",
-    "Outros Serviços", "Outros",
+    "Agro e Agronegócio", "Indústria e Produção", "Energia e Utilities",
+    "Construção e Infraestrutura", "Comércio Atacado e Varejo", "Logística e Transporte",
+    "Alimentação e Hospitalidade", "Tecnologia e Marketing", "Financeiro",
+    "Imobiliário", "Jurídico", "Serviços Profissionais", "Serviços Locais",
+    "Educação e Treinamento", "Saúde e Bem-estar", "Setor Público e Associações",
+    "Outros",
 })
 
 
@@ -419,13 +730,15 @@ class Database:
                     avaliacoes       TEXT,
                     atualizado_em    TEXT,
                     categoria_padrao TEXT,
-                    qualidade_contato TEXT DEFAULT 'media'
+                    qualidade_contato TEXT DEFAULT 'media',
+                    departamento     TEXT
                 )
             """)
-            # Adiciona coluna categoria_padrao em bancos já existentes (idempotente)
+            # Adiciona colunas em bancos já existentes (idempotente)
             if USE_POSTGRES:
                 cur.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS categoria_padrao TEXT")
                 cur.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS qualidade_contato TEXT DEFAULT 'media'")
+                cur.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS departamento TEXT")
             else:
                 try:
                     cur.execute("ALTER TABLE empresas ADD COLUMN categoria_padrao TEXT")
@@ -435,8 +748,12 @@ class Database:
                     cur.execute("ALTER TABLE empresas ADD COLUMN qualidade_contato TEXT DEFAULT 'media'")
                 except Exception:
                     conn.rollback()
+                try:
+                    cur.execute("ALTER TABLE empresas ADD COLUMN departamento TEXT")
+                except Exception:
+                    conn.rollback()
 
-            for idx in ["uf", "porte", "email", "cnae", "abertura", "atualizado_em", "categoria_padrao"]:
+            for idx in ["uf", "porte", "email", "cnae", "abertura", "atualizado_em", "categoria_padrao", "departamento"]:
                 cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{idx} ON empresas({idx})")
 
             # Índices parciais para os filtros de "tem contato" — só PostgreSQL
@@ -530,7 +847,7 @@ class Database:
         def _sets_pg():
             fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
                      "municipio","uf","socio_principal","atualizado_em","categoria_padrao",
-                     "qualidade_contato"]
+                     "qualidade_contato","departamento"]
             partes = [f"{f}=EXCLUDED.{f}" for f in fixos]
             partes += [f"{f}={_coalesce_pg.format(f=f)}" for f in contatos]
             return ", ".join(partes)
@@ -538,13 +855,18 @@ class Database:
         def _sets_sq():
             fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
                      "municipio","uf","socio_principal","atualizado_em","categoria_padrao",
-                     "qualidade_contato"]
+                     "qualidade_contato","departamento"]
             partes = [f"{f}=excluded.{f}" for f in fixos]
             partes += [f"{f}={_coalesce_sq.format(f=f)}" for f in contatos]
             return ", ".join(partes)
 
-        # Deriva categoria_padrao a partir do CNAE (se não vier no perfil)
-        cat = perfil.get("categoria_padrao") or cnae_para_categoria(perfil.get("cnae", ""))
+        # Deriva categoria_padrao e departamento a partir do CNAE
+        cnae_val = perfil.get("cnae", "")
+        depto, cat = cnae_para_departamento(cnae_val)
+        if perfil.get("categoria_padrao"):
+            cat = perfil["categoria_padrao"]
+        if perfil.get("departamento"):
+            depto = perfil["departamento"]
         qualidade = perfil.get("qualidade_contato", "media")
 
         sql_pg = f"""
@@ -552,8 +874,8 @@ class Database:
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
              instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
-             qualidade_contato)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+             qualidade_contato, departamento)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (cnpj) DO UPDATE SET {_sets_pg()}
         """
         sql_sq = f"""
@@ -561,8 +883,8 @@ class Database:
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
              instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
-             qualidade_contato)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             qualidade_contato, departamento)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(cnpj) DO UPDATE SET {_sets_sq()}
         """
         valores = (
@@ -571,7 +893,7 @@ class Database:
             perfil.get("abertura"), perfil.get("municipio"), perfil.get("uf"),
             perfil.get("socio_principal"), perfil.get("telefone",""), perfil.get("email",""),
             perfil.get("instagram",""), perfil.get("site",""), perfil.get("rating_google",""),
-            perfil.get("avaliacoes",""), perfil.get("atualizado_em"), cat, qualidade,
+            perfil.get("avaliacoes",""), perfil.get("atualizado_em"), cat, qualidade, depto,
         )
         with _conn() as conn:
             cur = conn.cursor()
@@ -591,7 +913,7 @@ class Database:
         contatos = ("telefone", "email", "instagram", "site", "rating_google", "avaliacoes")
         fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
                  "municipio","uf","socio_principal","atualizado_em","categoria_padrao",
-                 "qualidade_contato"]
+                 "qualidade_contato","departamento"]
 
         sets_pg = ", ".join(
             [f"{f}=EXCLUDED.{f}" for f in fixos] +
@@ -607,8 +929,8 @@ class Database:
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
              instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
-             qualidade_contato)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+             qualidade_contato, departamento)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (cnpj) DO UPDATE SET {sets_pg}
         """
         sql_sq = f"""
@@ -616,14 +938,19 @@ class Database:
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
              instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
-             qualidade_contato)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             qualidade_contato, departamento)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(cnpj) DO UPDATE SET {sets_sq}
         """
 
         rows = []
         for perfil in perfis:
-            cat = perfil.get("categoria_padrao") or cnae_para_categoria(perfil.get("cnae", ""))
+            cnae_val = perfil.get("cnae", "")
+            depto, cat = cnae_para_departamento(cnae_val)
+            if perfil.get("categoria_padrao"):
+                cat = perfil["categoria_padrao"]
+            if perfil.get("departamento"):
+                depto = perfil["departamento"]
             qualidade = perfil.get("qualidade_contato", "media")
             rows.append((
                 perfil.get("cnpj"), perfil.get("razao_social"), perfil.get("nome_fantasia"),
@@ -631,7 +958,7 @@ class Database:
                 perfil.get("abertura"), perfil.get("municipio"), perfil.get("uf"),
                 perfil.get("socio_principal"), perfil.get("telefone", ""), perfil.get("email", ""),
                 perfil.get("instagram", ""), perfil.get("site", ""), perfil.get("rating_google", ""),
-                perfil.get("avaliacoes", ""), perfil.get("atualizado_em"), cat, qualidade,
+                perfil.get("avaliacoes", ""), perfil.get("atualizado_em"), cat, qualidade, depto,
             ))
 
         sql = sql_pg if USE_POSTGRES else sql_sq
@@ -693,7 +1020,7 @@ class Database:
                     recentes.add(cnpj_db)
         return recentes
 
-    def buscar_empresas(self, q="", uf="", porte="", cnae="", categoria="",
+    def buscar_empresas(self, q="", uf="", porte="", cnae="", categoria="", departamento="",
                         abertura_de="", abertura_ate="",
                         com_email=False, com_instagram=False,
                         com_telefone=False, com_site=False,
@@ -712,8 +1039,10 @@ class Database:
         if porte:
             filtros.append(f"porte {LIKE} {PH}")
             params.append(f"%{porte}%")
-        if categoria:
-            # Filtro por categoria padronizada (match exato — campo normalizado)
+        if departamento:
+            filtros.append(f"departamento = {PH}")
+            params.append(departamento)
+        elif categoria:
             filtros.append(f"categoria_padrao = {PH}")
             params.append(categoria)
         elif cnae:
@@ -789,17 +1118,18 @@ class Database:
     def migrar_categorias_faltantes(self) -> int:
         """
         Reclassifica apenas registros com categorias antigas ou inválidas.
-        Processa em batches de 5.000 para não crashar o PostgreSQL.
-        Idempotente: na segunda execução encontra 0 registros e retorna 0.
+        Também preenche departamento quando ausente.
+        Processa em batches de 5.000. Idempotente.
         """
         placeholders = ",".join([PH] * len(_MACRO_SETORES_VALIDOS))
         sql_select = (
             f"SELECT cnpj, cnae FROM empresas "
             f"WHERE categoria_padrao IS NULL OR categoria_padrao = '' "
             f"OR categoria_padrao NOT IN ({placeholders}) "
+            f"OR departamento IS NULL OR departamento = '' "
             f"LIMIT 5000"
         )
-        sql_update = f"UPDATE empresas SET categoria_padrao = {PH} WHERE cnpj = {PH}"
+        sql_update = f"UPDATE empresas SET categoria_padrao = {PH}, departamento = {PH} WHERE cnpj = {PH}"
         total = 0
         while True:
             with _conn() as conn:
@@ -808,11 +1138,59 @@ class Database:
                 rows = cur.fetchall()
                 if not rows:
                     break
-                updates = [(cnae_para_categoria(cnae), cnpj) for cnpj, cnae in rows]
+                updates = []
+                for cnpj, cnae in rows:
+                    depto, cat = cnae_para_departamento(cnae)
+                    updates.append((cat, depto, cnpj))
                 cur.executemany(sql_update, updates)
                 conn.commit()
                 total += len(updates)
         return total
+
+    def remigrar_departamentos(self) -> int:
+        """
+        Recalcula departamento e categoria_padrao para TODOS os registros com as
+        regras atuais de cnae_para_departamento(). Idempotente. Batches de 5.000.
+        Chamar apenas quando as regras de classificação mudarem.
+        """
+        sql_update = f"UPDATE empresas SET departamento = {PH}, categoria_padrao = {PH} WHERE cnpj = {PH}"
+        total = 0
+        offset = 0
+        while True:
+            with _conn() as conn:
+                cur = conn.cursor()
+                cur.execute(f"SELECT cnpj, cnae FROM empresas LIMIT 5000 OFFSET {offset}")
+                rows = cur.fetchall()
+            if not rows:
+                break
+            updates = []
+            for cnpj, cnae in rows:
+                depto, cat = cnae_para_departamento(cnae)
+                updates.append((depto, cat, cnpj))
+            with _conn() as conn:
+                cur = conn.cursor()
+                cur.executemany(sql_update, updates)
+                conn.commit()
+            total += len(rows)
+            offset += 5000
+        return total
+
+    def listar_departamentos(self) -> list:
+        """Retorna hierarquia macro_setor → departamentos com contagem (empresas com telefone)."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT categoria_padrao, departamento, COUNT(*) as n
+                FROM empresas
+                WHERE departamento IS NOT NULL AND departamento != ''
+                  AND telefone IS NOT NULL AND telefone != ''
+                GROUP BY categoria_padrao, departamento
+                ORDER BY categoria_padrao, n DESC
+            """)
+            resultado = {}
+            for setor, depto, n in cur.fetchall():
+                resultado.setdefault(setor, []).append({"departamento": depto, "n": n})
+            return [{"setor": k, "departamentos": v} for k, v in sorted(resultado.items())]
 
     def migrar_municipios(self) -> int:
         """
