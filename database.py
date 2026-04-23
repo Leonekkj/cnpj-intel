@@ -418,17 +418,23 @@ class Database:
                     rating_google    TEXT,
                     avaliacoes       TEXT,
                     atualizado_em    TEXT,
-                    categoria_padrao TEXT
+                    categoria_padrao TEXT,
+                    qualidade_contato TEXT DEFAULT 'media'
                 )
             """)
             # Adiciona coluna categoria_padrao em bancos já existentes (idempotente)
             if USE_POSTGRES:
                 cur.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS categoria_padrao TEXT")
+                cur.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS qualidade_contato TEXT DEFAULT 'media'")
             else:
                 try:
                     cur.execute("ALTER TABLE empresas ADD COLUMN categoria_padrao TEXT")
                 except Exception:
-                    conn.rollback()  # SQLite não suporta IF NOT EXISTS — reseta transação
+                    conn.rollback()
+                try:
+                    cur.execute("ALTER TABLE empresas ADD COLUMN qualidade_contato TEXT DEFAULT 'media'")
+                except Exception:
+                    conn.rollback()
 
             for idx in ["uf", "porte", "email", "cnae", "abertura", "atualizado_em", "categoria_padrao"]:
                 cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{idx} ON empresas({idx})")
@@ -523,35 +529,40 @@ class Database:
 
         def _sets_pg():
             fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
-                     "municipio","uf","socio_principal","atualizado_em","categoria_padrao"]
+                     "municipio","uf","socio_principal","atualizado_em","categoria_padrao",
+                     "qualidade_contato"]
             partes = [f"{f}=EXCLUDED.{f}" for f in fixos]
             partes += [f"{f}={_coalesce_pg.format(f=f)}" for f in contatos]
             return ", ".join(partes)
 
         def _sets_sq():
             fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
-                     "municipio","uf","socio_principal","atualizado_em","categoria_padrao"]
+                     "municipio","uf","socio_principal","atualizado_em","categoria_padrao",
+                     "qualidade_contato"]
             partes = [f"{f}=excluded.{f}" for f in fixos]
             partes += [f"{f}={_coalesce_sq.format(f=f)}" for f in contatos]
             return ", ".join(partes)
 
         # Deriva categoria_padrao a partir do CNAE (se não vier no perfil)
         cat = perfil.get("categoria_padrao") or cnae_para_categoria(perfil.get("cnae", ""))
+        qualidade = perfil.get("qualidade_contato", "media")
 
         sql_pg = f"""
             INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
-             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
+             qualidade_contato)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (cnpj) DO UPDATE SET {_sets_pg()}
         """
         sql_sq = f"""
             INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
-             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
+             qualidade_contato)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(cnpj) DO UPDATE SET {_sets_sq()}
         """
         valores = (
@@ -560,7 +571,7 @@ class Database:
             perfil.get("abertura"), perfil.get("municipio"), perfil.get("uf"),
             perfil.get("socio_principal"), perfil.get("telefone",""), perfil.get("email",""),
             perfil.get("instagram",""), perfil.get("site",""), perfil.get("rating_google",""),
-            perfil.get("avaliacoes",""), perfil.get("atualizado_em"), cat,
+            perfil.get("avaliacoes",""), perfil.get("atualizado_em"), cat, qualidade,
         )
         with _conn() as conn:
             cur = conn.cursor()
@@ -579,7 +590,8 @@ class Database:
         _coalesce_sq = "CASE WHEN excluded.{f} != '' THEN excluded.{f} ELSE empresas.{f} END"
         contatos = ("telefone", "email", "instagram", "site", "rating_google", "avaliacoes")
         fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
-                 "municipio","uf","socio_principal","atualizado_em","categoria_padrao"]
+                 "municipio","uf","socio_principal","atualizado_em","categoria_padrao",
+                 "qualidade_contato"]
 
         sets_pg = ", ".join(
             [f"{f}=EXCLUDED.{f}" for f in fixos] +
@@ -594,29 +606,32 @@ class Database:
             INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
-             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
+             qualidade_contato)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (cnpj) DO UPDATE SET {sets_pg}
         """
         sql_sq = f"""
             INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
-             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
+             qualidade_contato)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(cnpj) DO UPDATE SET {sets_sq}
         """
 
         rows = []
         for perfil in perfis:
             cat = perfil.get("categoria_padrao") or cnae_para_categoria(perfil.get("cnae", ""))
+            qualidade = perfil.get("qualidade_contato", "media")
             rows.append((
                 perfil.get("cnpj"), perfil.get("razao_social"), perfil.get("nome_fantasia"),
                 perfil.get("porte"), perfil.get("cnae"), perfil.get("situacao"),
                 perfil.get("abertura"), perfil.get("municipio"), perfil.get("uf"),
                 perfil.get("socio_principal"), perfil.get("telefone", ""), perfil.get("email", ""),
                 perfil.get("instagram", ""), perfil.get("site", ""), perfil.get("rating_google", ""),
-                perfil.get("avaliacoes", ""), perfil.get("atualizado_em"), cat,
+                perfil.get("avaliacoes", ""), perfil.get("atualizado_em"), cat, qualidade,
             ))
 
         sql = sql_pg if USE_POSTGRES else sql_sq
@@ -966,6 +981,17 @@ class Database:
                 ORDER BY atualizado_em ASC
                 LIMIT {PH} OFFSET {PH}
             """, (limite, offset))
+            return [row[0] for row in cur.fetchall()]
+
+    def cnpjs_baixa_qualidade(self, limite: int = 500) -> list:
+        """Retorna CNPJs com qualidade_contato='baixa', priorizando os mais antigos."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT cnpj FROM empresas WHERE qualidade_contato = 'baixa' "
+                f"ORDER BY atualizado_em ASC LIMIT {PH}",
+                (limite,)
+            )
             return [row[0] for row in cur.fetchall()]
 
     def contar_sem_contato(self) -> int:

@@ -18,7 +18,11 @@ import os
 import random
 import sys
 import gzip
+import difflib
 from urllib.parse import quote, urljoin, urlparse
+
+import phonenumbers
+import dns.resolver
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import Database, telefone_valido
@@ -45,8 +49,9 @@ _MUNICIPIOS_ALL = {**_MUNICIPIOS_RF, **_MUNICIPIOS_IBGE}
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [AGENTE] %(message)s")
 log = logging.getLogger(__name__)
 
-GOOGLE_API_KEY       = os.environ.get("GOOGLE_API_KEY", "")
-REENRICH_SEM_CONTATO = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1", "true", "yes")
+GOOGLE_API_KEY          = os.environ.get("GOOGLE_API_KEY", "")
+REENRICH_SEM_CONTATO    = os.environ.get("REENRICH_SEM_CONTATO", "").lower() in ("1", "true", "yes")
+REENRICH_BAIXA_QUALIDADE = os.environ.get("REENRICH_BAIXA_QUALIDADE", "").lower() in ("1", "true", "yes")
 
 # ─── Concorrência e throughput ────────────────────────────────────────────────
 # Via rápida (seed com telefone): só BrasilAPI → alta concorrência
@@ -87,6 +92,63 @@ EMAIL_RUIDO = [
 
 # Slugs de páginas de contato para tentar após homepage
 PAGINAS_CONTATO = ["/contato", "/contact"]
+
+# ─── Validação e scoring de contatos ─────────────────────────────────────────
+
+def _telefone_mobile_valido(tel: str) -> bool:
+    """True apenas para números móveis brasileiros válidos (úteis para WhatsApp)."""
+    if not tel:
+        return False
+    try:
+        digits = re.sub(r'\D', '', tel)
+        if len(digits) not in (10, 11):
+            return False
+        parsed = phonenumbers.parse(f"+55{digits}", None)
+        return (
+            phonenumbers.is_valid_number(parsed) and
+            phonenumbers.number_type(parsed) == phonenumbers.PhoneNumberType.MOBILE
+        )
+    except Exception:
+        return False
+
+
+_mx_cache: dict = {}
+
+async def _dominio_tem_mx(dominio: str) -> bool:
+    """True se o domínio tem registros MX ativos. Resultado em cache por run."""
+    if dominio in _mx_cache:
+        return _mx_cache[dominio]
+    try:
+        await asyncio.to_thread(dns.resolver.resolve, dominio, 'MX')
+        _mx_cache[dominio] = True
+    except Exception:
+        _mx_cache[dominio] = False
+    return _mx_cache[dominio]
+
+
+def _score_email_relevancia(email: str, nome_fantasia: str, razao_social: str, site: str) -> float:
+    """Retorna 0.0–1.0 indicando o quanto o email é relevante para este negócio."""
+    if not email or '@' not in email:
+        return 0.0
+    partes_dominio = email.split('@')[1].lower().split('.')
+    prefixo_dominio = partes_dominio[0]  # 'svb' de svb.exacta@uol.com.br
+
+    # Match exato com domínio do site
+    if site:
+        site_parsed = urlparse(site if site.startswith('http') else f'http://{site}')
+        site_host = site_parsed.netloc.replace('www.', '')
+        site_prefixo = site_host.split('.')[0] if site_host else ''
+        if site_prefixo and prefixo_dominio == site_prefixo:
+            return 1.0
+
+    # Fuzzy match contra nome da empresa
+    nome = (nome_fantasia or razao_social or '').lower()
+    palavras = re.sub(r'[^a-z0-9\s]', '', nome).split()
+    best = max(
+        (difflib.SequenceMatcher(None, prefixo_dominio, p).ratio() for p in palavras if len(p) > 3),
+        default=0.0,
+    )
+    return best
 
 
 # ─── BrasilAPI ────────────────────────────────────────────────────────────────
@@ -502,7 +564,9 @@ async def _processar_rapido(session, seed_data, db):
             "municipio":       cidade_seed,
             "uf":              uf_seed,
             "socio_principal": socio,
-            "telefone":        tel_seed or tel_api,
+            "telefone":        tel_seed if _telefone_mobile_valido(tel_seed) else (
+                                   tel_api if _telefone_mobile_valido(tel_api) else (tel_seed or tel_api)
+                               ),
             "email":           email_seed or email_api or "",
             "instagram":       "",
             "site":            "",
@@ -510,6 +574,17 @@ async def _processar_rapido(session, seed_data, db):
             "avaliacoes":      "",
             "atualizado_em":   datetime.utcnow().isoformat(),
         }
+
+        tel_ok = _telefone_mobile_valido(perfil["telefone"])
+        email_score = _score_email_relevancia(
+            perfil["email"], perfil["nome_fantasia"], perfil["razao_social"], ""
+        )
+        if tel_ok and email_score >= 0.5:
+            perfil["qualidade_contato"] = "alta"
+        elif tel_ok or email_score >= 0.3:
+            perfil["qualidade_contato"] = "media"
+        else:
+            perfil["qualidade_contato"] = "baixa"
 
         achou = telefone_valido(perfil["telefone"])
         nome_busca = fantasia or nome
@@ -579,6 +654,23 @@ async def _processar_lento(session, seed_data, db, forcar=False):
             uf       = dados.get("uf", "") or seed_data.get("uf", "")
             email_rf = seed_data.get("email", "") or dados.get("email", "")
 
+        # Prefere número móvel validado; cai para qualquer valor se nenhum é móvel
+        tel_site = contatos.get("telefone_site", "")
+        tel_final = tel_site if _telefone_mobile_valido(tel_site) else (
+            tel_receita if _telefone_mobile_valido(tel_receita) else (tel_site or tel_receita)
+        )
+
+        # Escolhe email com maior relevância para o negócio e verifica MX
+        email_site = contatos.get("email_site", "")
+        email_rf_val = email_rf or ""
+        score_site = _score_email_relevancia(email_site, fantasia, nome, site)
+        score_rf   = _score_email_relevancia(email_rf_val, fantasia, nome, site)
+        email_escolhido = email_site if score_site >= score_rf else email_rf_val
+        if email_escolhido and '@' in email_escolhido:
+            dominio_email = email_escolhido.split('@')[1]
+            if not await _dominio_tem_mx(dominio_email):
+                email_escolhido = ""
+
         perfil = {
             "cnpj":            cnpj,
             "razao_social":    nome,
@@ -590,14 +682,23 @@ async def _processar_lento(session, seed_data, db, forcar=False):
             "municipio":       cidade,
             "uf":              uf,
             "socio_principal": socio,
-            "telefone":        contatos.get("telefone_site", "") or tel_receita,
-            "email":           contatos.get("email_site", "") or email_rf or "",
+            "telefone":        tel_final,
+            "email":           email_escolhido,
             "instagram":       contatos.get("instagram_site", ""),
             "site":            site,
             "rating_google":   "",
             "avaliacoes":      "",
             "atualizado_em":   datetime.utcnow().isoformat(),
         }
+
+        tel_ok = _telefone_mobile_valido(perfil["telefone"])
+        email_score = max(score_site, score_rf) if email_escolhido else 0.0
+        if tel_ok and email_score >= 0.5:
+            perfil["qualidade_contato"] = "alta"
+        elif tel_ok or email_score >= 0.3:
+            perfil["qualidade_contato"] = "media"
+        else:
+            perfil["qualidade_contato"] = "baixa"
 
         achou = telefone_valido(perfil["telefone"])
         if not achou:
@@ -652,7 +753,10 @@ async def rodar_agente():
         f"via lenta={CONCORRENCIA_LENTA} workers"
     )
 
-    if REENRICH_SEM_CONTATO:
+    if REENRICH_BAIXA_QUALIDADE:
+        log.info("Modo REENRICH_BAIXA_QUALIDADE ativo")
+        await rodar_reenrich(db, baixa_qualidade=True)
+    elif REENRICH_SEM_CONTATO:
         log.info("Modo REENRICH_SEM_CONTATO ativo")
         await rodar_reenrich(db)
     else:
@@ -809,12 +913,18 @@ async def rodar_seed(db):
                 await asyncio.sleep(30)
 
 
-async def rodar_reenrich(db):
+async def rodar_reenrich(db, baixa_qualidade: bool = False):
     """
-    Re-enriquece registros já salvos no banco que não têm email, instagram nem site.
+    Re-enriquece registros salvos. Dois modos:
+    - baixa_qualidade=True: re-processa CNPJs com qualidade_contato='baixa'
+    - padrão: re-processa CNPJs sem email E sem instagram
     """
-    total_sem_contato = db.contar_sem_contato()
-    log.info(f"{total_sem_contato:,} empresas sem contato — iniciando re-enriquecimento")
+    if baixa_qualidade:
+        total_sem_contato = len(db.cnpjs_baixa_qualidade(limite=5000))
+        log.info(f"{total_sem_contato:,} empresas com qualidade baixa — iniciando re-enriquecimento")
+    else:
+        total_sem_contato = db.contar_sem_contato()
+        log.info(f"{total_sem_contato:,} empresas sem contato — iniciando re-enriquecimento")
 
     semaphore = asyncio.Semaphore(CONCORRENCIA_LENTA)
     SUB_LOTE  = CONCORRENCIA_LENTA * 10
@@ -829,12 +939,18 @@ async def rodar_reenrich(db):
     async with aiohttp.ClientSession(connector=connector) as session:
         while True:
             try:
-                lote = db.buscar_cnpjs_sem_contato(limite=LOTE, offset=offset_db)
+                if baixa_qualidade:
+                    lote = db.cnpjs_baixa_qualidade(limite=LOTE)
+                else:
+                    lote = db.buscar_cnpjs_sem_contato(limite=LOTE, offset=offset_db)
                 if not lote:
                     log.info(f"REENRICH completo! {total_salvos:,} atualizados. Aguardando 5min...")
                     await asyncio.sleep(300)
                     offset_db = 0
-                    total_sem_contato = db.contar_sem_contato()
+                    if baixa_qualidade:
+                        total_sem_contato = len(db.cnpjs_baixa_qualidade(limite=5000))
+                    else:
+                        total_sem_contato = db.contar_sem_contato()
                     log.info(f"Novo ciclo REENRICH: {total_sem_contato:,} ainda sem contato")
                     continue
 
