@@ -1,0 +1,33 @@
+{
+  "file_hashes": {
+    ".claude/hooks/vexp-guard.sh": "1c4253ea6a0cc7ef65e952a67146b91a7d8b0a42f027e279d1a9f6c579e14614",
+    ".obsidian/plugins/terminal/main.js": "088fe319425cc88468d36ba8587781b01d3071b4d1d835c0ca17e3e8c2088906",
+    "agent/agent.py": "a91d73bdd529dbacb0161dd8cb4bbf00cd9728206a2b45192ab1f5304dbc5268",
+    "api.py": "1de1543b149bc9527efdb525a37becee2feca4e5e9bddf31e5d3657a4224968b",
+    "app/app.js": "ebcd50833a916d27f4bb4cd08271a4ffc1555c1a872f66632b2fad88676fe4b8",
+    "data/__init__.py": "3de3577a7c26681bdae91dbd9b8dcfebaef16fd2b3b82d3369b230feadf51961",
+    "data/cnae_descricoes.py": "3faf3eb1786c4113f9c476e4d2a6cfb096c0715c0a078d52871ea03d207956e7",
+    "data/ibge_municipios.py": "7dfb25592198aa0dcb7450422aa5919ae5465dbeaea7bc0fe1da4849a4f7eace",
+    "data/rf_municipios.py": "cbe15b26e9097d92fefaf2b4d46991f2ff471d97484b665bc0de9ddbce0bc6e9",
+    "database.py": "7e1f75b4e740fcffe3e275ebb304ac18e8f9482c0274eb4cd1780acb0f56827d",
+    "extrator.py": "82a12bc9166a1292ad845e47aaa32b3616f32c05509cfa69cd99c5b039f07e64",
+    "gerar_lookups.py": "da78dcc38ee65bff12c6cc6cb596e8feb2d4d41c64c77bd868e67ced831ab859",
+    "scripts/__init__.py": "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262",
+    "scripts/audit/__init__.py": "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262",
+    "scripts/audit/baselines.py": "eeb74ee44def26b3d46b6e285966e145868dbcb8864fef6624b056c70a4e93f4",
+    "scripts/audit/capture.py": "cfe29dc4fcfb17c6e1fef42a718b9160e1e4d927e47b5127e268049eb49069e0",
+    "scripts/audit/detector.py": "cac3584aa60e368257c3d72b8eedcc0560b784ce6efa371da56845fb308d4832",
+    "scripts/audit/reporter.py": "429c815ffa8e760208a03414e00d6b3406cb6dae33379462bddc10e6e853b92f",
+    "scripts/dashboard_audit.py": "9a917fa389430e12cd37ec33da6b10d891355afff8c5dc8a7495c8dc1d36b137",
+    "start.py": "5bac9ec171f991a6e4b99c3a523eb9b0d1152e98a6d680c88f8a06ad3f77bdba"
+  },
+  "indexed_at_commit": "1e346836205bcd34c315d4a1c10689c3359b97bc",
+  "indexed_at_timestamp": "2026-04-24T21:30:48.327237800+00:00",
+  "schema_version": 3,
+  "stats": {
+    "total_edges": 841,
+    "total_files": 20,
+    "total_nodes": 985
+  },
+  "vexp_version": "2.0.12"
+}

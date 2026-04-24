@@ -207,12 +207,15 @@ async function loadDetail(cnpj) {
 }
 
 async function loadCategories() {
+  const FALLBACK_CATS = ["Alimentação","Saúde","Beleza","Tecnologia","Educação","Serviços","Comércio","Construção","Transporte","Agro"];
   const [cats, deptos] = await Promise.all([
     apiFetch("/api/categorias"),
     apiFetch("/api/departamentos"),
   ]);
-  if (cats && !cats._err && Array.isArray(cats)) {
+  if (cats && !cats._err && Array.isArray(cats) && cats.length > 0) {
     state.categories = cats.map(d => d.categoria || d).filter(Boolean);
+  } else {
+    state.categories = FALLBACK_CATS;
   }
   if (deptos && !deptos._err && Array.isArray(deptos)) {
     state.departamentos = deptos;
@@ -394,7 +397,16 @@ function sparkline(data, color = "var(--accent)") {
 
 function viewDashboard() {
   const stats = state.statsData || { total: 0, com_telefone: 0, com_email: 0 };
-  const { activity, insights, porteBreak, setorBreak, ranking, sparks } = DASH_MOCK;
+  const { activity, insights, porteBreak, sparks } = DASH_MOCK;
+
+  const setorBreak = (state.departamentos || [])
+    .map(g => ({ label: g.setor, value: (g.departamentos || []).reduce((s, d) => s + (d.n || 0), 0), color: "" }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+
+  const ranking = (stats.por_uf || [])
+    .map(r => ({ uf: r.uf, count: r.n }))
+    .slice(0, 6);
 
   const metric = (lbl, val, delta, up, spark, ico, color) => `
     <div class="metric">

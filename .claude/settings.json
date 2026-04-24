@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PIDFILE='C:/Users/ideia/OneDrive/Desktop/CNPJ/.vexp/daemon.pid'; [ -f \"$PIDFILE\" ] && kill -0 \"$(cat \"$PIDFILE\" 2>/dev/null)\" 2>/dev/null && exit 0; 'C:/Users/ideia/.vscode/extensions/vexp.vexp-vscode-2.0.12-win32-x64/binaries/vexp-core-win32-x64/vexp-core.exe' daemon --workspace 'C:/Users/ideia/OneDrive/Desktop/CNPJ' > /dev/null 2>&1 &",
+            "async": true
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
