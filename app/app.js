@@ -648,7 +648,7 @@ function filterBar(showDates = false) {
           <option value="MEI" ${f.porte==="MEI"?"selected":""}>MEI</option>
           <option value="MICRO EMPRESA" ${f.porte==="MICRO EMPRESA"?"selected":""}>ME</option>
           <option value="EMPRESA DE PEQUENO PORTE" ${f.porte==="EMPRESA DE PEQUENO PORTE"?"selected":""}>EPP</option>
-          <option value="DEMAIS" ${f.porte==="DEMAIS"?"selected":""}>Demais</option>
+          <option value="DEMAIS" ${f.porte==="DEMAIS"?"selected":""}>Médio+</option>
         </select>
       </div>
       <div class="chip select">
