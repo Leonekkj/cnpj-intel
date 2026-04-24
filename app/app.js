@@ -397,7 +397,20 @@ function sparkline(data, color = "var(--accent)") {
 
 function viewDashboard() {
   const stats = state.statsData || { total: 0, com_telefone: 0, com_email: 0 };
-  const { activity, insights, porteBreak, sparks } = DASH_MOCK;
+  const { activity, insights, sparks } = DASH_MOCK;
+
+  const _PORTE_DISPLAY = {
+    "MEI":                      { label: "MEI",    color: "in" },
+    "MICRO EMPRESA":            { label: "ME",     color: ""   },
+    "EMPRESA DE PEQUENO PORTE": { label: "EPP",    color: "pu" },
+    "DEMAIS":                   { label: "Médio+", color: "wa" },
+  };
+  const porteBreak = (stats.por_porte || [])
+    .filter(p => p.porte)
+    .map(p => {
+      const d = _PORTE_DISPLAY[p.porte] || { label: p.porte, color: "" };
+      return { label: d.label, value: p.n, color: d.color };
+    });
 
   const setorBreak = (state.departamentos || [])
     .map(g => ({ label: g.setor, value: (g.departamentos || []).reduce((s, d) => s + (d.n || 0), 0), color: "" }))
