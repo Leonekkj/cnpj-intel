@@ -56,14 +56,14 @@ REENRICH_BAIXA_QUALIDADE = os.environ.get("REENRICH_BAIXA_QUALIDADE", "").lower(
 # ─── Concorrência e throughput ────────────────────────────────────────────────
 # Via rápida (seed com telefone): só BrasilAPI → alta concorrência
 # Via lenta (sem telefone): DDG + scraping → concorrência baixa para evitar rate limit
-CONCORRENCIA_RAPIDA = 3 if REENRICH_SEM_CONTATO else 15
+CONCORRENCIA_RAPIDA = 3 if REENRICH_SEM_CONTATO else 40
 # Via lenta é I/O-bound (DDG + scraping). Sobe com GOOGLE_API_KEY (sem depender de DDG para site).
-CONCORRENCIA_LENTA  = 3 if REENRICH_SEM_CONTATO else (30 if GOOGLE_API_KEY else 15)
+CONCORRENCIA_LENTA  = 3 if REENRICH_SEM_CONTATO else (50 if GOOGLE_API_KEY else 25)
 
 LOTE         = 3000 if REENRICH_SEM_CONTATO else 5000
 PAUSA_CICLO  = 0.5
 TIMEOUT_RAPIDO = 10   # BrasilAPI only
-TIMEOUT_LENTO  = 20   # BrasilAPI + DDG + scraping
+TIMEOUT_LENTO  = 30   # BrasilAPI + DDG + scraping
 
 # Headers realistas para evitar bloqueio nos scrapers
 HEADERS_BROWSER = {
@@ -739,7 +739,7 @@ async def enriquecer_lento(session, seed_data, db, forcar=False):
 
 async def rodar_agente():
     global _DDG_SEM, _BRASIL_SEM
-    _DDG_SEM = asyncio.Semaphore(min(CONCORRENCIA_LENTA, 10))  # alinhado com workers lenta
+    _DDG_SEM = asyncio.Semaphore(min(CONCORRENCIA_LENTA, 15))  # alinhado com workers lenta
     # BrasilAPI agora é fallback raro (seed expandido via extrator --empresas/--socios).
     # 3 é suficiente e fica dentro do rate limit real da API (~3 req/s).
     _BRASIL_SEM = asyncio.Semaphore(3)
@@ -809,7 +809,7 @@ async def rodar_seed(db):
         async with sem_lento:
             return await enriquecer_lento(session, seed_data, db)
 
-    connector = aiohttp.TCPConnector(limit=200, limit_per_host=50, ttl_dns_cache=300)
+    connector = aiohttp.TCPConnector(limit=400, limit_per_host=50, ttl_dns_cache=300)
     async with aiohttp.ClientSession(connector=connector) as session:
         while True:
             try:
