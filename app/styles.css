@@ -584,6 +584,7 @@ kbd {
   cursor: pointer;
 }
 .chip.select select:focus { outline: none; }
+.chip.select select option { background: #1c1c26; color: #f4f4f5; }
 
 .chip-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
 
