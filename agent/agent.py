@@ -182,14 +182,14 @@ async def buscar_brasilapi(session, cnpj, tentativas=3):
 def _porte_from_brasilapi(dados: dict | None, porte_seed: str = "") -> str:
     """Derives porte from BrasilAPI response, correctly detecting MEI via natureza_juridica.
 
-    BrasilAPI never returns 'MEI' — MEI is identified by natureza_juridica='2305',
-    which maps to porte code '01' (ME) in the Receita Federal schema.
+    BrasilAPI returns natureza_juridica as a human-readable string, e.g.
+    'Microempreendedor Individual (MEI)' — not the RF code '2305'.
     Also normalizes short forms ('ME', 'EPP') to the extrator.py long format.
     """
     if porte_seed == "MEI":
         return "MEI"
-    nj = str((dados or {}).get("natureza_juridica", ""))
-    if "2305" in nj:
+    nj = str((dados or {}).get("natureza_juridica", "")).upper()
+    if "MEI" in nj or "MICROEMPREENDEDOR" in nj:
         return "MEI"
     porte = (dados or {}).get("porte", "")
     return {"ME": "MICRO EMPRESA", "EPP": "EMPRESA DE PEQUENO PORTE"}.get(porte, porte)

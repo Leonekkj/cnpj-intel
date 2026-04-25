@@ -446,8 +446,8 @@ async def corrigir_mei_auto(_: str = Depends(require_admin)):
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as r:
                     if r.status == 200:
                         dados = await r.json()
-                        nj = str(dados.get("natureza_juridica", ""))
-                        if "2305" in nj:
+                        nj = str(dados.get("natureza_juridica", "")).upper()
+                        if "MEI" in nj or "MICROEMPREENDEDOR" in nj:
                             mei_cnpjs.append(cnpj)
             except Exception:
                 pass
