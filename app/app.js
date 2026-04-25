@@ -51,6 +51,7 @@ const state = {
   plan: "pro",
   planInfo: null,
   statsData: null,
+  atividadeData: null,
   dados: [],
   totalDados: 0,
   loading: false,
@@ -164,6 +165,13 @@ async function loadStats() {
   const agSub = $("#agent-sub");
   if (agSub && data.progresso_agente !== undefined)
     agSub.textContent = `Posição ${fmt(data.progresso_agente)}`;
+  if (state.tab === "dashboard") render();
+}
+
+async function loadAtividade() {
+  const data = await apiFetch("/api/atividade");
+  if (!data || data._err) return;
+  state.atividadeData = data;
   if (state.tab === "dashboard") render();
 }
 
@@ -395,7 +403,26 @@ function sparkline(data, color = "var(--accent)") {
 
 function viewDashboard() {
   const stats = state.statsData || { total: 0, com_telefone: 0, com_email: 0 };
-  const { activity, insights, sparks } = DASH_MOCK;
+  const activity = state.atividadeData || DASH_MOCK.activity;
+  const { insights } = DASH_MOCK;
+  const spark14 = activity.slice(-14);
+  const sparks = {
+    coletadas:    spark14.map(d => d.coletadas),
+    enriquecidas: spark14.map(d => d.enriquecidas),
+    contatos:     spark14.map(d => d.enriquecidas),
+    export:       spark14.map(() => 0),
+  };
+  function pctDelta(arr) {
+    const mid = Math.floor(arr.length / 2);
+    const prev = arr.slice(0, mid).reduce((s, x) => s + x, 0);
+    const curr = arr.slice(mid).reduce((s, x) => s + x, 0);
+    if (!prev) return { val: "—", up: true };
+    const p = (curr - prev) / prev * 100;
+    return { val: (p >= 0 ? "+" : "") + p.toFixed(1) + "%", up: p >= 0 };
+  }
+  const dTotal = pctDelta(sparks.coletadas);
+  const dTel   = pctDelta(sparks.contatos);
+  const dEmail = pctDelta(sparks.enriquecidas);
 
   const _PORTE_DISPLAY = {
     "MEI":                      { label: "MEI",    color: "in" },
@@ -434,9 +461,9 @@ function viewDashboard() {
 
   const metrics = `
     <div class="metrics">
-      ${metric("Total de CNPJs",  fmt(stats.total),         "+12.4%", true,  sparkline(sparks.coletadas,    "oklch(0.72 0.14 160)"), "building", "ac")}
-      ${metric("Com telefone",    fmt(stats.com_telefone),  "+3.2%",  true,  sparkline(sparks.contatos,     "oklch(0.74 0.13 240)"), "phone",    "in")}
-      ${metric("Com e-mail",      fmt(stats.com_email),     "+8.7%",  true,  sparkline(sparks.enriquecidas, "oklch(0.80 0.14 75)"),  "mail",     "wa")}
+      ${metric("Total de CNPJs",  fmt(stats.total),         dTotal.val, dTotal.up, sparkline(sparks.coletadas,    "oklch(0.72 0.14 160)"), "building", "ac")}
+      ${metric("Com telefone",    fmt(stats.com_telefone),  dTel.val,   dTel.up,   sparkline(sparks.contatos,     "oklch(0.74 0.13 240)"), "phone",    "in")}
+      ${metric("Com e-mail",      fmt(stats.com_email),     dEmail.val, dEmail.up, sparkline(sparks.enriquecidas, "oklch(0.80 0.14 75)"),  "mail",     "wa")}
       ${metric("Exports no mês",  "—",                      "—",      true,  sparkline(sparks.export,       "oklch(0.72 0.14 295)"), "download", "pu")}
     </div>`;
 
@@ -1176,7 +1203,7 @@ async function init() {
   initTweaksUI();
 
   // Load core data
-  await Promise.all([loadPlan(), loadStats(), loadCategories()]);
+  await Promise.all([loadPlan(), loadStats(), loadCategories(), loadAtividade()]);
 
   // Initial view
   render();

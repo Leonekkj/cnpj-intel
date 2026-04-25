@@ -273,6 +273,20 @@ def estatisticas(info: dict = Depends(get_token_info)):
     return data
 
 
+_atividade_cache = {"data": None, "ts": 0}
+_ATIVIDADE_TTL = 300  # 5 minutes
+
+@app.get("/api/atividade")
+def atividade(info: dict = Depends(get_token_info)):
+    agora = _time.time()
+    if _atividade_cache["data"] and (agora - _atividade_cache["ts"]) < _ATIVIDADE_TTL:
+        return _atividade_cache["data"]
+    data = db.atividade_diaria(dias=30)
+    _atividade_cache["data"] = data
+    _atividade_cache["ts"] = agora
+    return data
+
+
 @app.get("/api/cnaes")
 def listar_cnaes(info: dict = Depends(get_token_info)):
     """Retorna os CNAEs mais frequentes para popular o filtro de nicho."""

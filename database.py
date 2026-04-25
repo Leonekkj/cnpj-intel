@@ -1464,6 +1464,37 @@ class Database:
             "progresso_agente": progresso,
         }
 
+    def atividade_diaria(self, dias: int = 30) -> list:
+        """Returns [{data, coletadas, enriquecidas}] for the last `dias` days, ascending."""
+        from datetime import date, timedelta
+        today = date.today()
+        dates = [(today - timedelta(days=i)).isoformat() for i in range(dias - 1, -1, -1)]
+        cutoff = (today - timedelta(days=dias)).isoformat()
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                sql = """
+                    SELECT DATE(atualizado_em::timestamp)::text AS d,
+                           COUNT(*) AS total,
+                           COUNT(*) FILTER (WHERE telefone IS NOT NULL AND telefone != '') AS com_tel
+                    FROM empresas
+                    WHERE atualizado_em >= %s
+                    GROUP BY 1 ORDER BY 1
+                """
+            else:
+                sql = """
+                    SELECT strftime('%Y-%m-%d', atualizado_em) AS d,
+                           COUNT(*) AS total,
+                           SUM(CASE WHEN telefone IS NOT NULL AND telefone != '' THEN 1 ELSE 0 END) AS com_tel
+                    FROM empresas
+                    WHERE atualizado_em >= ?
+                    GROUP BY 1 ORDER BY 1
+                """
+            cur.execute(sql, (cutoff,))
+            rows = {r[0]: (r[1], r[2]) for r in cur.fetchall()}
+        return [{"data": d, "coletadas": rows.get(d, (0, 0))[0],
+                 "enriquecidas": rows.get(d, (0, 0))[1]} for d in dates]
+
     def diagnostico_telefone(self) -> dict:
         """Retorna contagens e últimos registros para diagnóstico de persistência de telefone."""
         _tel_valido = (
