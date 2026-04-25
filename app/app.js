@@ -129,20 +129,6 @@ function timeAgo(iso) {
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
-function mask(val, type) {
-  if (!val) return '<span class="contact-em">—</span>';
-  if (state.plan !== "free") return null;
-  if (type === "tel") {
-    const d = val.replace(/\D/g, "");
-    return `<span class="mask-text">${d.slice(0, 2) ? "("+d.slice(0,2)+")" : ""} ****-${d.slice(-4)}</span>`;
-  }
-  if (type === "email") {
-    const [u, d] = val.split("@");
-    if (!u || !d) return `<span class="mask-text">${val.slice(0, 1)}•••@•••</span>`;
-    return `<span class="mask-text">${u.slice(0, 1)}${"•".repeat(Math.max(1, u.length - 2))}${u.slice(-1)}@${d}</span>`;
-  }
-  return `<span class="mask-text">${val.slice(0, 3)}•••</span>`;
-}
 
 function porteBadge(p) {
   if (!p) return '<span class="badge de">—</span>';
@@ -150,6 +136,14 @@ function porteBadge(p) {
   if (p.includes("MICRO"))      return '<span class="badge me">ME</span>';
   if (p.includes("PEQUENO"))    return '<span class="badge epp">EPP</span>';
   return '<span class="badge de">MÉDIO+</span>';
+}
+
+function planoBadge(plano, nomePlano) {
+  const label = nomePlano || plano || "—";
+  if (plano === "admin") return `<span class="badge mei">${label}</span>`;
+  if (plano === "pro")   return `<span class="badge epp">${label}</span>`;
+  if (plano === "basico") return `<span class="badge me">${label}</span>`;
+  return `<span class="badge de">${label}</span>`;
 }
 
 // ─── API functions ───────────────────────────────────────────────
@@ -167,6 +161,9 @@ async function loadStats() {
   state.statsData = data;
   const navTotal = $("#nav-total");
   if (navTotal) navTotal.textContent = fmtK(data.total);
+  const agSub = $("#agent-sub");
+  if (agSub && data.progresso_agente !== undefined)
+    agSub.textContent = `Posição ${fmt(data.progresso_agente)}`;
   if (state.tab === "dashboard") render();
 }
 
@@ -783,12 +780,12 @@ function row(d) {
   const selected = state.selected.has(d.cnpj);
   const expanded = state.expanded.has(d.cnpj);
   const displayName = d.nome_fantasia || d.razao_social || "—";
-  const telCel = mask(d.telefone, "tel") || (d.telefone
+  const telCel = d.telefone
     ? `<span class="contact-pill ac">${ICONS.phone}${d.telefone}</span>`
-    : `<span class="contact-em">—</span>`);
-  const emCel = mask(d.email, "email") || (d.email
+    : `<span class="contact-em">—</span>`;
+  const emCel = d.email
     ? `<span class="contact-pill in">${ICONS.mail}${d.email.length > 22 ? d.email.slice(0,22)+"…" : d.email}</span>`
-    : "");
+    : "";
   return `
     <tr class="${selected ? "selected" : ""} ${expanded ? "expanded" : ""}">
       <td style="padding-left:16px"><input type="checkbox" class="checkbox" ${selected?"checked":""} onchange="toggleSelect('${d.cnpj}')"></td>
@@ -963,7 +960,7 @@ function viewClientes() {
         return `<div class="token-row">
           <div>
             <div class="token-val">${t.token}</div>
-            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${porteBadge(t.plano)} criado ${timeAgo(t.criado_em)}</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${planoBadge(t.plano, t.nome_plano)} criado ${timeAgo(t.criado_em)}</div>
           </div>
           <div style="font-size:12px;color:var(--text-muted)">${fmt(t.cnpjs_hoje)} / ${limiteText} hoje</div>
           <div>
