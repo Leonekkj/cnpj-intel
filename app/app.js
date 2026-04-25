@@ -167,6 +167,7 @@ async function loadStats() {
   state.statsData = data;
   const navTotal = $("#nav-total");
   if (navTotal) navTotal.textContent = fmtK(data.total);
+  if (state.tab === "dashboard") render();
 }
 
 async function loadEmpresas() {

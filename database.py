@@ -1419,9 +1419,19 @@ class Database:
             com_insta = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM empresas WHERE site IS NOT NULL AND site != ''")
             com_site = cur.fetchone()[0]
-            cur.execute("SELECT uf, COUNT(*) as n FROM empresas GROUP BY uf ORDER BY n DESC LIMIT 10")
+            cur.execute("""
+                SELECT uf, COUNT(*) as n FROM empresas
+                WHERE telefone IS NOT NULL AND telefone != ''
+                  AND uf IS NOT NULL AND uf != ''
+                GROUP BY uf ORDER BY n DESC LIMIT 10
+            """)
             por_uf = [{"uf": r[0], "n": r[1]} for r in cur.fetchall()]
-            cur.execute("SELECT porte, COUNT(*) as n FROM empresas GROUP BY porte ORDER BY n DESC")
+            cur.execute("""
+                SELECT porte, COUNT(*) as n FROM empresas
+                WHERE telefone IS NOT NULL AND telefone != ''
+                  AND porte IS NOT NULL AND porte != ''
+                GROUP BY porte ORDER BY n DESC
+            """)
             por_porte = [{"porte": r[0], "n": r[1]} for r in cur.fetchall()]
             progresso = 0
             try:

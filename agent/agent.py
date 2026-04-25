@@ -756,9 +756,13 @@ async def rodar_agente():
     if REENRICH_BAIXA_QUALIDADE:
         log.info("Modo REENRICH_BAIXA_QUALIDADE ativo")
         await rodar_reenrich(db, baixa_qualidade=True)
+        log.info("Reenrich baixa qualidade concluído — continuando com seed")
+        await rodar_seed(db)
     elif REENRICH_SEM_CONTATO:
         log.info("Modo REENRICH_SEM_CONTATO ativo")
         await rodar_reenrich(db)
+        log.info("Reenrich concluído — continuando com seed")
+        await rodar_seed(db)
     else:
         await rodar_seed(db)
 
@@ -944,15 +948,8 @@ async def rodar_reenrich(db, baixa_qualidade: bool = False):
                 else:
                     lote = db.buscar_cnpjs_sem_contato(limite=LOTE, offset=offset_db)
                 if not lote:
-                    log.info(f"REENRICH completo! {total_salvos:,} atualizados. Aguardando 5min...")
-                    await asyncio.sleep(300)
-                    offset_db = 0
-                    if baixa_qualidade:
-                        total_sem_contato = len(db.cnpjs_baixa_qualidade(limite=5000))
-                    else:
-                        total_sem_contato = db.contar_sem_contato()
-                    log.info(f"Novo ciclo REENRICH: {total_sem_contato:,} ainda sem contato")
-                    continue
+                    log.info(f"REENRICH completo! {total_salvos:,} atualizados.")
+                    break
 
                 log.info(f"REENRICH: {len(lote)} CNPJs (offset={offset_db:,}) | {total_salvos:,} salvos")
                 salvos_lote = 0
