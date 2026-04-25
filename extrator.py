@@ -71,7 +71,7 @@ COLUNAS_EMPRESAS = [
     "natureza_juridica",          # 2
     "qualificacao_responsavel",   # 3
     "capital_social",             # 4
-    "porte",                      # 5 — 01=ME, 03=EPP, 05=Demais
+    "porte",                      # 5 — 01=ME, 03=EPP, 05=Demais (MEI via natureza_juridica 2305)
     "ente_federativo_responsavel",# 6
 ]
 
@@ -183,8 +183,9 @@ def carregar_empresas(arquivo):
                 continue
             cnpj_basico = linha[0].strip().zfill(8)
             razao = linha[1].strip()
+            natureza  = linha[2].strip()
             porte_cod = linha[5].strip()
-            porte_txt = PORTE_MAP.get(porte_cod, "")
+            porte_txt = "MEI" if natureza == "2305" else PORTE_MAP.get(porte_cod, "")
             resultado[cnpj_basico] = (razao, porte_txt)
 
     print(f"  {len(resultado):,} empresas indexadas por cnpj_basico")

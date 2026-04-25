@@ -1335,6 +1335,22 @@ class Database:
             conn.commit()
         return total
 
+    def corrigir_porte_mei(self, cnpjs: list) -> int:
+        """
+        Atualiza porte para 'MEI' nos CNPJs informados. Retorna o número de registros atualizados.
+        """
+        if not cnpjs:
+            return 0
+        with _conn() as conn:
+            cur = conn.cursor()
+            placeholders = ",".join([PH] * len(cnpjs))
+            cur.execute(
+                f"UPDATE empresas SET porte={PH} WHERE cnpj IN ({placeholders})",
+                ["MEI"] + list(cnpjs),
+            )
+            conn.commit()
+            return cur.rowcount
+
     def listar_cnaes(self) -> list:
         with _conn() as conn:
             cur = conn.cursor()
