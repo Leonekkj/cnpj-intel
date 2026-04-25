@@ -168,6 +168,38 @@ function _patchMetric(id, newVal, changed) {
   }
 }
 
+function _patchBreakdowns() {
+  const stats = state.statsData || {};
+  const _PD = {
+    "MEI":                      { label: "MEI",    color: "in" },
+    "MICRO EMPRESA":            { label: "ME",     color: ""   },
+    "EMPRESA DE PEQUENO PORTE": { label: "EPP",    color: "pu" },
+    "DEMAIS":                   { label: "Médio+", color: "wa" },
+  };
+  const barRow = (b, pct) =>
+    `<div class="bar-row"><div class="bar-label">${b.label}</div><div class="bar-track"><div class="bar-fill ${b.color}" style="width:${pct}%"></div></div><div class="bar-val">${fmt(b.value)}</div></div>`;
+  const rankRow = (r, i, pct) =>
+    `<div class="rank-row"><div class="rank-num">${String(i+1).padStart(2,"0")}</div><div class="rank-name">${r.uf}</div><div class="rank-bar"><div class="rank-bar-fill" style="width:${pct}%"></div></div><div class="rank-val">${fmt(r.count)}</div></div>`;
+
+  const porteBreak = (stats.por_porte || []).filter(p => p.porte)
+    .map(p => { const d = _PD[p.porte] || { label: p.porte, color: "" }; return { label: d.label, value: p.n, color: d.color }; });
+  const porteTotal = porteBreak.reduce((s, x) => s + x.value, 0) || 1;
+  const bkP = $("#bk-porte-rows");
+  if (bkP) bkP.innerHTML = porteBreak.map(b => barRow(b, (b.value / porteTotal * 100).toFixed(0))).join("");
+
+  const setorBreak = (state.departamentos || [])
+    .map(g => ({ label: g.setor, value: (g.departamentos || []).reduce((s, d) => s + (d.n || 0), 0), color: "" }))
+    .sort((a, b) => b.value - a.value).slice(0, 5);
+  const setorTotal = setorBreak.reduce((s, x) => s + x.value, 0) || 1;
+  const bkS = $("#bk-setor-rows");
+  if (bkS) bkS.innerHTML = setorBreak.map(b => barRow(b, (b.value / setorTotal * 100).toFixed(0))).join("");
+
+  const ranking = (stats.por_uf || []).map(r => ({ uf: r.uf, count: r.n })).slice(0, 6);
+  const rankTotal = ranking[0]?.count || 1;
+  const bkU = $("#map-ranks");
+  if (bkU) bkU.innerHTML = ranking.map((r, i) => rankRow(r, i, (r.count / rankTotal * 100).toFixed(0))).join("");
+}
+
 async function loadStats() {
   const data = await apiFetch("/api/stats");
   if (!data || data._err) return;
@@ -188,6 +220,7 @@ async function loadStats() {
     _patchMetric("mv-total", fmt(data.total),        prev.total        !== data.total);
     _patchMetric("mv-tel",   fmt(data.com_telefone), prev.com_telefone !== data.com_telefone);
     _patchMetric("mv-email", fmt(data.com_email),    prev.com_email    !== data.com_email);
+    _patchBreakdowns();
   } else {
     render();
   }
@@ -250,6 +283,7 @@ async function loadCategories() {
   }
   if (deptos && !deptos._err && Array.isArray(deptos)) {
     state.departamentos = deptos;
+    if (state.tab === "dashboard" && $("#bk-setor-rows")) _patchBreakdowns();
   }
 }
 
@@ -587,21 +621,21 @@ function viewDashboard() {
     <div class="breakdown">
       <div class="panel break-card">
         <div class="break-title">Distribuição por porte</div>
-        ${porteBreak.map(b => `
+        <div id="bk-porte-rows">${porteBreak.map(b => `
           <div class="bar-row">
             <div class="bar-label">${b.label}</div>
             <div class="bar-track"><div class="bar-fill ${b.color}" style="width:${(b.value/porteTotal*100).toFixed(0)}%"></div></div>
             <div class="bar-val">${fmt(b.value)}</div>
-          </div>`).join("")}
+          </div>`).join("")}</div>
       </div>
       <div class="panel break-card">
         <div class="break-title">Setores mais representados</div>
-        ${setorBreak.map(b => `
+        <div id="bk-setor-rows">${setorBreak.map(b => `
           <div class="bar-row">
             <div class="bar-label">${b.label}</div>
             <div class="bar-track"><div class="bar-fill ${b.color}" style="width:${(b.value/setorTotal*100).toFixed(0)}%"></div></div>
             <div class="bar-val">${fmt(b.value)}</div>
-          </div>`).join("")}
+          </div>`).join("")}</div>
       </div>
     </div>`;
 
@@ -614,7 +648,7 @@ function viewDashboard() {
         </div>
         <button class="btn btn-ghost" onclick="exportCSV()">${ICONS.download}Exportar</button>
       </div>
-      <div class="map-ranks">
+      <div class="map-ranks" id="map-ranks">
         ${ranking.map((r, i) => `
           <div class="rank-row">
             <div class="rank-num">${String(i+1).padStart(2,"0")}</div>
@@ -1239,8 +1273,9 @@ async function init() {
   showTab("dashboard");
 
   // Auto-refresh
-  setInterval(loadStats, 10000);
-  setInterval(loadPlan,  60000);
+  setInterval(loadStats,      10000);
+  setInterval(loadPlan,       60000);
+  setInterval(loadCategories, 60000);
 }
 
 document.addEventListener("DOMContentLoaded", init);
