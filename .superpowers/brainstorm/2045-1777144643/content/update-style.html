@@ -1,0 +1,87 @@
+<style>
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
+  .mock-card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px 20px; }
+  .mock-card-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .mock-card-val { font-size: 28px; font-weight: 700; color: #e0e0f0; font-family: monospace; }
+  .mock-card-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: #888; }
+
+  /* Option A: silent */
+  .option-a .mock-card-val { color: #e0e0f0; }
+
+  /* Option B: animate count-up */
+  .option-b .mock-card-val { color: #6ee7b7; }
+  .option-b .mock-card-val span { display: inline-block; animation: countup 0.4s ease-out; }
+  @keyframes countup { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  /* Option C: live dot */
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; display: inline-block;
+              box-shadow: 0 0 0 0 rgba(74,222,128,0.4); animation: pulse-dot 2s infinite; }
+  @keyframes pulse-dot { 0%,100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.4); } 50% { box-shadow: 0 0 0 6px rgba(74,222,128,0); } }
+  .live-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #4ade80; font-weight: 600; }
+
+  /* Option D: countdown */
+  .countdown { font-size: 11px; color: #666; }
+  .countdown-bar { height: 2px; background: #2a2a4a; border-radius: 1px; margin-top: 10px; overflow: hidden; }
+  .countdown-fill { height: 100%; background: #6366f1; border-radius: 1px; width: 40%; animation: drain 10s linear infinite; }
+  @keyframes drain { from { width: 100%; } to { width: 0%; } }
+</style>
+
+<h2>How should live updates feel?</h2>
+<p class="subtitle">The dashboard will refresh automatically. Pick the style that fits best.</p>
+
+<div class="options">
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Silent refresh</h3>
+      <p>Numbers update quietly in the background. No animation, no indicator — data just stays current.</p>
+      <div class="cards option-a" style="pointer-events:none">
+        <div class="mock-card"><div class="mock-card-label">Total de CNPJs</div><div class="mock-card-val">12,847</div></div>
+        <div class="mock-card"><div class="mock-card-label">Com telefone</div><div class="mock-card-val">9,203</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Animated count-up</h3>
+      <p>When a number changes, it briefly animates upward — giving a satisfying sense of live growth.</p>
+      <div class="cards option-b" style="pointer-events:none">
+        <div class="mock-card"><div class="mock-card-label">Total de CNPJs</div><div class="mock-card-val"><span>12,851</span></div></div>
+        <div class="mock-card"><div class="mock-card-label">Com telefone</div><div class="mock-card-val"><span>9,207</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Live indicator dot</h3>
+      <p>A pulsing green dot in the header signals the dashboard is live. Numbers update silently.</p>
+      <div class="mock-card" style="pointer-events:none; margin: 12px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="mock-card-label">Visão geral</div>
+          <span class="live-badge"><span class="live-dot"></span> AO VIVO</span>
+        </div>
+        <div class="mock-card-val" style="margin-top:8px">12,851</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="d" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>Refresh countdown bar</h3>
+      <p>A thin progress bar drains to zero then refills on each update cycle — shows exactly when the next refresh fires.</p>
+      <div class="mock-card" style="pointer-events:none; margin: 12px 0">
+        <div class="mock-card-label">Total de CNPJs</div>
+        <div class="mock-card-val">12,851</div>
+        <div class="countdown-bar"><div class="countdown-fill"></div></div>
+        <div class="countdown" style="margin-top:4px">próxima atualização em 6s</div>
+      </div>
+    </div>
+  </div>
+
+</div>

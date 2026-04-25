@@ -379,6 +379,11 @@ kbd {
   display: flex; align-items: baseline; gap: 8px;
 }
 .metric-val .unit { font-size: 13px; color: var(--text-dim); font-weight: 500; letter-spacing: 0; }
+@keyframes metric-countup {
+  from { transform: translateY(6px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+.metric-val-updated { animation: metric-countup 0.35s ease-out; }
 .metric-foot {
   display: flex; align-items: center; justify-content: space-between;
   margin-top: auto;

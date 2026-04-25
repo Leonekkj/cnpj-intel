@@ -156,16 +156,41 @@ async function loadPlan() {
   updateSidebar();
 }
 
+function _patchMetric(id, newVal, changed) {
+  const el = $(`#${id}`);
+  if (!el) return;
+  el.textContent = newVal;
+  if (changed) {
+    el.classList.remove("metric-val-updated");
+    void el.offsetWidth; // force reflow to restart animation
+    el.classList.add("metric-val-updated");
+    el.addEventListener("animationend", () => el.classList.remove("metric-val-updated"), { once: true });
+  }
+}
+
 async function loadStats() {
   const data = await apiFetch("/api/stats");
   if (!data || data._err) return;
+
+  const prev = state.statsData;
   state.statsData = data;
+
   const navTotal = $("#nav-total");
   if (navTotal) navTotal.textContent = fmtK(data.total);
   const agSub = $("#agent-sub");
   if (agSub && data.progresso_agente !== undefined)
     agSub.textContent = `Posição ${fmt(data.progresso_agente)}`;
-  if (state.tab === "dashboard") render();
+
+  if (state.tab !== "dashboard") return;
+
+  // Targeted patch when metric elements are already in the DOM (avoid full re-render)
+  if (prev && $("#mv-total")) {
+    _patchMetric("mv-total", fmt(data.total),        prev.total        !== data.total);
+    _patchMetric("mv-tel",   fmt(data.com_telefone), prev.com_telefone !== data.com_telefone);
+    _patchMetric("mv-email", fmt(data.com_email),    prev.com_email    !== data.com_email);
+  } else {
+    render();
+  }
 }
 
 async function loadAtividade() {
@@ -447,13 +472,13 @@ function viewDashboard() {
     .map(r => ({ uf: r.uf, count: r.n }))
     .slice(0, 6);
 
-  const metric = (lbl, val, delta, up, spark, ico, color) => `
+  const metric = (lbl, val, delta, up, spark, ico, color, id) => `
     <div class="metric">
       <div class="metric-head">
         <div class="metric-ico ${color}">${ICONS[ico]}</div>
         <div class="metric-lbl">${lbl}</div>
       </div>
-      <div class="metric-val">${val}</div>
+      <div class="metric-val"${id ? ` id="${id}"` : ""}>${val}</div>
       <div class="metric-foot">
         <span class="delta ${up ? "up" : "down"}">${up ? ICONS.up : ICONS.down}${delta}</span>
         ${spark}
@@ -462,9 +487,9 @@ function viewDashboard() {
 
   const metrics = `
     <div class="metrics">
-      ${metric("Total de CNPJs",  fmt(stats.total),         dTotal.val, dTotal.up, sparkline(sparks.coletadas,    "oklch(0.72 0.14 160)"), "building", "ac")}
-      ${metric("Com telefone",    fmt(stats.com_telefone),  dTel.val,   dTel.up,   sparkline(sparks.contatos,     "oklch(0.74 0.13 240)"), "phone",    "in")}
-      ${metric("Com e-mail",      fmt(stats.com_email),     dEmail.val, dEmail.up, sparkline(sparks.enriquecidas, "oklch(0.80 0.14 75)"),  "mail",     "wa")}
+      ${metric("Total de CNPJs",  fmt(stats.total),         dTotal.val, dTotal.up, sparkline(sparks.coletadas,    "oklch(0.72 0.14 160)"), "building", "ac", "mv-total")}
+      ${metric("Com telefone",    fmt(stats.com_telefone),  dTel.val,   dTel.up,   sparkline(sparks.contatos,     "oklch(0.74 0.13 240)"), "phone",    "in", "mv-tel")}
+      ${metric("Com e-mail",      fmt(stats.com_email),     dEmail.val, dEmail.up, sparkline(sparks.enriquecidas, "oklch(0.80 0.14 75)"),  "mail",     "wa", "mv-email")}
       ${metric("Exports no mês",  "—",                      "—",      true,  sparkline(sparks.export,       "oklch(0.72 0.14 295)"), "download", "pu")}
     </div>`;
 
@@ -1214,7 +1239,7 @@ async function init() {
   showTab("dashboard");
 
   // Auto-refresh
-  setInterval(loadStats, 15000);
+  setInterval(loadStats, 10000);
   setInterval(loadPlan,  60000);
 }
 

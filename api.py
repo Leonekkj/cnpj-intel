@@ -260,7 +260,7 @@ def listar_empresas(
 # Cache em memória das estatísticas — 5 COUNT(*) full-scan custam caro
 import time as _time
 _stats_cache = {"data": None, "ts": 0}
-_STATS_TTL = 60  # segundos
+_STATS_TTL = 10  # segundos
 
 @app.get("/api/stats")
 def estatisticas(info: dict = Depends(get_token_info)):
