@@ -426,6 +426,40 @@ async def corrigir_mei(payload: dict, _: str = Depends(require_admin)):
     return {"status": "ok", "atualizados": updated}
 
 
+@app.post("/api/admin/corrigir-mei-auto")
+async def corrigir_mei_auto(_: str = Depends(require_admin)):
+    """Verifica via BrasilAPI quais empresas com porte='ME' são na verdade MEI
+    (natureza_juridica='2305') e corrige o porte para 'MEI' no banco."""
+    import aiohttp
+
+    candidatos = db.listar_cnpjs_por_porte("ME", limite=10000)
+    if not candidatos:
+        return {"status": "ok", "total_verificados": 0, "total_corrigidos": 0}
+
+    sem = asyncio.Semaphore(5)
+    mei_cnpjs: list[str] = []
+
+    async def verificar(session: aiohttp.ClientSession, cnpj: str):
+        url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+        async with sem:
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as r:
+                    if r.status == 200:
+                        dados = await r.json()
+                        nj = str(dados.get("natureza_juridica", ""))
+                        if "2305" in nj:
+                            mei_cnpjs.append(cnpj)
+            except Exception:
+                pass
+
+    async with aiohttp.ClientSession() as session:
+        await asyncio.gather(*[verificar(session, c) for c in candidatos])
+
+    corrigidos = db.corrigir_porte_mei(mei_cnpjs) if mei_cnpjs else 0
+    _stats_cache["data"] = None
+    return {"status": "ok", "total_verificados": len(candidatos), "total_corrigidos": corrigidos}
+
+
 @app.post("/api/admin/vacuum")
 def vacuum_banco(_: str = Depends(require_admin)):
     """Executa VACUUM ANALYZE no Postgres para liberar espaço após DELETE em massa."""

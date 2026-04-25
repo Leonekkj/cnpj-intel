@@ -179,6 +179,22 @@ async def buscar_brasilapi(session, cnpj, tentativas=3):
     return None
 
 
+def _porte_from_brasilapi(dados: dict | None, porte_seed: str = "") -> str:
+    """Derives porte from BrasilAPI response, correctly detecting MEI via natureza_juridica.
+
+    BrasilAPI never returns 'MEI' — MEI is identified by natureza_juridica='2305',
+    which maps to porte code '01' (ME) in the Receita Federal schema.
+    Also normalizes short forms ('ME', 'EPP') to the extrator.py long format.
+    """
+    if porte_seed == "MEI":
+        return "MEI"
+    nj = str((dados or {}).get("natureza_juridica", ""))
+    if "2305" in nj:
+        return "MEI"
+    porte = (dados or {}).get("porte", "")
+    return {"ME": "MICRO EMPRESA", "EPP": "EMPRESA DE PEQUENO PORTE"}.get(porte, porte)
+
+
 # ─── Google Places (requer GOOGLE_API_KEY) ────────────────────────────────────
 
 # Domínios que NÃO são o site real da empresa:
@@ -534,7 +550,7 @@ async def _processar_rapido(session, seed_data, db):
                 if dados.get("descricao_situacao_cadastral", "").upper() != "ATIVA":
                     return None
                 nome   = dados.get("razao_social", "")
-                porte  = dados.get("porte", "")
+                porte  = _porte_from_brasilapi(dados, porte_seed)
                 socios = dados.get("qsa", [])
                 socio  = socios[0].get("nome_socio", "") if socios else ""
                 fantasia = fantasia or dados.get("nome_fantasia", "")
@@ -648,7 +664,7 @@ async def _processar_lento(session, seed_data, db, forcar=False):
             uf       = registro.get("uf", "")
             email_rf = registro.get("email", "")
         else:
-            porte    = dados.get("porte", "")
+            porte    = _porte_from_brasilapi(dados, seed_data.get("porte", ""))
             cnae_str = dados.get("cnae_fiscal_descricao", "") or seed_data.get("cnae", "")
             abertura = dados.get("data_inicio_atividade", "") or seed_data.get("abertura", "")
             uf       = dados.get("uf", "") or seed_data.get("uf", "")

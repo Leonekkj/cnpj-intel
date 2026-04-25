@@ -1351,6 +1351,13 @@ class Database:
             conn.commit()
             return cur.rowcount
 
+    def listar_cnpjs_por_porte(self, porte_val: str, limite: int = 5000) -> list[str]:
+        """Returns CNPJs where porte matches the given value (exact match)."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT cnpj FROM empresas WHERE porte = {PH} LIMIT {PH}", [porte_val, limite])
+            return [r[0] for r in cur.fetchall()]
+
     def listar_cnaes(self) -> list:
         with _conn() as conn:
             cur = conn.cursor()
