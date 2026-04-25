@@ -629,6 +629,11 @@ async def _processar_lento(session, seed_data, db, forcar=False):
             fantasia   = registro.get("nome_fantasia", "")
             cidade     = registro.get("municipio", "")
             socio      = registro.get("socio_principal", "")
+            if not socio:
+                dados_api = await buscar_brasilapi(session, cnpj)
+                if dados_api:
+                    socios_api = dados_api.get("qsa", [])
+                    socio = socios_api[0].get("nome_socio", "") if socios_api else ""
             tel_receita = registro.get("telefone", "")
             nome_busca = fantasia or nome
         else:

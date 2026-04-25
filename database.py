@@ -845,11 +845,11 @@ class Database:
         _coalesce_pg = "CASE WHEN EXCLUDED.{f} != '' THEN EXCLUDED.{f} ELSE empresas.{f} END"
         _coalesce_sq = "CASE WHEN excluded.{f} != '' THEN excluded.{f} ELSE empresas.{f} END"
 
-        contatos = ("telefone", "email", "instagram", "site", "rating_google", "avaliacoes")
+        contatos = ("telefone", "email", "instagram", "site", "rating_google", "avaliacoes", "socio_principal")
 
         def _sets_pg():
             fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
-                     "municipio","uf","socio_principal","atualizado_em","categoria_padrao",
+                     "municipio","uf","atualizado_em","categoria_padrao",
                      "qualidade_contato","departamento"]
             partes = [f"{f}=EXCLUDED.{f}" for f in fixos]
             partes += [f"{f}={_coalesce_pg.format(f=f)}" for f in contatos]
@@ -857,7 +857,7 @@ class Database:
 
         def _sets_sq():
             fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
-                     "municipio","uf","socio_principal","atualizado_em","categoria_padrao",
+                     "municipio","uf","atualizado_em","categoria_padrao",
                      "qualidade_contato","departamento"]
             partes = [f"{f}=excluded.{f}" for f in fixos]
             partes += [f"{f}={_coalesce_sq.format(f=f)}" for f in contatos]
@@ -913,9 +913,9 @@ class Database:
 
         _coalesce_pg = "CASE WHEN EXCLUDED.{f} != '' THEN EXCLUDED.{f} ELSE empresas.{f} END"
         _coalesce_sq = "CASE WHEN excluded.{f} != '' THEN excluded.{f} ELSE empresas.{f} END"
-        contatos = ("telefone", "email", "instagram", "site", "rating_google", "avaliacoes")
+        contatos = ("telefone", "email", "instagram", "site", "rating_google", "avaliacoes", "socio_principal")
         fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
-                 "municipio","uf","socio_principal","atualizado_em","categoria_padrao",
+                 "municipio","uf","atualizado_em","categoria_padrao",
                  "qualidade_contato","departamento"]
 
         sets_pg = ", ".join(

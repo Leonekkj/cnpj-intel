@@ -433,7 +433,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--socios", default="",
-        help="Arquivo Socios*.zip (ou CSV extraído) para enriquecer sócio principal"
+        help="Arquivo Socios*.zip (ou CSV extraído) para preencher sócio principal. "
+             "SEM este argumento, todos os registros ficam com socio_principal vazio."
     )
 
     args = parser.parse_args()
