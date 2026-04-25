@@ -488,13 +488,15 @@ function viewDashboard() {
     const grid = [0, 0.25, 0.5, 0.75, 1].map(p => {
       const y = PT + iH * (1 - p);
       return `<line x1="${PL}" x2="${W-PR}" y1="${y}" y2="${y}" stroke="var(--border-soft)" stroke-dasharray="${p===0?"":"2 3"}"/>
-        <text x="${PL-6}" y="${y+3}" fill="var(--text-dim)" font-size="9.5" font-family="var(--mono)" text-anchor="end">${Math.round(maxV*p)}</text>`;
+        <text x="${PL-6}" y="${y+3}" fill="var(--text-dim)" font-size="9.5" font-family="var(--mono)" text-anchor="end">${fmtK(Math.round(maxV*p))}</text>`;
     }).join("");
-    const xlabels = [0, 7, 14, 21, 29].map(i =>
-      `<text x="${sx(i)}" y="${H-PB+16}" fill="var(--text-dim)" font-size="9.5" text-anchor="middle" font-family="var(--mono)">d${i+1}</text>`
-    ).join("");
+    const xlabels = [0, 7, 14, 21, 29].map(i => {
+      const raw = activity[i]?.data;
+      const label = raw ? raw.slice(8,10) + "/" + raw.slice(5,7) : `d${i+1}`;
+      return `<text x="${sx(i)}" y="${H-PB+16}" fill="var(--text-dim)" font-size="9.5" text-anchor="middle" font-family="var(--mono)">${label}</text>`;
+    }).join("");
     const dots = col.pts.map((p, i) =>
-      `<circle class="cd" data-i="${i}" cx="${p[0]}" cy="${p[1]}" r="8" fill="transparent"/>`
+      `<circle class="cd" data-i="${i}" data-col="${activity[i].coletadas}" data-enr="${activity[i].enriquecidas}" data-date="${activity[i].data || ''}" cx="${p[0]}" cy="${p[1]}" r="8" fill="transparent"/>`
     ).join("");
     return `<div class="panel chart-panel">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px">
@@ -1136,16 +1138,17 @@ function wireContent() {
     $$(".cd", body).forEach(el => {
       el.addEventListener("mouseenter", () => {
         const i = +el.dataset.i;
-        const d = DASH_MOCK.activity[i];
+        const raw = el.dataset.date;
+        const dateLabel = raw ? raw.slice(8,10) + "/" + raw.slice(5,7) : `Dia ${i+1}`;
         const cx = +el.getAttribute("cx"), cy = +el.getAttribute("cy");
         const sbox = body.querySelector("svg").getBoundingClientRect();
         const sx = (cx / 720) * sbox.width;
         const sy = (cy / 220) * sbox.height;
         tip.style.left = Math.min(sbox.width - 160, sx - 70) + "px";
         tip.style.top  = sy + "px";
-        tip.innerHTML = `<div class="tip-lbl">Dia ${d.day}</div>
-          <div class="tip-row"><span style="color:var(--accent)">● Coletadas</span><span>${Math.round(d.coletadas)}</span></div>
-          <div class="tip-row"><span style="color:var(--info)">● Enriquecidas</span><span>${Math.round(d.enriquecidas)}</span></div>`;
+        tip.innerHTML = `<div class="tip-lbl">${dateLabel}</div>
+          <div class="tip-row"><span style="color:var(--accent)">● Coletadas</span><span>${fmt(+el.dataset.col)}</span></div>
+          <div class="tip-row"><span style="color:var(--info)">● Enriquecidas</span><span>${fmt(+el.dataset.enr)}</span></div>`;
         tip.classList.add("show");
       });
       el.addEventListener("mouseleave", () => tip.classList.remove("show"));
