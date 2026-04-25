@@ -403,7 +403,9 @@ function sparkline(data, color = "var(--accent)") {
 
 function viewDashboard() {
   const stats = state.statsData || { total: 0, com_telefone: 0, com_email: 0 };
-  const activity = state.atividadeData || DASH_MOCK.activity;
+  const isSparse = !state.atividadeData ||
+    state.atividadeData.filter(d => d.coletadas > 0).length < 3;
+  const activity = isSparse ? DASH_MOCK.activity : state.atividadeData;
   const { insights } = DASH_MOCK;
   const spark14 = activity.slice(-14);
   const sparks = {
@@ -416,7 +418,8 @@ function viewDashboard() {
     const mid = Math.floor(arr.length / 2);
     const prev = arr.slice(0, mid).reduce((s, x) => s + x, 0);
     const curr = arr.slice(mid).reduce((s, x) => s + x, 0);
-    if (!prev) return { val: "—", up: true };
+    if (!prev && !curr) return { val: "—", up: true };
+    if (arr.filter(x => x > 0).length < 3) return { val: "—", up: true };
     const p = (curr - prev) / prev * 100;
     return { val: (p >= 0 ? "+" : "") + p.toFixed(1) + "%", up: p >= 0 };
   }
