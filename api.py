@@ -428,11 +428,11 @@ async def corrigir_mei(payload: dict, _: str = Depends(require_admin)):
 
 @app.post("/api/admin/corrigir-mei-auto")
 async def corrigir_mei_auto(_: str = Depends(require_admin)):
-    """Verifica via BrasilAPI quais empresas com porte='ME' são na verdade MEI
+    """Verifica via BrasilAPI quais empresas com porte='MICRO EMPRESA' são na verdade MEI
     (natureza_juridica='2305') e corrige o porte para 'MEI' no banco."""
     import aiohttp
 
-    candidatos = db.listar_cnpjs_por_porte("ME", limite=10000)
+    candidatos = db.listar_cnpjs_por_porte("MICRO EMPRESA", limite=10000)
     if not candidatos:
         return {"status": "ok", "total_verificados": 0, "total_corrigidos": 0}
 
