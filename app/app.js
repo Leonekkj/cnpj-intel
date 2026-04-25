@@ -403,9 +403,7 @@ function sparkline(data, color = "var(--accent)") {
 
 function viewDashboard() {
   const stats = state.statsData || { total: 0, com_telefone: 0, com_email: 0 };
-  const isSparse = !state.atividadeData ||
-    state.atividadeData.filter(d => d.coletadas > 0).length < 3;
-  const activity = isSparse ? DASH_MOCK.activity : state.atividadeData;
+  const activity = state.atividadeData || DASH_MOCK.activity;
   const { insights } = DASH_MOCK;
   const spark14 = activity.slice(-14);
   const sparks = {
