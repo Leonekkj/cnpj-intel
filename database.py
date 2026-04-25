@@ -180,23 +180,26 @@ _CNAE_GRUPOS = {
     "206": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
     "211": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
     "212": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
-    # Indústria e Produção — Outros (22-23, 32-33)
-    "221": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "222": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "231": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "232": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "233": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "234": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "235": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "239": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "321": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "322": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "323": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "324": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "325": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "329": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "331": ("Outros Produtos Industriais",      "Indústria e Produção"),
-    "332": ("Outros Produtos Industriais",      "Indústria e Produção"),
+    # Indústria e Produção — Borracha e Plástico (22) → mesma cadeia petroquímica
+    "221": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    "222": ("Indústria Química e Farmacêutica", "Indústria e Produção"),
+    # Indústria e Produção — Minerais Não-Metálicos (23)
+    "231": ("Metalurgia e Siderurgia",          "Indústria e Produção"),  # vidro
+    "232": ("Mineração e Extração",             "Indústria e Produção"),  # cimento
+    "233": ("Mineração e Extração",             "Indústria e Produção"),  # cerâmica
+    "234": ("Mineração e Extração",             "Indústria e Produção"),  # gesso/cal
+    "235": ("Mineração e Extração",             "Indústria e Produção"),  # pedra
+    "239": ("Mineração e Extração",             "Indústria e Produção"),  # outros minerais
+    # Indústria e Produção — Bens de Consumo e Lazer (32 sem 325)
+    "321": ("Bens de Consumo e Lazer",          "Indústria e Produção"),  # joalheria
+    "322": ("Bens de Consumo e Lazer",          "Indústria e Produção"),  # instrumentos musicais
+    "323": ("Bens de Consumo e Lazer",          "Indústria e Produção"),  # artefatos esporte/pesca
+    "324": ("Bens de Consumo e Lazer",          "Indústria e Produção"),  # brinquedos
+    "325": ("Eletrônica e Equipamentos",        "Indústria e Produção"),  # instrumentos médicos
+    "329": ("Bens de Consumo e Lazer",          "Indústria e Produção"),  # produtos diversos
+    # Indústria e Produção — Manutenção e Instalação (33)
+    "331": ("Reparação e Manutenção",           "Serviços Locais"),       # manutenção de máquinas
+    "332": ("Serviços Especializados de Construção", "Construção e Infraestrutura"),  # instalação
     # Indústria e Produção — Metalurgia (24-25)
     "241": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
     "242": ("Metalurgia e Siderurgia",          "Indústria e Produção"),
@@ -266,10 +269,10 @@ _CNAE_GRUPOS = {
     "454": ("Comércio de Veículos e Peças",          "Comércio Atacado e Varejo"),
     "461": ("Atacado de Alimentos e Bebidas",        "Comércio Atacado e Varejo"),
     "462": ("Atacado de Alimentos e Bebidas",        "Comércio Atacado e Varejo"),
-    "463": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
+    "463": ("Atacado de Materiais de Construção",    "Comércio Atacado e Varejo"),
     "464": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
     "465": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
-    "466": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
+    "466": ("Atacado de Saúde e Higiene",            "Comércio Atacado e Varejo"),
     "467": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
     "469": ("Atacado de Outros Produtos",            "Comércio Atacado e Varejo"),
     "471": ("Varejo de Alimentos e Supermercados",   "Comércio Atacado e Varejo"),
@@ -350,7 +353,7 @@ _CNAE_GRUPOS = {
     "713": ("Arquitetura e Engenharia",              "Serviços Profissionais"),
     "721": ("Pesquisa e Desenvolvimento",            "Serviços Profissionais"),
     "722": ("Pesquisa e Desenvolvimento",            "Serviços Profissionais"),
-    "749": ("Outros Serviços Profissionais",         "Serviços Profissionais"),
+    "749": ("Consultoria Empresarial e Gestão",       "Serviços Profissionais"),
     # Serviços Profissionais — RH (78)
     "781": ("Recursos Humanos",                      "Serviços Profissionais"),
     "782": ("Recursos Humanos",                      "Serviços Profissionais"),
