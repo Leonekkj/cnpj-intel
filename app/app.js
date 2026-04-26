@@ -66,6 +66,8 @@ const state = {
   selected: new Set(),
   expanded: new Set(),
   expandedData: {},
+  revealed: new Set(),
+  limitReached: false,
 };
 
 // ─── Dashboard mock data (awaiting dedicated backend endpoints) ──
@@ -153,7 +155,10 @@ async function loadPlan() {
   if (!data || data._err) return;
   state.planInfo = data;
   state.plan = data.plano;
+  const wasLimited = state.limitReached;
+  state.limitReached = !!data.limite_atingido;
   updateSidebar();
+  if (wasLimited !== state.limitReached) render();
 }
 
 function _patchMetric(id, newVal, changed) {
@@ -262,10 +267,17 @@ async function loadEmpresas() {
 }
 
 async function loadDetail(cnpj) {
-  if (state.expandedData[cnpj] === "LOADING" || (state.expandedData[cnpj] && !state.expandedData[cnpj]._notfound)) return;
-  state.expandedData[cnpj] = "LOADING"; // mark as loading
+  if (state.expandedData[cnpj] === "LOADING" || (state.expandedData[cnpj] && !state.expandedData[cnpj]._notfound && !state.expandedData[cnpj]._limitReached)) return;
+  state.expandedData[cnpj] = "LOADING";
   render();
   const data = await apiFetch(`/api/empresa/${cnpj}`);
+  if (data && data._err === 429) {
+    state.expandedData[cnpj] = { _limitReached: true };
+    state.limitReached = true;
+    render();
+    loadPlan();
+    return;
+  }
   state.expandedData[cnpj] = (data && !data._err) ? data : { _notfound: true };
   render();
   loadPlan();
@@ -871,7 +883,7 @@ function row(d) {
   const expanded = state.expanded.has(d.cnpj);
   const displayName = d.nome_fantasia || d.razao_social || "—";
   const isFree = state.plan === "free" || state.plan === "basico";
-  const shouldBlur = isFree && !expanded;
+  const shouldBlur = isFree && !state.revealed.has(d.cnpj);
   const telCel = d.telefone
     ? `<span class="contact-pill ac${shouldBlur ? " masked" : ""}">${ICONS.phone}${d.telefone}</span>`
     : `<span class="contact-em">—</span>`;
@@ -1158,6 +1170,7 @@ async function toggleExpand(cnpj) {
     render();
   } else {
     state.expanded.add(cnpj);
+    state.revealed.add(cnpj);
     render();
     await loadDetail(cnpj);
   }
