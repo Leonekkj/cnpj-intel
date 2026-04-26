@@ -871,11 +871,12 @@ function row(d) {
   const expanded = state.expanded.has(d.cnpj);
   const displayName = d.nome_fantasia || d.razao_social || "—";
   const isFree = state.plan === "free" || state.plan === "basico";
+  const shouldBlur = isFree && !expanded;
   const telCel = d.telefone
-    ? `<span class="contact-pill ac${isFree ? " masked" : ""}">${ICONS.phone}${d.telefone}</span>`
+    ? `<span class="contact-pill ac${shouldBlur ? " masked" : ""}">${ICONS.phone}${d.telefone}</span>`
     : `<span class="contact-em">—</span>`;
   const emCel = d.email
-    ? `<span class="contact-pill in${isFree ? " masked" : ""}">${ICONS.mail}${d.email.length > 22 ? d.email.slice(0,22)+"…" : d.email}</span>`
+    ? `<span class="contact-pill in${shouldBlur ? " masked" : ""}">${ICONS.mail}${d.email.length > 22 ? d.email.slice(0,22)+"…" : d.email}</span>`
     : "";
   return `
     <tr class="${selected ? "selected" : ""} ${expanded ? "expanded" : ""}">
@@ -894,7 +895,7 @@ function row(d) {
       <td class="city-cell"><span class="c-name">${d.municipio || "—"}</span><span class="c-uf">${d.uf || ""}</span></td>
       <td class="mono-cell">${fmtDate(d.abertura)}</td>
       <td><div style="display:flex;gap:4px;flex-wrap:wrap">${telCel}${emCel}</div></td>
-      <td style="color:var(--text-soft);font-size:12px">${d.socio_principal ? `<span class="${isFree ? "masked" : ""}" style="color:var(--text-soft)">${d.socio_principal}</span>` : "—"}</td>
+      <td style="color:var(--text-soft);font-size:12px">${d.socio_principal ? `<span class="${shouldBlur ? "masked" : ""}" style="color:var(--text-soft)">${d.socio_principal}</span>` : "—"}</td>
       <td style="text-align:right;padding-right:16px">
         <div class="row-actions">
           <button class="row-btn" title="Mais ações">${ICONS.more}</button>
