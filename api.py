@@ -237,12 +237,6 @@ def listar_empresas(
                                 detail=f"Limite diário do plano {info['nome_plano']} atingido "
                                        f"({info['limite_dia']} CNPJs/dia). Renova amanhã ou faça upgrade.")
 
-    # Free: oculta contatos na listagem (revelados via ver+)
-    if plano == "free":
-        for emp in resultado.get("dados", []):
-            for campo in ("telefone", "email", "instagram", "site"):
-                emp[campo] = ""
-
     resultado["plano"]    = info["nome_plano"]
     resultado["restante"] = info.get("restante")
     return resultado

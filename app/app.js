@@ -274,6 +274,7 @@ async function loadDetail(cnpj) {
   const data = await apiFetch(`/api/empresa/${cnpj}`);
   state.expandedData[cnpj] = (data && !data._err) ? data : { _notfound: true };
   render();
+  loadPlan();
 }
 
 async function loadCategories() {
@@ -877,14 +878,10 @@ function row(d) {
   const displayName = d.nome_fantasia || d.razao_social || "—";
   const isFree = state.plan === "free";
   const telCel = d.telefone
-    ? `<span class="contact-pill ac">${ICONS.phone}${d.telefone}</span>`
-    : isFree
-    ? `<span class="contact-pill ac masked">${ICONS.phone}(11) 9xxxx-xxxx</span>`
+    ? `<span class="contact-pill ac${isFree ? " masked" : ""}">${ICONS.phone}${d.telefone}</span>`
     : `<span class="contact-em">—</span>`;
   const emCel = d.email
-    ? `<span class="contact-pill in">${ICONS.mail}${d.email.length > 22 ? d.email.slice(0,22)+"…" : d.email}</span>`
-    : isFree
-    ? `<span class="contact-pill in masked">${ICONS.mail}contato@empresa.com</span>`
+    ? `<span class="contact-pill in${isFree ? " masked" : ""}">${ICONS.mail}${d.email.length > 22 ? d.email.slice(0,22)+"…" : d.email}</span>`
     : "";
   return `
     <tr class="${selected ? "selected" : ""} ${expanded ? "expanded" : ""}">
@@ -929,18 +926,10 @@ function detailRow(cnpj, baseData) {
   const telLink = d.telefone ? `https://wa.me/55${d.telefone.replace(/\D/g,"")}` : null;
   const siteUrl = d.site ? (d.site.startsWith("http") ? d.site : "https://" + d.site) : null;
 
-  const telVal    = d.telefone ? `<span style="color:var(--accent-hi)">${d.telefone}</span>`
-                   : isFree    ? `<span class="masked" style="color:var(--accent-hi)">(11) 9xxxx-xxxx</span>`
-                   :             `<span class="contact-em">Não encontrado</span>`;
-  const emailVal  = d.email    ? `<span style="color:var(--info)">${d.email}</span>`
-                   : isFree    ? `<span class="masked" style="color:var(--info)">contato@empresa.com.br</span>`
-                   :             `<span class="contact-em">Não encontrado</span>`;
-  const siteVal   = d.site     ? `<span style="color:var(--purple)">${d.site}</span>`
-                   : isFree    ? `<span class="masked" style="color:var(--purple)">www.empresa.com.br</span>`
-                   :             `<span class="contact-em">—</span>`;
-  const instaVal  = d.instagram? `<span style="color:var(--pink)">${d.instagram}</span>`
-                   : isFree    ? `<span class="masked" style="color:var(--pink)">@empresa</span>`
-                   :             `<span class="contact-em">—</span>`;
+  const telVal   = d.telefone  ? `<span class="${isFree?"masked ":""}tel" style="color:var(--accent-hi)">${d.telefone}</span>`   : `<span class="contact-em">Não encontrado</span>`;
+  const emailVal = d.email     ? `<span class="${isFree?"masked ":""}eml" style="color:var(--info)">${d.email}</span>`             : `<span class="contact-em">Não encontrado</span>`;
+  const siteVal  = d.site      ? `<span class="${isFree?"masked ":""}ste" style="color:var(--purple)">${d.site}</span>`            : `<span class="contact-em">—</span>`;
+  const instaVal = d.instagram ? `<span class="${isFree?"masked ":""}ins" style="color:var(--pink)">${d.instagram}</span>`         : `<span class="contact-em">—</span>`;
 
   return `
   <tr class="detail-row">
@@ -1299,7 +1288,7 @@ async function init() {
 
   // Auto-refresh
   setInterval(loadStats,      10000);
-  setInterval(loadPlan,       60000);
+  setInterval(loadPlan,       15000);
   setInterval(loadCategories, 60000);
 }
 
