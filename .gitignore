@@ -10,3 +10,4 @@ tests/visual/latest/
 career-ops/
 node_modules/
 package-lock.json
+package.json
