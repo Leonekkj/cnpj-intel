@@ -278,7 +278,12 @@ async function loadDetail(cnpj) {
     loadPlan();
     return;
   }
-  state.expandedData[cnpj] = (data && !data._err) ? data : { _notfound: true };
+  if (data && !data._err) {
+    state.expandedData[cnpj] = data;
+    state.revealed.add(cnpj);
+  } else {
+    state.expandedData[cnpj] = { _notfound: true };
+  }
   render();
   loadPlan();
 }
@@ -1210,7 +1215,6 @@ async function toggleExpand(cnpj) {
     render();
   } else {
     state.expanded.add(cnpj);
-    state.revealed.add(cnpj);
     if (state.limitReached && (state.plan === "free" || state.plan === "basico")) {
       state.expandedData[cnpj] = { _limitReached: true };
       render();
