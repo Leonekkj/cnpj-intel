@@ -379,7 +379,16 @@ function updateSidebar() {
   if (elBadge) elBadge.textContent = "Ativo";
 
   let pct = 0, statsText = "";
-  if (info.limite_dia) {
+  if (state.limitReached) {
+    pct = 100;
+    statsText = `${fmt(info.cnpjs_hoje)} / ${fmt(info.limite_dia)} — limite atingido`;
+    if (elBar) {
+      elBar.style.width = "100%";
+      elBar.style.background = "linear-gradient(90deg, var(--danger) 0%, oklch(0.85 0.17 25) 100%)";
+    }
+    if (elBadge) { elBadge.textContent = "Limitado"; elBadge.style.color = "var(--danger)"; }
+    if (elStats) elStats.innerHTML = `<span class="mono" style="color:var(--danger)">${statsText}</span><br><a href="#upgrade" class="plan-upgrade-link">Fazer upgrade →</a>`;
+  } else if (info.limite_dia) {
     pct = Math.min(100, (info.cnpjs_hoje / info.limite_dia) * 100);
     statsText = `${fmt(info.cnpjs_hoje)} / ${fmt(info.limite_dia)} hoje`;
     if (elBar) {
@@ -390,11 +399,12 @@ function updateSidebar() {
         ? "linear-gradient(90deg, var(--warn) 0%, oklch(0.90 0.14 75) 100%)"
         : "";
     }
+    if (elStats) elStats.innerHTML = `<span class="mono">${statsText}</span>`;
   } else {
     statsText = `${fmt(info.cnpjs_hoje)} / ilimitado hoje`;
     if (elBar) { elBar.style.width = "0%"; elBar.style.background = ""; }
+    if (elStats) elStats.innerHTML = `<span class="mono">${statsText}</span>`;
   }
-  if (elStats) elStats.innerHTML = `<span class="mono">${statsText}</span>`;
 
   if (elUser)  elUser.textContent  = nomePlano;
   if (elSub)   elSub.textContent   = info.plano;
@@ -439,17 +449,34 @@ function showTab(t) {
 }
 
 // ─── Render ─────────────────────────────────────────────────────
+function limitBanner() {
+  if (!state.limitReached) return "";
+  const info = state.planInfo;
+  const nomePlano = info ? info.nome_plano : "seu plano";
+  return `<div class="limit-banner">
+    <span class="limit-banner-icon">${ICONS.lock}</span>
+    <span class="limit-banner-text">
+      Limite diário do plano <strong>${nomePlano}</strong> atingido.
+      Você ainda pode navegar e ver os dados, mas não pode abrir detalhes.
+      Renova amanhã às 00:00 ou
+    </span>
+    <a href="#upgrade" class="limit-banner-cta">faça upgrade →</a>
+  </div>`;
+}
+
 function render() {
   const c = $("#content");
   if (!c) return;
   const t = state.tab;
-  if      (t === "dashboard") c.innerHTML = viewDashboard();
-  else if (t === "empresas")  c.innerHTML = viewEmpresas();
-  else if (t === "busca")     c.innerHTML = viewBusca();
-  else if (t === "listas")    c.innerHTML = viewListas();
-  else if (t === "exportar")  c.innerHTML = viewExport();
-  else if (t === "api")       c.innerHTML = viewAPI();
-  else if (t === "clientes")  c.innerHTML = viewClientes();
+  let html = limitBanner();
+  if      (t === "dashboard") html += viewDashboard();
+  else if (t === "empresas")  html += viewEmpresas();
+  else if (t === "busca")     html += viewBusca();
+  else if (t === "listas")    html += viewListas();
+  else if (t === "exportar")  html += viewExport();
+  else if (t === "api")       html += viewAPI();
+  else if (t === "clientes")  html += viewClientes();
+  c.innerHTML = html;
   wireContent();
 }
 
@@ -927,6 +954,19 @@ function detailRow(cnpj, baseData) {
   if (det._notfound) {
     return `<tr class="detail-row"><td colspan="9"><div class="detail-loading">Detalhes não disponíveis.</div></td></tr>`;
   }
+  if (det._limitReached) {
+    const info = state.planInfo;
+    const nomePlano = info ? info.nome_plano : "seu plano";
+    const limite = info ? fmt(info.limite_dia) : "—";
+    return `<tr class="detail-row"><td colspan="9">
+      <div class="limit-reached-row">
+        <div class="limit-reached-icon">${ICONS.lock}</div>
+        <div class="limit-reached-title">Limite diário atingido</div>
+        <div class="limit-reached-sub">Você consumiu todos os ${limite} detalhes do plano <strong>${nomePlano}</strong> disponíveis hoje.<br>Renova amanhã às 00:00 ou faça upgrade para ver mais empresas.</div>
+        <a href="#upgrade" class="btn limit-reached-btn">${ICONS.bolt}Fazer upgrade</a>
+      </div>
+    </td></tr>`;
+  }
 
   const d = { ...baseData, ...det };
   const isFree = state.plan === "free" || state.plan === "basico";
@@ -1171,6 +1211,11 @@ async function toggleExpand(cnpj) {
   } else {
     state.expanded.add(cnpj);
     state.revealed.add(cnpj);
+    if (state.limitReached && (state.plan === "free" || state.plan === "basico")) {
+      state.expandedData[cnpj] = { _limitReached: true };
+      render();
+      return;
+    }
     render();
     await loadDetail(cnpj);
   }

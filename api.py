@@ -141,6 +141,38 @@ def get_token_info(credentials: HTTPAuthorizationCredentials = Depends(security)
     return info
 
 
+def get_token_info_soft(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    """
+    Valida o token mas nunca levanta 429 por limite — retorna info com limite_atingido=True.
+    Usar em endpoints de leitura que não consomem quota.
+    """
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Token obrigatório")
+
+    token = credentials.credentials
+
+    if ADMIN_TOKEN and token == ADMIN_TOKEN:
+        return {
+            "token": token,
+            "plano": "admin",
+            "nome_plano": "Admin",
+            "cnpjs_hoje": 0,
+            "limite_dia": None,
+            "restante": None,
+            "export": True,
+            "api": True,
+            "limite_atingido": False,
+            "is_admin": True,
+        }
+
+    info = db.verificar_token_db(token)
+    if not info:
+        raise HTTPException(status_code=401, detail="Token inválido ou inativo")
+
+    info["is_admin"] = False
+    return info
+
+
 def require_export(info: dict = Depends(get_token_info)) -> dict:
     """Dependência que exige plano com export liberado."""
     if not info.get("export"):
@@ -175,16 +207,17 @@ def health():
 # ─── Plano do usuário ──────────────────────────────────────────────────────────
 
 @app.get("/api/meu-plano")
-def meu_plano(info: dict = Depends(get_token_info)):
+def meu_plano(info: dict = Depends(get_token_info_soft)):
     """Retorna informações do plano do token atual."""
     return {
-        "plano":      info["plano"],
-        "nome_plano": info["nome_plano"],
-        "cnpjs_hoje": info["cnpjs_hoje"],
-        "limite_dia": info["limite_dia"],
-        "restante":   info["restante"],
-        "export":     info["export"],
-        "api":        info["api"],
+        "plano":           info["plano"],
+        "nome_plano":      info["nome_plano"],
+        "cnpjs_hoje":      info["cnpjs_hoje"],
+        "limite_dia":      info["limite_dia"],
+        "restante":        info["restante"],
+        "export":          info["export"],
+        "api":             info["api"],
+        "limite_atingido": info["limite_atingido"],
     }
 
 
@@ -207,7 +240,7 @@ def listar_empresas(
     com_contato:   bool = Query(False, description="Padrão: retorna todos os CNPJs"),
     pagina:        int  = Query(1, ge=1),
     por_pagina:    int  = Query(50, le=200),
-    info:          dict = Depends(get_token_info),
+    info:          dict = Depends(get_token_info_soft),
 ):
     plano = info["plano"]
 
@@ -231,7 +264,7 @@ _stats_cache = {"data": None, "ts": 0}
 _STATS_TTL = 10  # segundos
 
 @app.get("/api/stats")
-def estatisticas(info: dict = Depends(get_token_info)):
+def estatisticas(info: dict = Depends(get_token_info_soft)):
     agora = _time.time()
     if _stats_cache["data"] and (agora - _stats_cache["ts"]) < _STATS_TTL:
         return _stats_cache["data"]
@@ -245,7 +278,7 @@ _atividade_cache = {"data": None, "ts": 0}
 _ATIVIDADE_TTL = 300  # 5 minutes
 
 @app.get("/api/atividade")
-def atividade(info: dict = Depends(get_token_info)):
+def atividade(info: dict = Depends(get_token_info_soft)):
     agora = _time.time()
     if _atividade_cache["data"] and (agora - _atividade_cache["ts"]) < _ATIVIDADE_TTL:
         return _atividade_cache["data"]
@@ -256,19 +289,19 @@ def atividade(info: dict = Depends(get_token_info)):
 
 
 @app.get("/api/cnaes")
-def listar_cnaes(info: dict = Depends(get_token_info)):
+def listar_cnaes(info: dict = Depends(get_token_info_soft)):
     """Retorna os CNAEs mais frequentes para popular o filtro de nicho."""
     return db.listar_cnaes()
 
 
 @app.get("/api/categorias")
-def listar_categorias(info: dict = Depends(get_token_info)):
+def listar_categorias(info: dict = Depends(get_token_info_soft)):
     """Retorna macro-setores presentes no banco para popular o filtro de setor."""
     return db.listar_categorias()
 
 
 @app.get("/api/departamentos")
-def listar_departamentos(info: dict = Depends(get_token_info)):
+def listar_departamentos(info: dict = Depends(get_token_info_soft)):
     """Retorna hierarquia macro_setor → departamentos com contagem."""
     return db.listar_departamentos()
 
