@@ -926,10 +926,10 @@ function detailRow(cnpj, baseData) {
   const telLink = d.telefone ? `https://wa.me/55${d.telefone.replace(/\D/g,"")}` : null;
   const siteUrl = d.site ? (d.site.startsWith("http") ? d.site : "https://" + d.site) : null;
 
-  const telVal   = d.telefone  ? `<span class="${isFree?"masked ":""}tel" style="color:var(--accent-hi)">${d.telefone}</span>`   : `<span class="contact-em">Não encontrado</span>`;
-  const emailVal = d.email     ? `<span class="${isFree?"masked ":""}eml" style="color:var(--info)">${d.email}</span>`             : `<span class="contact-em">Não encontrado</span>`;
-  const siteVal  = d.site      ? `<span class="${isFree?"masked ":""}ste" style="color:var(--purple)">${d.site}</span>`            : `<span class="contact-em">—</span>`;
-  const instaVal = d.instagram ? `<span class="${isFree?"masked ":""}ins" style="color:var(--pink)">${d.instagram}</span>`         : `<span class="contact-em">—</span>`;
+  const telVal   = d.telefone  ? `<span style="color:var(--accent-hi)">${d.telefone}</span>`   : `<span class="contact-em">Não encontrado</span>`;
+  const emailVal = d.email     ? `<span style="color:var(--info)">${d.email}</span>`             : `<span class="contact-em">Não encontrado</span>`;
+  const siteVal  = d.site      ? `<span style="color:var(--purple)">${d.site}</span>`            : `<span class="contact-em">—</span>`;
+  const instaVal = d.instagram ? `<span style="color:var(--pink)">${d.instagram}</span>`         : `<span class="contact-em">—</span>`;
 
   return `
   <tr class="detail-row">
