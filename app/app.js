@@ -253,12 +253,6 @@ async function loadEmpresas() {
   if (data && !data._err) {
     state.dados = data.dados || [];
     state.totalDados = data.total || 0;
-    if (state.plan === "basico" && state.planInfo && data.restante !== undefined) {
-      state.planInfo.restante   = data.restante;
-      state.planInfo.cnpjs_hoje = (state.planInfo.limite_dia ?? 0) - (data.restante ?? 0);
-      if (state.planInfo.cnpjs_hoje < 0) state.planInfo.cnpjs_hoje = 0;
-      updateSidebar();
-    }
   } else {
     state.dados = [];
     state.totalDados = 0;

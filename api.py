@@ -211,15 +211,6 @@ def listar_empresas(
 ):
     plano = info["plano"]
 
-    # Básico: limita por_pagina ao restante e consome quota na listagem
-    if plano == "basico":
-        restante = info.get("restante", 0)
-        if info.get("limite_dia") is not None:
-            por_pagina = min(por_pagina, restante) if restante > 0 else 0
-            if por_pagina == 0:
-                return {"total": 0, "pagina": pagina, "por_pagina": 0, "dados": [],
-                        "plano": info["nome_plano"], "restante": 0}
-
     resultado = db.buscar_empresas(
         q=q, uf=uf, porte=porte, cnae=cnae, categoria=categoria, departamento=departamento,
         abertura_de=abertura_de, abertura_ate=abertura_ate,
@@ -229,19 +220,8 @@ def listar_empresas(
         pagina=pagina, por_pagina=por_pagina,
     )
 
-    # Básico: consome quota com base nas linhas retornadas (atômico — sem race)
-    retornados = len(resultado.get("dados", []))
-    if plano == "basico" and retornados > 0 and not info.get("is_admin"):
-        if not db.consumir_quota_atomico(info["token"], retornados, info["limite_dia"]):
-            raise HTTPException(status_code=429,
-                                detail=f"Limite diário do plano {info['nome_plano']} atingido "
-                                       f"({info['limite_dia']} CNPJs/dia). Renova amanhã ou faça upgrade.")
-
-    resultado["plano"] = info["nome_plano"]
-    if plano == "basico" and retornados > 0:
-        resultado["restante"] = max(0, (info.get("restante") or 0) - retornados)
-    else:
-        resultado["restante"] = info.get("restante")
+    resultado["plano"]    = info["nome_plano"]
+    resultado["restante"] = info.get("restante")
     return resultado
 
 
@@ -302,7 +282,7 @@ def detalhe_empresa(cnpj: str, info: dict = Depends(get_token_info)):
 
     # Quota: só o plano free consome ao abrir detalhe (ver+)
     # Básico consome no export, Pro é ilimitado
-    if not info.get("is_admin") and info["plano"] == "free":
+    if not info.get("is_admin") and info["plano"] in ("free", "basico"):
         if not db.consumir_quota_atomico(info["token"], 1, info["limite_dia"]):
             raise HTTPException(status_code=429,
                                 detail=f"Limite diário do plano {info['nome_plano']} atingido "
