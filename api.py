@@ -237,8 +237,11 @@ def listar_empresas(
                                 detail=f"Limite diário do plano {info['nome_plano']} atingido "
                                        f"({info['limite_dia']} CNPJs/dia). Renova amanhã ou faça upgrade.")
 
-    resultado["plano"]    = info["nome_plano"]
-    resultado["restante"] = info.get("restante")
+    resultado["plano"] = info["nome_plano"]
+    if plano == "basico" and retornados > 0:
+        resultado["restante"] = max(0, (info.get("restante") or 0) - retornados)
+    else:
+        resultado["restante"] = info.get("restante")
     return resultado
 
 

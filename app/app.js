@@ -237,7 +237,7 @@ async function loadEmpresas() {
   state.loading = true;
   render();
   const f = state.filters;
-  const params = new URLSearchParams({ pagina: state.page, por_pagina: state.perPage });
+  const params = new URLSearchParams({ pagina: state.page, por_pagina: state.perPage, com_contato: "true" });
   if (f.q)          params.set("q", f.q);
   if (f.uf)         params.set("uf", f.uf);
   if (f.porte)      params.set("porte", f.porte);
@@ -253,7 +253,7 @@ async function loadEmpresas() {
   if (data && !data._err) {
     state.dados = data.dados || [];
     state.totalDados = data.total || 0;
-    if (state.planInfo && data.restante !== undefined) {
+    if (state.plan === "basico" && state.planInfo && data.restante !== undefined) {
       state.planInfo.restante   = data.restante;
       state.planInfo.cnpjs_hoje = (state.planInfo.limite_dia ?? 0) - (data.restante ?? 0);
       if (state.planInfo.cnpjs_hoje < 0) state.planInfo.cnpjs_hoje = 0;
@@ -900,7 +900,7 @@ function row(d) {
       <td class="city-cell"><span class="c-name">${d.municipio || "—"}</span><span class="c-uf">${d.uf || ""}</span></td>
       <td class="mono-cell">${fmtDate(d.abertura)}</td>
       <td><div style="display:flex;gap:4px;flex-wrap:wrap">${telCel}${emCel}</div></td>
-      <td style="color:var(--text-soft);font-size:12px">${d.socio_principal || "—"}</td>
+      <td style="color:var(--text-soft);font-size:12px">${d.socio_principal ? `<span class="${isFree ? "masked" : ""}" style="color:var(--text-soft)">${d.socio_principal}</span>` : "—"}</td>
       <td style="text-align:right;padding-right:16px">
         <div class="row-actions">
           <button class="row-btn" title="Mais ações">${ICONS.more}</button>
