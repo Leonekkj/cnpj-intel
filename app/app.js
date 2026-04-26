@@ -876,7 +876,7 @@ function row(d) {
   const selected = state.selected.has(d.cnpj);
   const expanded = state.expanded.has(d.cnpj);
   const displayName = d.nome_fantasia || d.razao_social || "—";
-  const isFree = state.plan === "free";
+  const isFree = state.plan === "free" || state.plan === "basico";
   const telCel = d.telefone
     ? `<span class="contact-pill ac${isFree ? " masked" : ""}">${ICONS.phone}${d.telefone}</span>`
     : `<span class="contact-em">—</span>`;
@@ -922,7 +922,7 @@ function detailRow(cnpj, baseData) {
   }
 
   const d = { ...baseData, ...det };
-  const isFree = state.plan === "free";
+  const isFree = state.plan === "free" || state.plan === "basico";
   const telLink = d.telefone ? `https://wa.me/55${d.telefone.replace(/\D/g,"")}` : null;
   const siteUrl = d.site ? (d.site.startsWith("http") ? d.site : "https://" + d.site) : null;
 
