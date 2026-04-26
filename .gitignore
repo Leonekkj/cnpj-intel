@@ -8,3 +8,5 @@ cnpjs_seed.txt
 cnpjs_seed.txt.gz
 tests/visual/latest/
 career-ops/
+node_modules/
+package-lock.json
