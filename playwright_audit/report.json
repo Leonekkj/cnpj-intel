@@ -1,0 +1,322 @@
+{
+  "findings": [
+    {
+      "section": "Dashboard",
+      "status": "INFO",
+      "detail": "--- Testing Dashboard ---"
+    },
+    {
+      "section": "Dashboard",
+      "status": "OK",
+      "detail": "Total CNPJs card: \"201\""
+    },
+    {
+      "section": "Dashboard",
+      "status": "OK",
+      "detail": "Com telefone card: \"201\""
+    },
+    {
+      "section": "Dashboard",
+      "status": "OK",
+      "detail": "Com e-mail card: \"201\""
+    },
+    {
+      "section": "Dashboard",
+      "status": "WARN",
+      "detail": "\"Exports no mês\" shows \"—\" — hardcoded zeros, no real tracking (known bug)"
+    },
+    {
+      "section": "Dashboard",
+      "status": "OK",
+      "detail": "Activity chart SVG rendered"
+    },
+    {
+      "section": "Dashboard",
+      "status": "OK",
+      "detail": "Chart tooltip shows on hover"
+    },
+    {
+      "section": "Dashboard",
+      "status": "OK",
+      "detail": "Breakdown bars: 9 rows"
+    },
+    {
+      "section": "Dashboard",
+      "status": "OK",
+      "detail": "Insight cards: 5"
+    },
+    {
+      "section": "Dashboard",
+      "status": "WARN",
+      "detail": "All 5 insight cards are static MOCK data — never update based on real metrics (known bug)"
+    },
+    {
+      "section": "Dashboard",
+      "status": "OK",
+      "detail": "Agent sidebar: \"Posição 0\""
+    },
+    {
+      "section": "Dashboard",
+      "status": "OK",
+      "detail": "Plan sidebar: \"Plano Admin\""
+    },
+    {
+      "section": "Dashboard",
+      "status": "OK",
+      "detail": "Nav total badge: \"201\""
+    },
+    {
+      "section": "Empresas",
+      "status": "INFO",
+      "detail": "--- Testing Empresas tab ---"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Table loaded: 14 rows"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "UF=SP filter: 14 rows"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Porte=MEI filter: 1 rows"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Setor \"Comércio Atacado e Varejo\" selected. Selects present: 4 (cascade appeared)"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Text search \"A\": 14 rows"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Toggle \"Com telefone\": 14 rows"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Toggle \"Com e-mail\": 14 rows"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Toggle \"Com site\": 2 rows"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Toggle \"Instagram\": 1 rows"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Sortable columns: 6"
+    },
+    {
+      "section": "Empresas",
+      "status": "WARN",
+      "detail": "Column sort is CLIENT-SIDE only — only sorts current page, resets on pagination (known bug)"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Bulk action bar appears after row selection"
+    },
+    {
+      "section": "Empresas",
+      "status": "FAIL",
+      "detail": "Bulk button \"Salvar em lista\" has no onclick — not implemented (known bug)"
+    },
+    {
+      "section": "Empresas",
+      "status": "FAIL",
+      "detail": "Bulk button \"Campanha\" has no onclick — not implemented (known bug)"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Row expands to detail panel"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Detail action buttons: 3"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "WhatsApp link: present"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "Pagination page 2: 14 rows"
+    },
+    {
+      "section": "Empresas",
+      "status": "OK",
+      "detail": "\"Limpar\" (clear filters) works"
+    },
+    {
+      "section": "Busca",
+      "status": "INFO",
+      "detail": "--- Testing Busca avançada tab ---"
+    },
+    {
+      "section": "Busca",
+      "status": "OK",
+      "detail": "Date range inputs: 2"
+    },
+    {
+      "section": "Busca",
+      "status": "OK",
+      "detail": "Date range applied: 1 rows"
+    },
+    {
+      "section": "Empresas",
+      "status": "WARN",
+      "detail": "Filter state shared between tabs: empresas#filter-q=\"SHARED_STATE_TEST\" (known UX issue if WARN)"
+    },
+    {
+      "section": "Listas",
+      "status": "INFO",
+      "detail": "--- Testing Minhas listas tab ---"
+    },
+    {
+      "section": "Listas",
+      "status": "WARN",
+      "detail": "Listas tab: \"em breve\" placeholder — feature NOT implemented"
+    },
+    {
+      "section": "Listas",
+      "status": "FAIL",
+      "detail": "\"Nova lista\" button onclick: MISSING — no handler (known bug)"
+    },
+    {
+      "section": "Exportar",
+      "status": "INFO",
+      "detail": "--- Testing Exportar CSV tab ---"
+    },
+    {
+      "section": "Exportar",
+      "status": "OK",
+      "detail": "Export panel rendered"
+    },
+    {
+      "section": "Exportar",
+      "status": "WARN",
+      "detail": "Export tab: no filter UI shown — user cannot see what data will be exported (UX issue)"
+    },
+    {
+      "section": "Exportar",
+      "status": "OK",
+      "detail": "Export API response: HTTP 200, type=text/csv; charset=utf-8"
+    },
+    {
+      "section": "API",
+      "status": "INFO",
+      "detail": "--- Testing API & Webhooks tab ---"
+    },
+    {
+      "section": "API",
+      "status": "OK",
+      "detail": "Token displayed: \"test\""
+    },
+    {
+      "section": "API",
+      "status": "OK",
+      "detail": "Link to /docs present"
+    },
+    {
+      "section": "Clientes",
+      "status": "INFO",
+      "detail": "--- Testing Clientes tab ---"
+    },
+    {
+      "section": "Clientes",
+      "status": "OK",
+      "detail": "Token list: 0 tokens"
+    },
+    {
+      "section": "Clientes",
+      "status": "OK",
+      "detail": "Token creation result panel shown"
+    },
+    {
+      "section": "Clientes",
+      "status": "OK",
+      "detail": "Token list after creation: 1 (was 0)"
+    },
+    {
+      "section": "Clientes",
+      "status": "OK",
+      "detail": "Token deleted. Final count: 0"
+    },
+    {
+      "section": "Prefs",
+      "status": "INFO",
+      "detail": "--- Testing Preferences panel ---"
+    },
+    {
+      "section": "Prefs",
+      "status": "OK",
+      "detail": "Preferences panel opens on avatar click"
+    },
+    {
+      "section": "Prefs",
+      "status": "OK",
+      "detail": "Density → Compact"
+    },
+    {
+      "section": "Prefs",
+      "status": "OK",
+      "detail": "Radius → Round"
+    },
+    {
+      "section": "Prefs",
+      "status": "OK",
+      "detail": "Panel closes"
+    },
+    {
+      "section": "GlobalSearch",
+      "status": "INFO",
+      "detail": "--- Testing global search ---"
+    },
+    {
+      "section": "GlobalSearch",
+      "status": "OK",
+      "detail": "Enter in global search → tab switched to: \"empresas\""
+    },
+    {
+      "section": "GlobalSearch",
+      "status": "OK",
+      "detail": "Query passed to filter: \"Restaurante\""
+    },
+    {
+      "section": "GlobalSearch",
+      "status": "WARN",
+      "detail": "⌘K shortcut: active element=\"\" (should be \"global-search\" — if WARN it's decorative only)"
+    },
+    {
+      "section": "Console",
+      "status": "INFO",
+      "detail": "--- JS Console errors ---"
+    },
+    {
+      "section": "Console",
+      "status": "FAIL",
+      "detail": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

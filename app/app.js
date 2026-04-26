@@ -62,7 +62,7 @@ const state = {
   filters: { q: "", uf: "", porte: "", categoria: "", departamento: "", tel: false, email: false, site: false, insta: false, abertura_de: "", abertura_ate: "" },
   sort: { key: null, dir: "asc" },
   page: 1,
-  perPage: 14,
+  perPage: 15,
   selected: new Set(),
   expanded: new Set(),
   expandedData: {},
@@ -262,8 +262,8 @@ async function loadEmpresas() {
 }
 
 async function loadDetail(cnpj) {
-  if (state.expandedData[cnpj]) return; // cached
-  state.expandedData[cnpj] = null; // mark as loading
+  if (state.expandedData[cnpj] === "LOADING" || (state.expandedData[cnpj] && !state.expandedData[cnpj]._notfound)) return;
+  state.expandedData[cnpj] = "LOADING"; // mark as loading
   render();
   const data = await apiFetch(`/api/empresa/${cnpj}`);
   state.expandedData[cnpj] = (data && !data._err) ? data : { _notfound: true };
@@ -468,7 +468,7 @@ function viewDashboard() {
   const sparks = {
     coletadas:    spark14.map(d => d.coletadas),
     enriquecidas: spark14.map(d => d.enriquecidas),
-    contatos:     spark14.map(d => d.enriquecidas),
+    contatos:     spark14.map(d => d.com_email || 0),
     export:       spark14.map(() => 0),
   };
   function pctDelta(arr) {
@@ -906,7 +906,7 @@ function row(d) {
 function detailRow(cnpj, baseData) {
   const det = state.expandedData[cnpj];
 
-  if (det === undefined || det === null) {
+  if (det === undefined || det === null || det === "LOADING") {
     return `<tr class="detail-row"><td colspan="9"><div class="detail-loading">Carregando detalhes…</div></td></tr>`;
   }
   if (det._notfound) {

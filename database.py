@@ -1033,9 +1033,12 @@ class Database:
         params = []
 
         if q:
-            filtros.append(f"(razao_social {LIKE} {PH} OR nome_fantasia {LIKE} {PH} OR cnpj LIKE {PH} OR municipio {LIKE} {PH})")
+            filtros.append(
+                f"(razao_social {LIKE} {PH} OR nome_fantasia {LIKE} {PH} "
+                f"OR cnpj LIKE {PH} OR municipio {LIKE} {PH} OR socio_principal {LIKE} {PH})"
+            )
             like = f"%{q}%"
-            params.extend([like, like, like, like])
+            params.extend([like, like, like, like, like])
         if uf:
             filtros.append(f"uf = {PH}")
             params.append(uf.upper())
@@ -1537,10 +1540,12 @@ class Database:
             return
         conn = psycopg2.connect(DATABASE_URL)
         conn.set_isolation_level(0)  # AUTOCOMMIT obrigatório — VACUUM não pode rodar em transação
-        cur = conn.cursor()
-        cur.execute("VACUUM ANALYZE empresas")
-        cur.close()
-        conn.close()
+        try:
+            cur = conn.cursor()
+            cur.execute("VACUUM ANALYZE empresas")
+            cur.close()
+        finally:
+            conn.close()
 
     def limpar_sites_falsos(self) -> int:
         """Alias de limpar_sites_diretorio — mantido para compatibilidade."""
