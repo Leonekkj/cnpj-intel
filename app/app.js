@@ -253,6 +253,12 @@ async function loadEmpresas() {
   if (data && !data._err) {
     state.dados = data.dados || [];
     state.totalDados = data.total || 0;
+    if (state.planInfo && data.restante !== undefined) {
+      state.planInfo.restante   = data.restante;
+      state.planInfo.cnpjs_hoje = (state.planInfo.limite_dia ?? 0) - (data.restante ?? 0);
+      if (state.planInfo.cnpjs_hoje < 0) state.planInfo.cnpjs_hoje = 0;
+      updateSidebar();
+    }
   } else {
     state.dados = [];
     state.totalDados = 0;
@@ -869,11 +875,16 @@ function row(d) {
   const selected = state.selected.has(d.cnpj);
   const expanded = state.expanded.has(d.cnpj);
   const displayName = d.nome_fantasia || d.razao_social || "—";
+  const isFree = state.plan === "free";
   const telCel = d.telefone
     ? `<span class="contact-pill ac">${ICONS.phone}${d.telefone}</span>`
+    : isFree
+    ? `<span class="contact-pill ac masked">${ICONS.phone}(11) 9xxxx-xxxx</span>`
     : `<span class="contact-em">—</span>`;
   const emCel = d.email
     ? `<span class="contact-pill in">${ICONS.mail}${d.email.length > 22 ? d.email.slice(0,22)+"…" : d.email}</span>`
+    : isFree
+    ? `<span class="contact-pill in masked">${ICONS.mail}contato@empresa.com</span>`
     : "";
   return `
     <tr class="${selected ? "selected" : ""} ${expanded ? "expanded" : ""}">
@@ -914,8 +925,22 @@ function detailRow(cnpj, baseData) {
   }
 
   const d = { ...baseData, ...det };
+  const isFree = state.plan === "free";
   const telLink = d.telefone ? `https://wa.me/55${d.telefone.replace(/\D/g,"")}` : null;
   const siteUrl = d.site ? (d.site.startsWith("http") ? d.site : "https://" + d.site) : null;
+
+  const telVal    = d.telefone ? `<span style="color:var(--accent-hi)">${d.telefone}</span>`
+                   : isFree    ? `<span class="masked" style="color:var(--accent-hi)">(11) 9xxxx-xxxx</span>`
+                   :             `<span class="contact-em">Não encontrado</span>`;
+  const emailVal  = d.email    ? `<span style="color:var(--info)">${d.email}</span>`
+                   : isFree    ? `<span class="masked" style="color:var(--info)">contato@empresa.com.br</span>`
+                   :             `<span class="contact-em">Não encontrado</span>`;
+  const siteVal   = d.site     ? `<span style="color:var(--purple)">${d.site}</span>`
+                   : isFree    ? `<span class="masked" style="color:var(--purple)">www.empresa.com.br</span>`
+                   :             `<span class="contact-em">—</span>`;
+  const instaVal  = d.instagram? `<span style="color:var(--pink)">${d.instagram}</span>`
+                   : isFree    ? `<span class="masked" style="color:var(--pink)">@empresa</span>`
+                   :             `<span class="contact-em">—</span>`;
 
   return `
   <tr class="detail-row">
@@ -938,10 +963,10 @@ function detailRow(cnpj, baseData) {
         </div>
         <div class="detail-col">
           <h4>Contatos</h4>
-          <div class="detail-field"><div class="k">Telefone</div><div class="v">${d.telefone ? `<span style="color:var(--accent-hi)">${d.telefone}</span>` : '<span class="contact-em">Não encontrado</span>'}</div></div>
-          <div class="detail-field"><div class="k">E-mail</div><div class="v" style="word-break:break-all">${d.email ? `<span style="color:var(--info)">${d.email}</span>` : '<span class="contact-em">Não encontrado</span>'}</div></div>
-          <div class="detail-field"><div class="k">Site</div><div class="v">${d.site ? `<span style="color:var(--purple)">${d.site}</span>` : '<span class="contact-em">—</span>'}</div></div>
-          <div class="detail-field"><div class="k">Instagram</div><div class="v">${d.instagram ? `<span style="color:var(--pink)">${d.instagram}</span>` : '<span class="contact-em">—</span>'}</div></div>
+          <div class="detail-field"><div class="k">Telefone</div><div class="v">${telVal}</div></div>
+          <div class="detail-field"><div class="k">E-mail</div><div class="v" style="word-break:break-all">${emailVal}</div></div>
+          <div class="detail-field"><div class="k">Site</div><div class="v">${siteVal}</div></div>
+          <div class="detail-field"><div class="k">Instagram</div><div class="v">${instaVal}</div></div>
         </div>
         <div class="detail-col">
           <h4>Quadro societário</h4>

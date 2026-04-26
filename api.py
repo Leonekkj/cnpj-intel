@@ -211,15 +211,6 @@ def listar_empresas(
 ):
     plano = info["plano"]
 
-    # Free: limita por_pagina ao restante; quota consumida no ver+
-    if plano == "free":
-        restante = info.get("restante", 0)
-        if info.get("limite_dia") is not None:
-            por_pagina = min(por_pagina, restante) if restante > 0 else 0
-            if por_pagina == 0:
-                return {"total": 0, "pagina": pagina, "por_pagina": 0, "dados": [],
-                        "plano": info["nome_plano"], "restante": 0}
-
     # Básico: limita por_pagina ao restante e consome quota na listagem
     if plano == "basico":
         restante = info.get("restante", 0)
