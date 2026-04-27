@@ -876,6 +876,125 @@ class Database:
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_lista_itens_lista ON lista_itens(lista_id)")
             conn.commit()
 
+    def criar_lista(self, token: str, nome: str) -> dict:
+        agora = datetime.utcnow().isoformat()
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute(
+                    "INSERT INTO listas (token, nome, criada_em) VALUES (%s, %s, %s) RETURNING id",
+                    (token, nome, agora)
+                )
+                lista_id = cur.fetchone()[0]
+            else:
+                cur.execute(
+                    "INSERT INTO listas (token, nome, criada_em) VALUES (?, ?, ?)",
+                    (token, nome, agora)
+                )
+                lista_id = cur.lastrowid
+            conn.commit()
+        return {"id": lista_id, "nome": nome, "criada_em": agora, "total": 0}
+
+    def listar_listas(self, token: str) -> list:
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"""
+                SELECT l.id, l.nome, l.criada_em,
+                       COUNT(li.id) AS total
+                FROM listas l
+                LEFT JOIN lista_itens li ON li.lista_id = l.id
+                WHERE l.token = {PH}
+                GROUP BY l.id, l.nome, l.criada_em
+                ORDER BY l.criada_em DESC
+            """, (token,))
+            rows = cur.fetchall()
+        return [{"id": r[0], "nome": r[1], "criada_em": r[2], "total": r[3]} for r in rows]
+
+    def renomear_lista(self, token: str, lista_id: int, novo_nome: str) -> bool:
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"UPDATE listas SET nome = {PH} WHERE id = {PH} AND token = {PH}",
+                (novo_nome, lista_id, token)
+            )
+            conn.commit()
+            return cur.rowcount == 1
+
+    def deletar_lista(self, token: str, lista_id: int) -> bool:
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"DELETE FROM listas WHERE id = {PH} AND token = {PH}",
+                (lista_id, token)
+            )
+            conn.commit()
+            return cur.rowcount == 1
+
+    def adicionar_itens_lista(self, token: str, lista_id: int, cnpjs: list) -> int:
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT id FROM listas WHERE id = {PH} AND token = {PH}", (lista_id, token))
+            if not cur.fetchone():
+                return 0
+            agora = datetime.utcnow().isoformat()
+            added = 0
+            for cnpj in cnpjs:
+                try:
+                    if USE_POSTGRES:
+                        cur.execute(
+                            "INSERT INTO lista_itens (lista_id, cnpj, adicionado_em) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                            (lista_id, cnpj, agora)
+                        )
+                    else:
+                        cur.execute(
+                            "INSERT OR IGNORE INTO lista_itens (lista_id, cnpj, adicionado_em) VALUES (?, ?, ?)",
+                            (lista_id, cnpj, agora)
+                        )
+                    added += cur.rowcount
+                except Exception:
+                    pass
+            conn.commit()
+        return added
+
+    def remover_item_lista(self, token: str, lista_id: int, cnpj: str) -> bool:
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT id FROM listas WHERE id = {PH} AND token = {PH}", (lista_id, token))
+            if not cur.fetchone():
+                return False
+            cur.execute(
+                f"DELETE FROM lista_itens WHERE lista_id = {PH} AND cnpj = {PH}",
+                (lista_id, cnpj)
+            )
+            conn.commit()
+            return cur.rowcount == 1
+
+    def obter_lista(self, token: str, lista_id: int) -> dict | None:
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT id, nome, criada_em FROM listas WHERE id = {PH} AND token = {PH}",
+                (lista_id, token)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            meta = {"id": row[0], "nome": row[1], "criada_em": row[2]}
+            cur.execute(f"""
+                SELECT e.cnpj, e.razao_social, e.nome_fantasia, e.porte,
+                       e.municipio, e.uf, e.telefone, e.email,
+                       e.instagram, e.site, li.adicionado_em
+                FROM lista_itens li
+                JOIN empresas e ON e.cnpj = li.cnpj
+                WHERE li.lista_id = {PH}
+                ORDER BY li.adicionado_em DESC
+            """, (lista_id,))
+            cols = ["cnpj", "razao_social", "nome_fantasia", "porte", "municipio", "uf",
+                    "telefone", "email", "instagram", "site", "adicionado_em"]
+            meta["itens"] = [dict(zip(cols, r)) for r in cur.fetchall()]
+            meta["total"] = len(meta["itens"])
+        return meta
+
     def criar_tabela_progresso(self):
         with _conn() as conn:
             cur = conn.cursor()
