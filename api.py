@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSO
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
+from typing import Annotated
 from database import Database
 import csv
 import io
@@ -415,7 +416,7 @@ class RenomearListaBody(BaseModel):
     nome: str = Field(..., min_length=1, max_length=120)
 
 class AdicionarItensBody(BaseModel):
-    cnpjs: list[str] = Field(..., max_length=500)
+    cnpjs: list[Annotated[str, Field(max_length=14)]] = Field(..., max_length=500)
 
 
 @app.get("/api/listas")
