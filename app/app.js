@@ -1576,11 +1576,11 @@ function toggleRowMenu(e, cnpj) {
     if (listas.length > 0) {
       const listBtns = listas.map(l => {
         const btn = document.createElement('button');
-        btn.innerHTML = `${ICONS.bookmark}${l.nome}`;
+        btn.innerHTML = `${ICONS.bookmark}${esc(l.nome)}`;
         btn.onclick = async () => {
           try {
             await adicionarNaLista(l.id, cnpj);
-            toast(`Empresa salva em "${l.nome}"!`, 'success');
+            toast(`Empresa salva em "${esc(l.nome)}"!`, 'success');
           } catch(e) {
             toast('Erro ao salvar empresa na lista', 'error');
           }
