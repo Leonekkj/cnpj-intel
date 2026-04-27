@@ -84,7 +84,7 @@ ALLOWED_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -404,6 +404,87 @@ def exportar_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# ─── Listas ────────────────────────────────────────────────────────────────────
+
+class CriarListaBody(BaseModel):
+    nome: str
+
+class RenomearListaBody(BaseModel):
+    nome: str
+
+class AdicionarItensBody(BaseModel):
+    cnpjs: list[str]
+
+class RemoverItemBody(BaseModel):
+    cnpj: str
+
+
+@app.get("/api/listas")
+def get_listas(token_info=Depends(get_token_info_soft)):
+    token = token_info["token"]
+    return db.listar_listas(token)
+
+
+@app.post("/api/listas", status_code=201)
+def post_criar_lista(body: CriarListaBody, token_info=Depends(get_token_info_soft)):
+    nome = body.nome.strip()
+    if not nome:
+        raise HTTPException(status_code=400, detail="Nome não pode ser vazio")
+    token = token_info["token"]
+    try:
+        return db.criar_lista(token, nome)
+    except Exception:
+        raise HTTPException(status_code=409, detail="Já existe uma lista com esse nome")
+
+
+@app.get("/api/listas/{lista_id}")
+def get_lista(lista_id: int, token_info=Depends(get_token_info_soft)):
+    token = token_info["token"]
+    lista = db.obter_lista(token, lista_id)
+    if not lista:
+        raise HTTPException(status_code=404, detail="Lista não encontrada")
+    return lista
+
+
+@app.put("/api/listas/{lista_id}")
+def put_renomear_lista(lista_id: int, body: RenomearListaBody, token_info=Depends(get_token_info_soft)):
+    nome = body.nome.strip()
+    if not nome:
+        raise HTTPException(status_code=400, detail="Nome não pode ser vazio")
+    token = token_info["token"]
+    ok = db.renomear_lista(token, lista_id, nome)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Lista não encontrada")
+    return {"ok": True}
+
+
+@app.delete("/api/listas/{lista_id}")
+def delete_lista(lista_id: int, token_info=Depends(get_token_info_soft)):
+    token = token_info["token"]
+    ok = db.deletar_lista(token, lista_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Lista não encontrada")
+    return {"ok": True}
+
+
+@app.post("/api/listas/{lista_id}/itens")
+def post_adicionar_itens(lista_id: int, body: AdicionarItensBody, token_info=Depends(get_token_info_soft)):
+    token = token_info["token"]
+    if not body.cnpjs:
+        raise HTTPException(status_code=400, detail="Lista de CNPJs vazia")
+    added = db.adicionar_itens_lista(token, lista_id, body.cnpjs)
+    return {"adicionados": added}
+
+
+@app.delete("/api/listas/{lista_id}/itens")
+def delete_item_lista(lista_id: int, body: RemoverItemBody, token_info=Depends(get_token_info_soft)):
+    token = token_info["token"]
+    ok = db.remover_item_lista(token, lista_id, body.cnpj)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Item não encontrado")
+    return {"ok": True}
 
 
 # ─── Admin ─────────────────────────────────────────────────────────────────────
