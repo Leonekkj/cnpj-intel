@@ -877,6 +877,9 @@ class Database:
             conn.commit()
 
     def criar_lista(self, token: str, nome: str) -> dict:
+        nome = nome.strip()
+        if not nome:
+            raise ValueError("Nome da lista não pode ser vazio")
         agora = datetime.utcnow().isoformat()
         with _conn() as conn:
             cur = conn.cursor()
@@ -923,12 +926,15 @@ class Database:
     def deletar_lista(self, token: str, lista_id: int) -> bool:
         with _conn() as conn:
             cur = conn.cursor()
-            cur.execute(
-                f"DELETE FROM listas WHERE id = {PH} AND token = {PH}",
-                (lista_id, token)
-            )
+            # Verify ownership
+            cur.execute(f"SELECT id FROM listas WHERE id = {PH} AND token = {PH}", (lista_id, token))
+            if not cur.fetchone():
+                return False
+            # Delete items first (SQLite doesn't enforce CASCADE without PRAGMA)
+            cur.execute(f"DELETE FROM lista_itens WHERE lista_id = {PH}", (lista_id,))
+            cur.execute(f"DELETE FROM listas WHERE id = {PH}", (lista_id,))
             conn.commit()
-            return cur.rowcount == 1
+            return True
 
     def adicionar_itens_lista(self, token: str, lista_id: int, cnpjs: list) -> int:
         with _conn() as conn:
@@ -939,20 +945,17 @@ class Database:
             agora = datetime.utcnow().isoformat()
             added = 0
             for cnpj in cnpjs:
-                try:
-                    if USE_POSTGRES:
-                        cur.execute(
-                            "INSERT INTO lista_itens (lista_id, cnpj, adicionado_em) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
-                            (lista_id, cnpj, agora)
-                        )
-                    else:
-                        cur.execute(
-                            "INSERT OR IGNORE INTO lista_itens (lista_id, cnpj, adicionado_em) VALUES (?, ?, ?)",
-                            (lista_id, cnpj, agora)
-                        )
-                    added += cur.rowcount
-                except Exception:
-                    pass
+                if USE_POSTGRES:
+                    cur.execute(
+                        "INSERT INTO lista_itens (lista_id, cnpj, adicionado_em) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                        (lista_id, cnpj, agora)
+                    )
+                else:
+                    cur.execute(
+                        "INSERT OR IGNORE INTO lista_itens (lista_id, cnpj, adicionado_em) VALUES (?, ?, ?)",
+                        (lista_id, cnpj, agora)
+                    )
+                added += cur.rowcount
             conn.commit()
         return added
 
@@ -985,7 +988,7 @@ class Database:
                        e.municipio, e.uf, e.telefone, e.email,
                        e.instagram, e.site, li.adicionado_em
                 FROM lista_itens li
-                JOIN empresas e ON e.cnpj = li.cnpj
+                LEFT JOIN empresas e ON e.cnpj = li.cnpj
                 WHERE li.lista_id = {PH}
                 ORDER BY li.adicionado_em DESC
             """, (lista_id,))
