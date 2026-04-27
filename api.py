@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from database import Database
 import csv
 import io
@@ -409,16 +409,13 @@ def exportar_csv(
 # ─── Listas ────────────────────────────────────────────────────────────────────
 
 class CriarListaBody(BaseModel):
-    nome: str
+    nome: str = Field(..., min_length=1, max_length=120)
 
 class RenomearListaBody(BaseModel):
-    nome: str
+    nome: str = Field(..., min_length=1, max_length=120)
 
 class AdicionarItensBody(BaseModel):
-    cnpjs: list[str]
-
-class RemoverItemBody(BaseModel):
-    cnpj: str
+    cnpjs: list[str] = Field(..., max_length=500)
 
 
 @app.get("/api/listas")
@@ -435,8 +432,10 @@ def post_criar_lista(body: CriarListaBody, token_info=Depends(get_token_info_sof
     token = token_info["token"]
     try:
         return db.criar_lista(token, nome)
-    except Exception:
-        raise HTTPException(status_code=409, detail="Já existe uma lista com esse nome")
+    except Exception as e:
+        if "unique" in str(e).lower():
+            raise HTTPException(status_code=409, detail="Já existe uma lista com esse nome")
+        raise
 
 
 @app.get("/api/listas/{lista_id}")
@@ -454,7 +453,12 @@ def put_renomear_lista(lista_id: int, body: RenomearListaBody, token_info=Depend
     if not nome:
         raise HTTPException(status_code=400, detail="Nome não pode ser vazio")
     token = token_info["token"]
-    ok = db.renomear_lista(token, lista_id, nome)
+    try:
+        ok = db.renomear_lista(token, lista_id, nome)
+    except Exception as e:
+        if "unique" in str(e).lower():
+            raise HTTPException(status_code=409, detail="Já existe uma lista com esse nome")
+        raise
     if not ok:
         raise HTTPException(status_code=404, detail="Lista não encontrada")
     return {"ok": True}
@@ -475,13 +479,15 @@ def post_adicionar_itens(lista_id: int, body: AdicionarItensBody, token_info=Dep
     if not body.cnpjs:
         raise HTTPException(status_code=400, detail="Lista de CNPJs vazia")
     added = db.adicionar_itens_lista(token, lista_id, body.cnpjs)
+    if added == 0 and not db.obter_lista(token, lista_id):
+        raise HTTPException(status_code=404, detail="Lista não encontrada")
     return {"adicionados": added}
 
 
-@app.delete("/api/listas/{lista_id}/itens")
-def delete_item_lista(lista_id: int, body: RemoverItemBody, token_info=Depends(get_token_info_soft)):
+@app.delete("/api/listas/{lista_id}/itens/{cnpj}")
+def delete_item_lista(lista_id: int, cnpj: str, token_info=Depends(get_token_info_soft)):
     token = token_info["token"]
-    ok = db.remover_item_lista(token, lista_id, body.cnpj)
+    ok = db.remover_item_lista(token, lista_id, cnpj)
     if not ok:
         raise HTTPException(status_code=404, detail="Item não encontrado")
     return {"ok": True}
