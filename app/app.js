@@ -152,7 +152,13 @@ function planoBadge(plano, nomePlano) {
 // ─── API functions ───────────────────────────────────────────────
 async function loadPlan() {
   const data = await apiFetch("/api/meu-plano");
-  if (!data || data._err) return;
+  if (!data || data._err) {
+    if (data && data._err === 401) {
+      localStorage.removeItem("cnpj_token");
+      showAuthOverlay("Sessão expirada ou token inválido. Faça login novamente.");
+    }
+    return;
+  }
   state.planInfo = data;
   state.plan = data.plano;
   const wasLimited = state.limitReached;
@@ -1561,27 +1567,168 @@ function initTweaksUI() {
   });
 }
 
+// ─── Auth overlay ────────────────────────────────────────────────
+function showAuthOverlay(msg = "") {
+  document.body.innerHTML = `
+<style>
+.auth-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg,#0f1117);z-index:9999;padding:20px}
+.auth-box{background:var(--bg-elev,#1a1d27);border:1px solid var(--border,rgba(255,255,255,.08));border-radius:16px;padding:40px 36px;width:100%;max-width:400px;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.auth-logo{width:40px;height:40px;color:var(--accent,#00e5a0);margin-bottom:12px}
+.auth-brand{font-weight:700;font-size:18px;letter-spacing:-.3px;margin-bottom:4px}
+.auth-sub{font-size:13px;color:var(--text-dim,#7a8499);margin-bottom:28px}
+.auth-tabs{display:flex;gap:0;border-bottom:1px solid var(--border,rgba(255,255,255,.08));margin-bottom:24px}
+.auth-tab{flex:1;padding:8px 0;font-size:13px;font-weight:500;color:var(--text-dim,#7a8499);cursor:pointer;text-align:center;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;background:none;border-top:none;border-left:none;border-right:none}
+.auth-tab.on{color:var(--accent,#00e5a0);border-bottom-color:var(--accent,#00e5a0)}
+.auth-field{margin-bottom:14px}
+.auth-field label{display:block;font-size:12px;font-weight:500;color:var(--text-muted,#9ba3b8);margin-bottom:6px}
+.auth-input{width:100%;padding:10px 12px;background:var(--surface,rgba(255,255,255,.04));border:1px solid var(--border,rgba(255,255,255,.08));border-radius:8px;color:var(--text,#e8eaf0);font-size:14px;outline:none;transition:border-color .15s;box-sizing:border-box}
+.auth-input:focus{border-color:var(--accent,#00e5a0)}
+.auth-btn{width:100%;padding:11px;background:var(--accent,#00e5a0);color:#0a0d12;font-weight:600;font-size:14px;border-radius:8px;cursor:pointer;border:none;margin-top:4px;transition:opacity .15s}
+.auth-btn:hover{opacity:.88}
+.auth-btn:disabled{opacity:.5;cursor:not-allowed}
+.auth-err{font-size:13px;color:#f47;text-align:center;margin-top:12px;min-height:18px}
+.auth-divider{display:flex;align-items:center;gap:10px;margin:20px 0 0;color:var(--text-dim,#7a8499);font-size:12px}
+.auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--border,rgba(255,255,255,.08))}
+.auth-token-link{text-align:center;margin-top:12px;font-size:12px;color:var(--text-dim,#7a8499);cursor:pointer;text-decoration:underline}
+.auth-token-link:hover{color:var(--text,#e8eaf0)}
+</style>
+<div class="auth-overlay">
+  <div class="auth-box">
+    <svg class="auth-logo" viewBox="0 0 24 24" fill="none"><path d="M4 8L12 4L20 8V16L12 20L4 16V8Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 12L20 8M12 12V20M12 12L4 8" stroke="currentColor" stroke-width="1.5"/></svg>
+    <div class="auth-brand">CNPJ Intel</div>
+    <div class="auth-sub">Plataforma B2B de prospecção de empresas</div>
+    <div class="auth-tabs">
+      <button class="auth-tab on" id="tab-login" onclick="authSwitchTab('login')">Entrar</button>
+      <button class="auth-tab" id="tab-signup" onclick="authSwitchTab('signup')">Criar conta</button>
+    </div>
+    <div id="auth-form-login">
+      <div class="auth-field"><label>E-mail</label><input id="login-email" class="auth-input" type="email" placeholder="seu@email.com" autocomplete="email"></div>
+      <div class="auth-field"><label>Senha</label><input id="login-password" class="auth-input" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+      <button class="auth-btn" id="login-btn" onclick="submitLogin()">Entrar</button>
+    </div>
+    <div id="auth-form-signup" style="display:none">
+      <div class="auth-field"><label>Nome</label><input id="signup-nome" class="auth-input" type="text" placeholder="Seu nome" autocomplete="name"></div>
+      <div class="auth-field"><label>E-mail</label><input id="signup-email" class="auth-input" type="email" placeholder="seu@email.com" autocomplete="email"></div>
+      <div class="auth-field"><label>Senha</label><input id="signup-password" class="auth-input" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div>
+      <div class="auth-field"><label>Confirmar senha</label><input id="signup-password2" class="auth-input" type="password" placeholder="Repita a senha" autocomplete="new-password"></div>
+      <button class="auth-btn" id="signup-btn" onclick="submitSignup()">Criar conta grátis</button>
+    </div>
+    <div class="auth-err" id="auth-err">${msg}</div>
+    <div class="auth-divider">ou</div>
+    <div class="auth-token-link" onclick="authSwitchTab('token')">Tenho um token de acesso →</div>
+    <div id="auth-form-token" style="display:none">
+      <div class="auth-field" style="margin-top:12px"><label>Token de acesso</label><input id="token-input" class="auth-input" type="text" placeholder="Cole seu token" autocomplete="off"></div>
+      <button class="auth-btn" onclick="submitToken()">Entrar com token</button>
+    </div>
+  </div>
+</div>`;
+
+  document.getElementById("login-password")?.addEventListener("keydown", e => { if (e.key === "Enter") submitLogin(); });
+  document.getElementById("login-email")?.addEventListener("keydown",    e => { if (e.key === "Enter") submitLogin(); });
+  document.getElementById("signup-password2")?.addEventListener("keydown", e => { if (e.key === "Enter") submitSignup(); });
+  document.getElementById("token-input")?.addEventListener("keydown", e => { if (e.key === "Enter") submitToken(); });
+}
+
+function authSwitchTab(tab) {
+  document.getElementById("auth-form-login").style.display  = tab === "login"  ? "" : "none";
+  document.getElementById("auth-form-signup").style.display = tab === "signup" ? "" : "none";
+  document.getElementById("auth-form-token").style.display  = tab === "token"  ? "" : "none";
+  document.getElementById("tab-login")?.classList.toggle("on",  tab === "login");
+  document.getElementById("tab-signup")?.classList.toggle("on", tab === "signup");
+  document.getElementById("auth-err").textContent = "";
+}
+
+function authShake() {
+  const box = document.querySelector(".auth-box");
+  if (!box) return;
+  box.classList.remove("shake");
+  void box.offsetWidth;
+  box.classList.add("shake");
+  setTimeout(() => box.classList.remove("shake"), 600);
+}
+
+function authSetError(msg) {
+  const el = document.getElementById("auth-err");
+  if (el) el.textContent = msg;
+}
+
+async function submitLogin() {
+  const email    = document.getElementById("login-email")?.value.trim();
+  const password = document.getElementById("login-password")?.value;
+  if (!email || !password) { authShake(); authSetError("Preencha e-mail e senha."); return; }
+  const btn = document.getElementById("login-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Entrando…"; }
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem("cnpj_token", data.token);
+      location.reload();
+    } else {
+      authShake();
+      authSetError("E-mail ou senha incorretos.");
+      if (btn) { btn.disabled = false; btn.textContent = "Entrar"; }
+    }
+  } catch {
+    authShake();
+    authSetError("Erro de conexão. Tente novamente.");
+    if (btn) { btn.disabled = false; btn.textContent = "Entrar"; }
+  }
+}
+
+async function submitSignup() {
+  const nome      = document.getElementById("signup-nome")?.value.trim();
+  const email     = document.getElementById("signup-email")?.value.trim();
+  const password  = document.getElementById("signup-password")?.value;
+  const password2 = document.getElementById("signup-password2")?.value;
+  if (!nome || !email || !password) { authShake(); authSetError("Preencha todos os campos."); return; }
+  if (password !== password2)       { authShake(); authSetError("As senhas não coincidem."); return; }
+  if (password.length < 6)          { authShake(); authSetError("Senha deve ter ao menos 6 caracteres."); return; }
+  const btn = document.getElementById("signup-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Criando conta…"; }
+  try {
+    const res = await fetch("/api/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome, email, password }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      localStorage.setItem("cnpj_token", data.token);
+      location.reload();
+    } else {
+      authShake();
+      authSetError(data.detail || "Erro ao criar conta.");
+      if (btn) { btn.disabled = false; btn.textContent = "Criar conta grátis"; }
+    }
+  } catch {
+    authShake();
+    authSetError("Erro de conexão. Tente novamente.");
+    if (btn) { btn.disabled = false; btn.textContent = "Criar conta grátis"; }
+  }
+}
+
+function submitToken() {
+  const v = document.getElementById("token-input")?.value?.trim();
+  if (!v) { authShake(); return; }
+  localStorage.setItem("cnpj_token", v);
+  location.reload();
+}
+
+function logout() {
+  localStorage.removeItem("cnpj_token");
+  location.reload();
+}
+
 // ─── Init ────────────────────────────────────────────────────────
 async function init() {
   // No token — show login screen instead of loading dashboard
   if (!TOKEN) {
-    document.body.innerHTML = `<div class="token-overlay">
-      <div class="token-box">
-        <div class="token-logo">
-          <svg viewBox="0 0 24 24" fill="none" width="40" height="40"><path d="M4 8L12 4L20 8V16L12 20L4 16V8Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 12L20 8M12 12V20M12 12L4 8" stroke="currentColor" stroke-width="1.5"/></svg>
-        </div>
-        <div class="token-brand">CNPJ Intel</div>
-        <h2 class="token-title">Acesse sua conta</h2>
-        <input id="token-input" class="token-input" type="text" placeholder="Cole seu token de acesso" autocomplete="off">
-        <button class="btn btn-accent token-btn" id="token-submit">Entrar</button>
-      </div>
-    </div>`;
-    const submitFn = () => {
-      const v = document.getElementById("token-input")?.value?.trim();
-      if (v) { localStorage.setItem("cnpj_token", v); location.reload(); }
-    };
-    document.getElementById("token-submit").onclick = submitFn;
-    document.getElementById("token-input").addEventListener("keydown", e => { if (e.key === "Enter") submitFn(); });
+    showAuthOverlay();
     return;
   }
 

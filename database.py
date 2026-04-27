@@ -4,6 +4,7 @@ Inclui persistência de progresso do agente.
 """
 
 import os
+import secrets
 import unicodedata
 from datetime import datetime, timedelta, date as date_type
 
@@ -604,6 +605,66 @@ class Database:
                 )
             """)
             conn.commit()
+        # Migrate: add email/password/nome columns if missing
+        self._migrar_colunas_auth()
+
+    def _migrar_colunas_auth(self):
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS email TEXT UNIQUE")
+                cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS password_hash TEXT")
+                cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS nome TEXT")
+            else:
+                for col, defn in [("email", "TEXT UNIQUE"), ("password_hash", "TEXT"), ("nome", "TEXT")]:
+                    try:
+                        cur.execute(f"ALTER TABLE tokens ADD COLUMN {col} {defn}")
+                    except Exception:
+                        conn.rollback()
+            conn.commit()
+
+    def criar_conta_email(self, email: str, password: str, nome: str) -> str:
+        from passlib.hash import bcrypt as _bcrypt
+        email = email.strip().lower()
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT token FROM tokens WHERE email = {PH}", (email,))
+            if cur.fetchone():
+                raise ValueError("E-mail já cadastrado")
+        token = secrets.token_urlsafe(32)
+        pw_hash = _bcrypt.hash(password)
+        agora = datetime.utcnow().isoformat()
+        hoje  = str(date_type.today())
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("""
+                    INSERT INTO tokens (token, plano, cnpjs_hoje, data_reset, ativo, criado_em, email, password_hash, nome)
+                    VALUES (%s, 'free', 0, %s, TRUE, %s, %s, %s, %s)
+                """, (token, hoje, agora, email, pw_hash, nome))
+            else:
+                cur.execute("""
+                    INSERT INTO tokens (token, plano, cnpjs_hoje, data_reset, ativo, criado_em, email, password_hash, nome)
+                    VALUES (?, 'free', 0, ?, 1, ?, ?, ?, ?)
+                """, (token, hoje, agora, email, pw_hash, nome))
+            conn.commit()
+        return token
+
+    def login_email(self, email: str, password: str) -> str | None:
+        from passlib.hash import bcrypt as _bcrypt
+        email = email.strip().lower()
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT token, password_hash, ativo FROM tokens WHERE email = {PH}", (email,))
+            row = cur.fetchone()
+        if not row:
+            return None
+        token, pw_hash, ativo = row[0], row[1], row[2]
+        if not ativo or not pw_hash:
+            return None
+        if not _bcrypt.verify(password, pw_hash):
+            return None
+        return token
 
     def criar_token(self, token: str, plano: str = "free") -> dict:
         """Cria um novo token com plano especificado."""

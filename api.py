@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
 from database import Database
 import csv
 import io
@@ -202,6 +203,36 @@ def index():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ─── Auth público (signup / login por e-mail) ──────────────────────────────────
+
+class SignupBody(BaseModel):
+    email: str
+    password: str
+    nome: str
+
+class LoginBody(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/signup")
+def signup(body: SignupBody):
+    if len(body.password) < 6:
+        raise HTTPException(400, "Senha deve ter ao menos 6 caracteres")
+    try:
+        token = db.criar_conta_email(body.email, body.password, body.nome)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"token": token, "plano": "free"}
+
+@app.post("/api/login")
+def login_email(body: LoginBody):
+    token = db.login_email(body.email, body.password)
+    if not token:
+        raise HTTPException(401, "E-mail ou senha incorretos")
+    info = db.verificar_token_db(token)
+    return {"token": token, "plano": info["plano"], "nome_plano": info["nome_plano"]}
 
 
 # ─── Plano do usuário ──────────────────────────────────────────────────────────
