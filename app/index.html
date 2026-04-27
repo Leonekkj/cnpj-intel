@@ -99,7 +99,8 @@
         <kbd>⌘K</kbd>
       </div>
       <div class="topbar-actions">
-        <button class="icon-btn" title="Ajuda">
+        <button class="hamburger" id="hamburger-btn">☰</button>
+        <button class="icon-btn" id="help-btn" title="Ajuda">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 1 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg>
         </button>
         <div class="user-chip" onclick="openTweaks()" title="Preferências">
@@ -147,6 +148,7 @@
   </div>
 </div>
 
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
 <script src="/app/app.js" defer></script>
 </body>
 </html>

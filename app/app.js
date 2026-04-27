@@ -214,9 +214,13 @@ async function loadStats() {
 
   const navTotal = $("#nav-total");
   if (navTotal) navTotal.textContent = fmtK(data.total);
-  const agSub = $("#agent-sub");
-  if (agSub && data.progresso_agente !== undefined)
-    agSub.textContent = `Posição ${fmt(data.progresso_agente)}`;
+  const agSub   = $("#agent-sub");
+  const agPulse = $(".agent-pulse");
+  if (data.progresso_agente !== undefined) {
+    const active = data.progresso_agente > 0;
+    if (agSub)   agSub.textContent = active ? `Posição ${fmt(data.progresso_agente)} — Ativo` : "Parado";
+    if (agPulse) { agPulse.classList.toggle("agent-active", active); agPulse.classList.toggle("agent-stopped", !active); }
+  }
 
   if (state.tab !== "dashboard") return;
 
@@ -254,6 +258,7 @@ async function loadEmpresas() {
   if (f.insta)      params.set("com_instagram", "true");
   if (f.abertura_de)  params.set("abertura_de", f.abertura_de);
   if (f.abertura_ate) params.set("abertura_ate", f.abertura_ate);
+  if (state.sort.key) { params.set("sort_by", state.sort.key); params.set("sort_dir", state.sort.dir); }
   const data = await apiFetch(`/api/empresas?${params}`);
   if (data && !data._err) {
     state.dados = data.dados || [];
@@ -307,7 +312,7 @@ async function loadCategories() {
 
 async function exportCSV() {
   if (state.plan === "free") {
-    alert("Exportação disponível nos planos Básico e Pro.");
+    toast("Exportação disponível nos planos Básico e Pro. Faça upgrade para exportar.", "info");
     return;
   }
   const f = state.filters;
@@ -330,14 +335,14 @@ async function exportCSV() {
   const headers = TOKEN ? { "Authorization": `Bearer ${TOKEN}` } : {};
   try {
     const r = await fetch(url, { headers });
-    if (!r.ok) { alert("Erro ao exportar. Verifique seu plano."); return; }
+    if (!r.ok) { toast("Erro ao exportar. Verifique seu plano.", "error"); return; }
     const blob = await r.blob();
     const objUrl = URL.createObjectURL(blob);
     a.href = objUrl;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(objUrl); a.remove(); }, 1000);
-  } catch (e) { alert("Erro ao exportar CSV."); }
+  } catch (e) { toast("Erro ao exportar CSV.", "error"); }
 }
 
 async function loadTokens() {
@@ -356,14 +361,31 @@ async function criarToken(tokenVal, plano) {
     await loadTokens();
     return data;
   }
-  alert("Erro ao criar token. Verifique os dados.");
+  toast("Erro ao criar token. Verifique os dados.", "error");
   return null;
 }
 
 async function deletarToken(token) {
-  if (!confirm(`Remover token "${token}"?`)) return;
-  await apiFetch(`/api/admin/tokens/${encodeURIComponent(token)}`, { method: "DELETE" });
-  await loadTokens();
+  confirmModal(`Remover o token <strong>${token}</strong>? Esta ação não pode ser desfeita.`, async () => {
+    await apiFetch(`/api/admin/tokens/${encodeURIComponent(token)}`, { method: "DELETE" });
+    await loadTokens();
+  });
+}
+
+async function adminTool(tool) {
+  const dangerous = tool === "reset-database";
+  const run = async () => {
+    const data = await apiFetch(`/api/admin/${tool}`, { method: "POST" });
+    if (!data || data._err) { toast(`Erro ao executar ${tool}.`, "error"); return; }
+    if (tool === "agente")        toast(data.status || "Agente iniciado.", "success");
+    else if (tool === "limpar-sites") toast(`${data.registros_limpos ?? 0} registros limpos.`, "success");
+    else toast(data.mensagem || "Concluído.", "success");
+  };
+  if (dangerous) {
+    confirmModal("Isso irá <strong>apagar todas as empresas e o progresso do agente</strong>. Esta ação não pode ser desfeita.", run);
+  } else {
+    await run();
+  }
 }
 
 // ─── Sidebar update ──────────────────────────────────────────────
@@ -392,7 +414,7 @@ function updateSidebar() {
       elBar.style.background = "linear-gradient(90deg, var(--danger) 0%, oklch(0.85 0.17 25) 100%)";
     }
     if (elBadge) { elBadge.textContent = "Limitado"; elBadge.style.color = "var(--danger)"; }
-    if (elStats) elStats.innerHTML = `<span class="mono" style="color:var(--danger)">${statsText}</span><br><a href="#upgrade" class="plan-upgrade-link">Fazer upgrade →</a>`;
+    if (elStats) elStats.innerHTML = `<span class="mono" style="color:var(--danger)">${statsText}</span><br><a href="javascript:void(0)" onclick="showUpgradeModal()" class="plan-upgrade-link">Fazer upgrade →</a>`;
   } else if (info.limite_dia) {
     pct = Math.min(100, (info.cnpjs_hoje / info.limite_dia) * 100);
     statsText = `${fmt(info.cnpjs_hoje)} / ${fmt(info.limite_dia)} hoje`;
@@ -465,7 +487,7 @@ function limitBanner() {
       Você ainda pode navegar e ver os dados, mas não pode abrir detalhes.
       Renova amanhã às 00:00 ou
     </span>
-    <a href="#upgrade" class="limit-banner-cta">faça upgrade →</a>
+    <a href="javascript:void(0)" onclick="showUpgradeModal()" class="limit-banner-cta">faça upgrade →</a>
   </div>`;
 }
 
@@ -737,8 +759,8 @@ function viewEmpresas() {
       <span class="bulk-count"><strong>${state.selected.size}</strong> selecionadas</span>
       <button class="btn btn-ghost" style="font-size:12px" onclick="clearSelection()">Limpar seleção</button>
       <div class="bulk-actions">
-        <button class="btn">${ICONS.bookmark}Salvar em lista</button>
-        <button class="btn">${ICONS.mail}Campanha</button>
+        <button class="btn" onclick="toast('Em breve — funcionalidade em desenvolvimento','info')">${ICONS.bookmark}Salvar em lista</button>
+        <button class="btn" onclick="toast('Em breve — funcionalidade em desenvolvimento','info')">${ICONS.mail}Campanha</button>
         <button class="btn btn-accent" onclick="exportCSV()">${ICONS.download}Exportar</button>
       </div>
     </div>
@@ -786,6 +808,7 @@ function filterBar(showDates = false) {
           <option value="">Estado</option>
           ${ufs.map(u => `<option ${f.uf===u?"selected":""}>${u}</option>`).join("")}
         </select>
+        ${f.uf ? `<button class="filter-clear" onclick="updateFilter('uf','')">×</button>` : ""}
       </div>
       <div class="chip select">
         <select onchange="updateFilter('porte', this.value)">
@@ -795,12 +818,14 @@ function filterBar(showDates = false) {
           <option value="EMPRESA DE PEQUENO PORTE" ${f.porte==="EMPRESA DE PEQUENO PORTE"?"selected":""}>EPP</option>
           <option value="DEMAIS" ${f.porte==="DEMAIS"?"selected":""}>Médio+</option>
         </select>
+        ${f.porte ? `<button class="filter-clear" onclick="updateFilter('porte','')">×</button>` : ""}
       </div>
       <div class="chip select">
         <select onchange="onSetorChange(this.value)">
           <option value="">Setor</option>
           ${cats.map(c => `<option ${f.categoria===c?"selected":""}>${c}</option>`).join("")}
         </select>
+        ${f.categoria ? `<button class="filter-clear" onclick="onSetorChange('')">×</button>` : ""}
       </div>
       ${(() => {
         const setorSel = f.categoria;
@@ -941,8 +966,8 @@ function row(d) {
       <td><div style="display:flex;gap:4px;flex-wrap:wrap">${telCel}${emCel}</div></td>
       <td style="color:var(--text-soft);font-size:12px">${d.socio_principal ? `<span class="${shouldBlur ? "masked" : ""}" style="color:var(--text-soft)">${d.socio_principal}</span>` : "—"}</td>
       <td style="text-align:right;padding-right:16px">
-        <div class="row-actions">
-          <button class="row-btn" title="Mais ações">${ICONS.more}</button>
+        <div class="row-actions" style="position:relative">
+          <button class="row-btn" title="Mais ações" onclick="toggleRowMenu(event,'${d.cnpj}')">${ICONS.more}</button>
           <button class="row-btn expand" title="Expandir" onclick="toggleExpand('${d.cnpj}')">${ICONS.expand}</button>
         </div>
       </td>
@@ -968,7 +993,7 @@ function detailRow(cnpj, baseData) {
         <div class="limit-reached-icon">${ICONS.lock}</div>
         <div class="limit-reached-title">Limite diário atingido</div>
         <div class="limit-reached-sub">Você consumiu todos os ${limite} detalhes do plano <strong>${nomePlano}</strong> disponíveis hoje.<br>Renova amanhã às 00:00 ou faça upgrade para ver mais empresas.</div>
-        <a href="#upgrade" class="btn limit-reached-btn">${ICONS.bolt}Fazer upgrade</a>
+        <a href="javascript:void(0)" onclick="showUpgradeModal()" class="btn limit-reached-btn">${ICONS.bolt}Fazer upgrade</a>
       </div>
     </td></tr>`;
   }
@@ -1008,6 +1033,7 @@ function detailRow(cnpj, baseData) {
           <div class="detail-field"><div class="k">E-mail</div><div class="v" style="word-break:break-all">${emailVal}</div></div>
           <div class="detail-field"><div class="k">Site</div><div class="v">${siteVal}</div></div>
           <div class="detail-field"><div class="k">Instagram</div><div class="v">${instaVal}</div></div>
+          ${d.rating_google ? `<div class="detail-field"><div class="k">Avaliação Google</div><div class="v">⭐ ${d.rating_google} <span style="color:var(--text-dim)">(${d.avaliacoes || 0} avaliações)</span></div></div>` : ""}
         </div>
         <div class="detail-col">
           <h4>Quadro societário</h4>
@@ -1016,7 +1042,7 @@ function detailRow(cnpj, baseData) {
             ${telLink  ? `<a href="${telLink}" target="_blank" class="btn">${ICONS.phone}WhatsApp</a>` : ""}
             ${d.email  ? `<a href="mailto:${d.email}" class="btn">${ICONS.mail}E-mail</a>` : ""}
             ${siteUrl  ? `<a href="${siteUrl}" target="_blank" class="btn">${ICONS.globe}Site</a>` : ""}
-            <button class="btn" onclick="navigator.clipboard.writeText('${fmtCNPJ(d.cnpj)}')">${ICONS.copy}Copiar CNPJ</button>
+            <button class="btn" onclick="navigator.clipboard.writeText('${fmtCNPJ(d.cnpj)}').then(()=>toast('CNPJ copiado!','success'))">${ICONS.copy}Copiar CNPJ</button>
           </div>
         </div>
       </div>
@@ -1024,33 +1050,81 @@ function detailRow(cnpj, baseData) {
   </tr>`;
 }
 
+// ─── Minhas Listas helpers (localStorage) ───────────────────────
+function getListas() { return JSON.parse(localStorage.getItem("cnpj_listas") || "[]"); }
+function saveListas(l) { localStorage.setItem("cnpj_listas", JSON.stringify(l)); }
+function criarLista(name) {
+  const nova = { id: Date.now().toString(), name, cnpjs: [], createdAt: new Date().toISOString() };
+  saveListas([...getListas(), nova]);
+  return nova;
+}
+function deletarLista(id) { saveListas(getListas().filter(l => l.id !== id)); render(); }
+function adicionarNaLista(listId, cnpj) {
+  const ls = getListas();
+  const l = ls.find(l => l.id === listId);
+  if (l && !l.cnpjs.includes(cnpj)) { l.cnpjs.push(cnpj); saveListas(ls); }
+}
+
+function promptNovaLista() {
+  const existing = document.getElementById("nova-lista-modal");
+  if (existing) { existing.remove(); return; }
+  const m = document.createElement("div");
+  m.id = "nova-lista-modal";
+  m.className = "modal-overlay";
+  m.innerHTML = `<div class="modal-box" style="width:min(380px,92vw)">
+    <div class="modal-header"><h3>Nova lista</h3>
+      <button class="modal-close" onclick="document.getElementById('nova-lista-modal').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <input id="lista-nome" class="token-input" placeholder="Nome da lista" style="margin-bottom:0" autofocus>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="document.getElementById('nova-lista-modal').remove()">Cancelar</button>
+      <button class="btn btn-accent" id="lista-criar-btn">Criar</button>
+    </div>
+  </div>`;
+  m.addEventListener("click", e => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+  const inp = document.getElementById("lista-nome");
+  const criar = () => {
+    const name = inp?.value?.trim();
+    if (!name) { inp.style.borderColor = "var(--danger)"; return; }
+    criarLista(name);
+    m.remove();
+    render();
+    toast(`Lista "${name}" criada!`, "success");
+  };
+  document.getElementById("lista-criar-btn").onclick = criar;
+  inp?.addEventListener("keydown", e => { if (e.key === "Enter") criar(); });
+  setTimeout(() => inp?.focus(), 50);
+}
+
 // ─── Other views ─────────────────────────────────────────────────
 function viewListas() {
-  const listas = [
-    { nome: "Restaurantes SP — Campanha Q2", cnt: 142, cor: "ac", upd: "Em breve" },
-    { nome: "Clínicas odonto premium",       cnt: 87,  cor: "in", upd: "Em breve" },
-    { nome: "Academias MG/RJ",               cnt: 56,  cor: "wa", upd: "Em breve" },
-    { nome: "Agências de marketing",          cnt: 214, cor: "pu", upd: "Em breve" },
-  ];
+  const listas = getListas();
+  const cards = listas.length === 0
+    ? `<div class="panel" style="padding:40px;text-align:center;color:var(--text-dim)">
+        <div style="font-size:14px;color:var(--text-muted);margin-bottom:8px">Nenhuma lista criada ainda</div>
+        Crie sua primeira lista e salve leads da tabela de empresas.
+      </div>`
+    : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
+        ${listas.map(l => `
+          <div class="panel" style="padding:18px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+              <div class="insight-ico ac">${ICONS.bookmark}</div>
+              <button class="row-btn" title="Remover lista" onclick="confirmModal('Remover a lista <strong>${l.name}</strong>?', () => deletarLista('${l.id}'))">${ICONS.trash}</button>
+            </div>
+            <div style="font-weight:600;margin-bottom:4px">${l.name}</div>
+            <div style="font-size:11.5px;color:var(--text-dim)">${l.cnpjs.length} empresa${l.cnpjs.length !== 1 ? "s" : ""} · criada ${fmtDate(l.createdAt.slice(0,10))}</div>
+          </div>`).join("")}
+      </div>`;
+
   return `
     <div class="page-head">
       <div><div class="page-title">Minhas listas</div><div class="page-sub">Leads salvos organizados por campanha</div></div>
-      <button class="btn btn-accent">${ICONS.plus}Nova lista</button>
+      <button class="btn btn-accent" onclick="promptNovaLista()">${ICONS.plus}Nova lista</button>
     </div>
-    <div class="panel" style="padding:32px;text-align:center;color:var(--text-dim);margin-bottom:20px">
-      <div style="font-size:14px;color:var(--text-muted);margin-bottom:8px">Listas em breve</div>
-      Salve leads da tabela de empresas e organize-os em listas personalizadas.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;opacity:0.4;pointer-events:none">
-      ${listas.map(l => `
-        <div class="panel" style="padding:18px">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-            <div class="insight-ico ${l.cor}">${ICONS.bookmark}</div>
-          </div>
-          <div style="font-weight:600;margin-bottom:4px">${l.nome}</div>
-          <div style="font-size:11.5px;color:var(--text-dim)">${l.cnt} empresas · ${l.upd}</div>
-        </div>`).join("")}
-    </div>`;
+    ${cards}`;
 }
 
 function viewExport() {
@@ -1064,6 +1138,7 @@ function viewExport() {
         <div style="font-size:14px;font-weight:600;margin-bottom:8px">Exportar base atual</div>
         <div style="color:var(--text-dim);margin-bottom:20px">Use os filtros nas páginas <strong>Empresas</strong> ou <strong>Busca avançada</strong> e clique em "Exportar CSV".</div>
         <button class="btn btn-accent" onclick="exportCSV()">${ICONS.download}Exportar CSV agora</button>
+        <p class="export-limit-note">Seu plano exporta até <strong>${state.planInfo?.plano === "basico" ? "500" : "5.000"} linhas</strong> por arquivo.</p>
       ` : `
         <div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text-muted)">Exportação não disponível</div>
         <div style="color:var(--text-dim)">Faça upgrade para o plano Básico ou Pro para exportar listas em CSV.</div>
@@ -1124,7 +1199,7 @@ function viewClientes() {
             </span>
           </div>
           <div>
-            <button class="btn" style="font-size:11px;padding:5px 10px" onclick="navigator.clipboard.writeText('${location.origin}?token=${t.token}').then(() => alert('Link copiado!'))">${ICONS.copy}Copiar link</button>
+            <button class="btn" style="font-size:11px;padding:5px 10px" onclick="navigator.clipboard.writeText('${location.origin}?token=${t.token}').then(() => toast('Link copiado!', 'success'))">${ICONS.copy}Copiar link</button>
           </div>
           <div>
             <button class="row-btn" title="Remover" onclick="deletarToken('${t.token}')">${ICONS.trash}</button>
@@ -1155,9 +1230,18 @@ function viewClientes() {
       </div>
       <div id="token-result" style="margin-top:12px;display:none"></div>
     </div>
-    <div class="panel" style="padding:18px 20px">
+    <div class="panel" style="padding:18px 20px;margin-bottom:16px">
       <div class="panel-title" style="margin-bottom:14px">Tokens ativos — ${state.tokens.length}</div>
       ${tokenList}
+    </div>
+    <div class="panel" style="padding:18px 20px">
+      <div class="panel-title" style="margin-bottom:14px">Ferramentas administrativas</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" onclick="adminTool('agente')">▶ Iniciar agente</button>
+        <button class="btn" onclick="adminTool('limpar-sites')">🧹 Limpar sites inválidos</button>
+        <button class="btn btn-danger" onclick="adminTool('reset-database')">⚠ Reset database</button>
+        <button class="btn" onclick="adminTool('vacuum')">🗜 Vacuum banco</button>
+      </div>
     </div>`;
 }
 
@@ -1188,7 +1272,8 @@ function clearFilters() {
 function sortBy(k) {
   if (state.sort.key === k) state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
   else { state.sort.key = k; state.sort.dir = "asc"; }
-  render();
+  state.page = 1;
+  loadEmpresas();
 }
 function goPage(p) {
   state.page = p;
@@ -1225,6 +1310,29 @@ async function toggleExpand(cnpj) {
   }
 }
 
+function toggleRowMenu(e, cnpj) {
+  e.stopPropagation();
+  const existing = document.getElementById("row-menu");
+  if (existing) { existing.remove(); return; }
+  const btn = e.currentTarget;
+  const rect = btn.getBoundingClientRect();
+  const m = document.createElement("div");
+  m.id = "row-menu";
+  m.className = "row-dropdown";
+  m.style.cssText = `position:fixed;top:${rect.bottom + 4}px;left:${rect.left - 120}px;z-index:300`;
+  const listItems = getListas().map(l =>
+    `<button onclick="document.getElementById('row-menu').remove();adicionarNaLista('${l.id}','${cnpj}');toast('Empresa salva em &quot;${l.name}&quot;!','success')">${ICONS.bookmark}${l.name}</button>`
+  ).join("");
+  m.innerHTML = `
+    <button onclick="document.getElementById('row-menu').remove();toggleExpand('${cnpj}')">Ver detalhes</button>
+    <button onclick="document.getElementById('row-menu').remove();navigator.clipboard.writeText('${fmtCNPJ(cnpj)}').then(()=>toast('CNPJ copiado!','success'))">Copiar CNPJ</button>
+    ${listItems ? `<div style="border-top:1px solid var(--border-soft);margin:3px 0"></div>${listItems}` : ""}
+    <button onclick="document.getElementById('row-menu').remove();promptNovaLista()">${ICONS.plus}Nova lista…</button>`;
+  document.body.appendChild(m);
+  const close = ev => { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener("click", close); } };
+  setTimeout(() => document.addEventListener("click", close), 0);
+}
+
 function updateBulkBar() {
   const bar = $("#bulk-bar");
   if (!bar) return;
@@ -1240,7 +1348,11 @@ function updateBulkBar() {
 async function handleCriarToken() {
   const tokenVal = $("#new-token")?.value?.trim();
   const plano    = $("#new-plano")?.value;
-  if (!tokenVal) { alert("Informe o token/nome do cliente."); return; }
+  if (!tokenVal) {
+    const inp = $("#new-token");
+    if (inp) { inp.style.borderColor = "var(--danger)"; inp.classList.add("shake"); setTimeout(() => { inp.style.borderColor = ""; inp.classList.remove("shake"); }, 600); }
+    return;
+  }
   const result = await criarToken(tokenVal, plano);
   if (result) {
     const link = `${location.origin}?token=${result.token}`;
@@ -1299,6 +1411,124 @@ function wireContent() {
   }
 }
 
+// ─── Toast notifications ─────────────────────────────────────────
+let _toastCount = 0;
+function toast(message, type = "info") {
+  _toastCount++;
+  const id = "toast-" + _toastCount;
+  const t = document.createElement("div");
+  t.id = id;
+  t.className = `toast toast-${type}`;
+  t.textContent = message;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add("toast-show"));
+  setTimeout(() => {
+    t.classList.remove("toast-show");
+    t.addEventListener("transitionend", () => t.remove(), { once: true });
+  }, 3000);
+}
+
+// ─── Confirm modal ───────────────────────────────────────────────
+function confirmModal(message, onConfirm) {
+  const existing = document.getElementById("confirm-modal");
+  if (existing) existing.remove();
+  const m = document.createElement("div");
+  m.id = "confirm-modal";
+  m.className = "modal-overlay";
+  m.innerHTML = `<div class="modal-box" style="width:min(400px,90vw)">
+    <div class="modal-header">
+      <h3>Confirmar ação</h3>
+      <button class="modal-close" onclick="document.getElementById('confirm-modal').remove()">×</button>
+    </div>
+    <div class="modal-body" style="font-size:13.5px;color:var(--text-muted)">${message}</div>
+    <div class="modal-footer">
+      <button class="btn" onclick="document.getElementById('confirm-modal').remove()">Cancelar</button>
+      <button class="btn btn-danger" id="confirm-ok">Confirmar</button>
+    </div>
+  </div>`;
+  m.addEventListener("click", e => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+  document.getElementById("confirm-ok").onclick = () => { m.remove(); onConfirm(); };
+}
+
+// ─── Modals ──────────────────────────────────────────────────────
+function showUpgradeModal() {
+  const existing = document.getElementById("upgrade-modal");
+  if (existing) { existing.remove(); return; }
+  const m = document.createElement("div");
+  m.id = "upgrade-modal";
+  m.className = "modal-overlay";
+  m.innerHTML = `<div class="modal-box">
+    <div class="modal-header">
+      <h3>Planos disponíveis</h3>
+      <button class="modal-close" onclick="document.getElementById('upgrade-modal').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="upgrade-grid">
+        <div class="upgrade-plan">
+          <div class="upgrade-plan-name">Gratuito</div>
+          <div class="upgrade-plan-features">
+            <div>10 CNPJs / dia</div>
+            <div>Acesso ao dashboard</div>
+            <div style="color:var(--text-dim)">Sem exportação CSV</div>
+            <div style="color:var(--text-dim)">Sem API</div>
+          </div>
+        </div>
+        <div class="upgrade-plan featured">
+          <div class="upgrade-plan-name">Básico</div>
+          <div class="upgrade-plan-features">
+            <div>500 CNPJs / dia</div>
+            <div>Acesso ao dashboard</div>
+            <div>Exportação CSV</div>
+            <div style="color:var(--text-dim)">Sem API</div>
+          </div>
+        </div>
+        <div class="upgrade-plan featured-pro">
+          <div class="upgrade-plan-name">Pro</div>
+          <div class="upgrade-plan-features">
+            <div>Ilimitado</div>
+            <div>Acesso ao dashboard</div>
+            <div>Exportação CSV</div>
+            <div>Acesso via API</div>
+          </div>
+        </div>
+      </div>
+      <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--text-dim)">Entre em contato para fazer upgrade do seu plano.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="document.getElementById('upgrade-modal').remove()">Fechar</button>
+    </div>
+  </div>`;
+  m.addEventListener("click", e => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+}
+
+function showHelpModal() {
+  const existing = document.getElementById("help-modal");
+  if (existing) { existing.remove(); return; }
+  const m = document.createElement("div");
+  m.id = "help-modal";
+  m.className = "modal-overlay";
+  m.innerHTML = `<div class="modal-box">
+    <div class="modal-header">
+      <h3>Ajuda</h3>
+      <button class="modal-close" onclick="document.getElementById('help-modal').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--text-muted);margin-bottom:12px">O <strong>CNPJ Intel</strong> é uma plataforma B2B para busca e enriquecimento de dados de empresas brasileiras via CNPJ.</p>
+      <p style="color:var(--text-muted);margin-bottom:16px">Pesquise por filtros como UF, porte, setor, data de abertura e exporte listas com contatos (telefone, e-mail, Instagram, site).</p>
+      <div style="border-top:1px solid var(--border-soft);padding-top:12px">
+        <a href="/docs" target="_blank" class="btn btn-accent" style="display:inline-flex">Documentação da API →</a>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="document.getElementById('help-modal').remove()">Fechar</button>
+    </div>
+  </div>`;
+  m.addEventListener("click", e => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+}
+
 // ─── Tweaks ──────────────────────────────────────────────────────
 function openTweaks()  { $("#tweaks-panel")?.classList.add("open"); }
 function closeTweaks() { $("#tweaks-panel")?.classList.remove("open"); }
@@ -1314,6 +1544,7 @@ function initTweaksUI() {
     b.classList.toggle("on", b.dataset.val === state.density);
     b.onclick = () => {
       state.density = b.dataset.val;
+      localStorage.setItem("cnpj_density", b.dataset.val);
       $$("button", dens).forEach(x => x.classList.toggle("on", x === b));
       render();
     };
@@ -1323,6 +1554,7 @@ function initTweaksUI() {
     b.classList.toggle("on", b.dataset.val === state.radius);
     b.onclick = () => {
       state.radius = b.dataset.val;
+      localStorage.setItem("cnpj_radius", b.dataset.val);
       $$("button", rad).forEach(x => x.classList.toggle("on", x === b));
       applyTweaks();
     };
@@ -1331,8 +1563,56 @@ function initTweaksUI() {
 
 // ─── Init ────────────────────────────────────────────────────────
 async function init() {
-  $$(".nav-item").forEach(n => { if (n.dataset.tab) n.onclick = () => showTab(n.dataset.tab); });
+  // No token — show login screen instead of loading dashboard
+  if (!TOKEN) {
+    document.body.innerHTML = `<div class="token-overlay">
+      <div class="token-box">
+        <div class="token-logo">
+          <svg viewBox="0 0 24 24" fill="none" width="40" height="40"><path d="M4 8L12 4L20 8V16L12 20L4 16V8Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 12L20 8M12 12V20M12 12L4 8" stroke="currentColor" stroke-width="1.5"/></svg>
+        </div>
+        <div class="token-brand">CNPJ Intel</div>
+        <h2 class="token-title">Acesse sua conta</h2>
+        <input id="token-input" class="token-input" type="text" placeholder="Cole seu token de acesso" autocomplete="off">
+        <button class="btn btn-accent token-btn" id="token-submit">Entrar</button>
+      </div>
+    </div>`;
+    const submitFn = () => {
+      const v = document.getElementById("token-input")?.value?.trim();
+      if (v) { localStorage.setItem("cnpj_token", v); location.reload(); }
+    };
+    document.getElementById("token-submit").onclick = submitFn;
+    document.getElementById("token-input").addEventListener("keydown", e => { if (e.key === "Enter") submitFn(); });
+    return;
+  }
 
+  // Wire nav items (also closes mobile sidebar)
+  $$(".nav-item").forEach(n => {
+    if (n.dataset.tab) n.onclick = () => {
+      document.querySelector(".app")?.classList.remove("sidebar-open");
+      showTab(n.dataset.tab);
+    };
+  });
+
+  // ⌘K / Ctrl+K → focus global search
+  document.addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      e.preventDefault();
+      document.getElementById("global-search")?.focus();
+    }
+  });
+
+  // Help button
+  const helpBtn = document.getElementById("help-btn");
+  if (helpBtn) helpBtn.onclick = showHelpModal;
+
+  // Hamburger (mobile sidebar toggle)
+  const hamburger = document.getElementById("hamburger-btn");
+  const overlay   = document.getElementById("sidebar-overlay");
+  if (hamburger) hamburger.onclick = () => document.querySelector(".app")?.classList.toggle("sidebar-open");
+  if (overlay)   overlay.onclick   = () => document.querySelector(".app")?.classList.remove("sidebar-open");
+
+  state.density = localStorage.getItem("cnpj_density") || "normal";
+  state.radius  = localStorage.getItem("cnpj_radius")  || "soft";
   applyTweaks();
   initTweaksUI();
 
