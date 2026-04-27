@@ -258,6 +258,7 @@ async function loadEmpresas() {
   if (f.insta)      params.set("com_instagram", "true");
   if (f.abertura_de)  params.set("abertura_de", f.abertura_de);
   if (f.abertura_ate) params.set("abertura_ate", f.abertura_ate);
+  if (state.sort.key) { params.set("sort_by", state.sort.key); params.set("sort_dir", state.sort.dir); }
   const data = await apiFetch(`/api/empresas?${params}`);
   if (data && !data._err) {
     state.dados = data.dados || [];
@@ -1049,33 +1050,81 @@ function detailRow(cnpj, baseData) {
   </tr>`;
 }
 
+// ─── Minhas Listas helpers (localStorage) ───────────────────────
+function getListas() { return JSON.parse(localStorage.getItem("cnpj_listas") || "[]"); }
+function saveListas(l) { localStorage.setItem("cnpj_listas", JSON.stringify(l)); }
+function criarLista(name) {
+  const nova = { id: Date.now().toString(), name, cnpjs: [], createdAt: new Date().toISOString() };
+  saveListas([...getListas(), nova]);
+  return nova;
+}
+function deletarLista(id) { saveListas(getListas().filter(l => l.id !== id)); render(); }
+function adicionarNaLista(listId, cnpj) {
+  const ls = getListas();
+  const l = ls.find(l => l.id === listId);
+  if (l && !l.cnpjs.includes(cnpj)) { l.cnpjs.push(cnpj); saveListas(ls); }
+}
+
+function promptNovaLista() {
+  const existing = document.getElementById("nova-lista-modal");
+  if (existing) { existing.remove(); return; }
+  const m = document.createElement("div");
+  m.id = "nova-lista-modal";
+  m.className = "modal-overlay";
+  m.innerHTML = `<div class="modal-box" style="width:min(380px,92vw)">
+    <div class="modal-header"><h3>Nova lista</h3>
+      <button class="modal-close" onclick="document.getElementById('nova-lista-modal').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <input id="lista-nome" class="token-input" placeholder="Nome da lista" style="margin-bottom:0" autofocus>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="document.getElementById('nova-lista-modal').remove()">Cancelar</button>
+      <button class="btn btn-accent" id="lista-criar-btn">Criar</button>
+    </div>
+  </div>`;
+  m.addEventListener("click", e => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+  const inp = document.getElementById("lista-nome");
+  const criar = () => {
+    const name = inp?.value?.trim();
+    if (!name) { inp.style.borderColor = "var(--danger)"; return; }
+    criarLista(name);
+    m.remove();
+    render();
+    toast(`Lista "${name}" criada!`, "success");
+  };
+  document.getElementById("lista-criar-btn").onclick = criar;
+  inp?.addEventListener("keydown", e => { if (e.key === "Enter") criar(); });
+  setTimeout(() => inp?.focus(), 50);
+}
+
 // ─── Other views ─────────────────────────────────────────────────
 function viewListas() {
-  const listas = [
-    { nome: "Restaurantes SP — Campanha Q2", cnt: 142, cor: "ac", upd: "Em breve" },
-    { nome: "Clínicas odonto premium",       cnt: 87,  cor: "in", upd: "Em breve" },
-    { nome: "Academias MG/RJ",               cnt: 56,  cor: "wa", upd: "Em breve" },
-    { nome: "Agências de marketing",          cnt: 214, cor: "pu", upd: "Em breve" },
-  ];
+  const listas = getListas();
+  const cards = listas.length === 0
+    ? `<div class="panel" style="padding:40px;text-align:center;color:var(--text-dim)">
+        <div style="font-size:14px;color:var(--text-muted);margin-bottom:8px">Nenhuma lista criada ainda</div>
+        Crie sua primeira lista e salve leads da tabela de empresas.
+      </div>`
+    : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
+        ${listas.map(l => `
+          <div class="panel" style="padding:18px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+              <div class="insight-ico ac">${ICONS.bookmark}</div>
+              <button class="row-btn" title="Remover lista" onclick="confirmModal('Remover a lista <strong>${l.name}</strong>?', () => deletarLista('${l.id}'))">${ICONS.trash}</button>
+            </div>
+            <div style="font-weight:600;margin-bottom:4px">${l.name}</div>
+            <div style="font-size:11.5px;color:var(--text-dim)">${l.cnpjs.length} empresa${l.cnpjs.length !== 1 ? "s" : ""} · criada ${fmtDate(l.createdAt.slice(0,10))}</div>
+          </div>`).join("")}
+      </div>`;
+
   return `
     <div class="page-head">
       <div><div class="page-title">Minhas listas</div><div class="page-sub">Leads salvos organizados por campanha</div></div>
-      <button class="btn btn-accent" onclick="toast('Listas em breve — funcionalidade em desenvolvimento','info')">${ICONS.plus}Nova lista</button>
+      <button class="btn btn-accent" onclick="promptNovaLista()">${ICONS.plus}Nova lista</button>
     </div>
-    <div class="panel" style="padding:32px;text-align:center;color:var(--text-dim);margin-bottom:20px">
-      <div style="font-size:14px;color:var(--text-muted);margin-bottom:8px">Listas em breve</div>
-      Salve leads da tabela de empresas e organize-os em listas personalizadas.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;opacity:0.4;pointer-events:none">
-      ${listas.map(l => `
-        <div class="panel" style="padding:18px">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-            <div class="insight-ico ${l.cor}">${ICONS.bookmark}</div>
-          </div>
-          <div style="font-weight:600;margin-bottom:4px">${l.nome}</div>
-          <div style="font-size:11.5px;color:var(--text-dim)">${l.cnt} empresas · ${l.upd}</div>
-        </div>`).join("")}
-    </div>`;
+    ${cards}`;
 }
 
 function viewExport() {
@@ -1223,7 +1272,8 @@ function clearFilters() {
 function sortBy(k) {
   if (state.sort.key === k) state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
   else { state.sort.key = k; state.sort.dir = "asc"; }
-  render();
+  state.page = 1;
+  loadEmpresas();
 }
 function goPage(p) {
   state.page = p;
@@ -1270,9 +1320,14 @@ function toggleRowMenu(e, cnpj) {
   m.id = "row-menu";
   m.className = "row-dropdown";
   m.style.cssText = `position:fixed;top:${rect.bottom + 4}px;left:${rect.left - 120}px;z-index:300`;
+  const listItems = getListas().map(l =>
+    `<button onclick="document.getElementById('row-menu').remove();adicionarNaLista('${l.id}','${cnpj}');toast('Empresa salva em &quot;${l.name}&quot;!','success')">${ICONS.bookmark}${l.name}</button>`
+  ).join("");
   m.innerHTML = `
     <button onclick="document.getElementById('row-menu').remove();toggleExpand('${cnpj}')">Ver detalhes</button>
-    <button onclick="document.getElementById('row-menu').remove();navigator.clipboard.writeText('${fmtCNPJ(cnpj)}').then(()=>toast('CNPJ copiado!','success'))">Copiar CNPJ</button>`;
+    <button onclick="document.getElementById('row-menu').remove();navigator.clipboard.writeText('${fmtCNPJ(cnpj)}').then(()=>toast('CNPJ copiado!','success'))">Copiar CNPJ</button>
+    ${listItems ? `<div style="border-top:1px solid var(--border-soft);margin:3px 0"></div>${listItems}` : ""}
+    <button onclick="document.getElementById('row-menu').remove();promptNovaLista()">${ICONS.plus}Nova lista…</button>`;
   document.body.appendChild(m);
   const close = ev => { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener("click", close); } };
   setTimeout(() => document.addEventListener("click", close), 0);

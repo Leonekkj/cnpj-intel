@@ -1028,7 +1028,8 @@ class Database:
                         com_email=False, com_instagram=False,
                         com_telefone=False, com_site=False,
                         com_contato=False,
-                        pagina=1, por_pagina=50) -> dict:
+                        pagina=1, por_pagina=50,
+                        sort_by="razao_social", sort_dir="asc") -> dict:
         filtros = ["1=1"]
         params = []
 
@@ -1080,12 +1081,17 @@ class Database:
         where = " AND ".join(filtros)
         offset = (pagina - 1) * por_pagina
 
+        _ALLOWED_SORT = {"razao_social", "cnpj", "porte", "municipio", "abertura", "atualizado_em"}
+        if sort_by not in _ALLOWED_SORT:
+            sort_by = "razao_social"
+        direction = "ASC" if sort_dir.lower() != "desc" else "DESC"
+
         with _conn() as conn:
             cur = conn.cursor()
             cur.execute(f"SELECT COUNT(*) FROM empresas WHERE {where}", params)
             total = cur.fetchone()[0]
             cur.execute(
-                f"SELECT * FROM empresas WHERE {where} ORDER BY atualizado_em DESC LIMIT {PH} OFFSET {PH}",
+                f"SELECT * FROM empresas WHERE {where} ORDER BY {sort_by} {direction} LIMIT {PH} OFFSET {PH}",
                 params + [por_pagina, offset]
             )
             cols = [d[0] for d in cur.description]

@@ -240,6 +240,8 @@ def listar_empresas(
     com_contato:   bool = Query(False, description="Padrão: retorna todos os CNPJs"),
     pagina:        int  = Query(1, ge=1),
     por_pagina:    int  = Query(50, le=200),
+    sort_by:       str  = Query("razao_social", description="Campo para ordenar"),
+    sort_dir:      str  = Query("asc", description="asc ou desc"),
     info:          dict = Depends(get_token_info_soft),
 ):
     plano = info["plano"]
@@ -251,6 +253,7 @@ def listar_empresas(
         com_telefone=com_telefone, com_site=com_site,
         com_contato=com_contato,
         pagina=pagina, por_pagina=por_pagina,
+        sort_by=sort_by, sort_dir=sort_dir,
     )
 
     resultado["plano"]    = info["nome_plano"]
