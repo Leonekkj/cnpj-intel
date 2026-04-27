@@ -497,7 +497,7 @@ function limitBanner() {
   </div>`;
 }
 
-function render() {
+async function render() {
   const c = $("#content");
   if (!c) return;
   const t = state.tab;
@@ -505,7 +505,7 @@ function render() {
   if      (t === "dashboard") html += viewDashboard();
   else if (t === "empresas")  html += viewEmpresas();
   else if (t === "busca")     html += viewBusca();
-  else if (t === "listas")    html += viewListas();
+  else if (t === "listas")    html += await viewListas();
   else if (t === "exportar")  html += viewExport();
   else if (t === "api")       html += viewAPI();
   else if (t === "clientes")  html += viewClientes();
@@ -765,7 +765,7 @@ function viewEmpresas() {
       <span class="bulk-count"><strong>${state.selected.size}</strong> selecionadas</span>
       <button class="btn btn-ghost" style="font-size:12px" onclick="clearSelection()">Limpar seleção</button>
       <div class="bulk-actions">
-        <button class="btn" onclick="toast('Em breve — funcionalidade em desenvolvimento','info')">${ICONS.bookmark}Salvar em lista</button>
+        <button class="btn" onclick="promptBulkSalvarEmLista()">${ICONS.bookmark}Salvar em lista</button>
         <button class="btn" onclick="toast('Em breve — funcionalidade em desenvolvimento','info')">${ICONS.mail}Campanha</button>
         <button class="btn btn-accent" onclick="exportCSV()">${ICONS.download}Exportar</button>
       </div>
@@ -1056,19 +1056,44 @@ function detailRow(cnpj, baseData) {
   </tr>`;
 }
 
-// ─── Minhas Listas helpers (localStorage) ───────────────────────
-function getListas() { return JSON.parse(localStorage.getItem("cnpj_listas") || "[]"); }
-function saveListas(l) { localStorage.setItem("cnpj_listas", JSON.stringify(l)); }
-function criarLista(name) {
-  const nova = { id: Date.now().toString(), name, cnpjs: [], createdAt: new Date().toISOString() };
-  saveListas([...getListas(), nova]);
-  return nova;
+// ── Lists API helpers ─────────────────────────────────────────────────────────
+
+async function apiListas(path = '', opts = {}) {
+  const r = await fetch(`/api/listas${path}`, {
+    headers: { 'Authorization': `Bearer ${state.token}`, 'Content-Type': 'application/json' },
+    ...opts
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
 }
-function deletarLista(id) { saveListas(getListas().filter(l => l.id !== id)); render(); }
-function adicionarNaLista(listId, cnpj) {
-  const ls = getListas();
-  const l = ls.find(l => l.id === listId);
-  if (l && !l.cnpjs.includes(cnpj)) { l.cnpjs.push(cnpj); saveListas(ls); }
+
+async function getListas() {
+  return apiListas();
+}
+
+async function criarLista(nome) {
+  return apiListas('', { method: 'POST', body: JSON.stringify({ nome }) });
+}
+
+async function deletarLista(id) {
+  await apiListas(`/${id}`, { method: 'DELETE' });
+  render();
+}
+
+async function adicionarNaLista(listaId, cnpj) {
+  await apiListas(`/${listaId}/itens`, {
+    method: 'POST', body: JSON.stringify({ cnpjs: [cnpj] })
+  });
+}
+
+async function removerDaLista(listaId, cnpj) {
+  await apiListas(`/${listaId}/itens/${encodeURIComponent(cnpj)}`, { method: 'DELETE' });
+}
+
+async function renomearLista(listaId, novoNome) {
+  await apiListas(`/${listaId}`, {
+    method: 'PUT', body: JSON.stringify({ nome: novoNome })
+  });
 }
 
 function promptNovaLista() {
@@ -1092,13 +1117,17 @@ function promptNovaLista() {
   m.addEventListener("click", e => { if (e.target === m) m.remove(); });
   document.body.appendChild(m);
   const inp = document.getElementById("lista-nome");
-  const criar = () => {
+  const criar = async () => {
     const name = inp?.value?.trim();
     if (!name) { inp.style.borderColor = "var(--danger)"; return; }
-    criarLista(name);
-    m.remove();
-    render();
-    toast(`Lista "${name}" criada!`, "success");
+    try {
+      await criarLista(name);
+      m.remove();
+      toast(`Lista "${name}" criada!`, "success");
+      render();
+    } catch(e) {
+      toast('Erro ao criar lista. Nome já existe?', 'error');
+    }
   };
   document.getElementById("lista-criar-btn").onclick = criar;
   inp?.addEventListener("keydown", e => { if (e.key === "Enter") criar(); });
@@ -1106,8 +1135,8 @@ function promptNovaLista() {
 }
 
 // ─── Other views ─────────────────────────────────────────────────
-function viewListas() {
-  const listas = getListas();
+async function viewListas() {
+  const listas = await getListas();
   const cards = listas.length === 0
     ? `<div class="panel" style="padding:40px;text-align:center;color:var(--text-dim)">
         <div style="font-size:14px;color:var(--text-muted);margin-bottom:8px">Nenhuma lista criada ainda</div>
@@ -1115,13 +1144,13 @@ function viewListas() {
       </div>`
     : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
         ${listas.map(l => `
-          <div class="panel" style="padding:18px">
+          <div class="panel" style="padding:18px;cursor:pointer" onclick="navigateToLista(${l.id})">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
               <div class="insight-ico ac">${ICONS.bookmark}</div>
-              <button class="row-btn" title="Remover lista" onclick="confirmModal('Remover a lista <strong>${l.name}</strong>?', () => deletarLista('${l.id}'))">${ICONS.trash}</button>
+              <button class="row-btn" title="Remover lista" onclick="event.stopPropagation();(async()=>{if(!confirm('Deletar lista &quot;${l.nome}&quot;?'))return;try{await deletarLista(${l.id});toast('Lista &quot;${l.nome}&quot; removida','info');}catch(e){toast('Erro ao deletar lista','error');}})()">${ICONS.trash}</button>
             </div>
-            <div style="font-weight:600;margin-bottom:4px">${l.name}</div>
-            <div style="font-size:11.5px;color:var(--text-dim)">${l.cnpjs.length} empresa${l.cnpjs.length !== 1 ? "s" : ""} · criada ${fmtDate(l.createdAt.slice(0,10))}</div>
+            <div style="font-weight:600;margin-bottom:4px">${l.nome}</div>
+            <div style="font-size:11.5px;color:var(--text-dim)">${l.total} empresa${l.total !== 1 ? "s" : ""}</div>
           </div>`).join("")}
       </div>`;
 
@@ -1131,6 +1160,179 @@ function viewListas() {
       <button class="btn btn-accent" onclick="promptNovaLista()">${ICONS.plus}Nova lista</button>
     </div>
     ${cards}`;
+}
+
+async function viewListaDetalhe(listaId) {
+  const lista = await apiListas(`/${listaId}`);
+  const itens = lista.itens || [];
+  return `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+      <button class="btn btn-ghost" onclick="render()">← Voltar</button>
+      <h2 style="margin:0">${lista.nome}</h2>
+      <span style="color:var(--text-muted);font-size:13px">${lista.total} empresa${lista.total !== 1 ? 's' : ''}</span>
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="promptRenomearLista(${lista.id}, '${lista.nome.replace(/'/g, "\\'")}')">Renomear</button>
+      <button class="btn btn-ghost" onclick="exportListaCSV(${lista.id}, '${lista.nome.replace(/'/g, "\\'")}')">Exportar CSV</button>
+    </div>
+    ${itens.length === 0
+      ? `<div style="text-align:center;color:var(--text-muted);padding:40px 0"><p>Nenhuma empresa nesta lista ainda.</p></div>`
+      : `<table class="tabela-empresas">
+          <thead><tr>
+            <th>Empresa</th><th>Município / UF</th><th>Telefone</th><th>Email</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${itens.map(e => `
+              <tr>
+                <td>
+                  <strong>${e.nome_fantasia || e.razao_social || '—'}</strong><br>
+                  <small style="color:var(--text-muted)">${e.razao_social || ''}</small>
+                </td>
+                <td>${e.municipio || '—'} / ${e.uf || '—'}</td>
+                <td>${e.telefone || '—'}</td>
+                <td>${e.email || '—'}</td>
+                <td>
+                  <button class="btn btn-ghost btn-sm"
+                    onclick="removerItemListaUI(${lista.id}, '${e.cnpj}', this)"
+                    title="Remover da lista">✕</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>`
+    }
+  `;
+}
+
+async function removerItemListaUI(listaId, cnpj, btn) {
+  try {
+    await removerDaLista(listaId, cnpj);
+    btn.closest('tr').remove();
+    toast('Empresa removida da lista', 'info');
+  } catch(e) {
+    toast('Erro ao remover empresa', 'error');
+  }
+}
+
+async function navigateToLista(listaId) {
+  const main = document.getElementById('content');
+  main.innerHTML = await viewListaDetalhe(listaId);
+}
+
+async function promptRenomearLista(listaId, nomeAtual) {
+  const novoNome = prompt('Novo nome da lista:', nomeAtual);
+  if (!novoNome || !novoNome.trim() || novoNome.trim() === nomeAtual) return;
+  try {
+    await renomearLista(listaId, novoNome.trim());
+    toast(`Lista renomeada para "${novoNome.trim()}"`, 'success');
+    const main = document.getElementById('content');
+    main.innerHTML = await viewListaDetalhe(listaId);
+  } catch(e) {
+    toast('Erro ao renomear lista (nome já existe?)', 'error');
+  }
+}
+
+async function migrarListasLocais() {
+  const local = JSON.parse(localStorage.getItem('cnpj_listas') || '[]');
+  if (local.length === 0) return;
+  let migrated = 0;
+  for (const l of local) {
+    try {
+      const nova = await criarLista(l.name || l.nome);
+      if (l.cnpjs && l.cnpjs.length > 0) {
+        await apiListas(`/${nova.id}/itens`, {
+          method: 'POST', body: JSON.stringify({ cnpjs: l.cnpjs })
+        });
+      }
+      migrated++;
+    } catch(e) {
+      // skip duplicates or errors silently
+    }
+  }
+  localStorage.removeItem('cnpj_listas');
+  if (migrated > 0) {
+    toast(`${migrated} lista${migrated > 1 ? 's' : ''} migrada${migrated > 1 ? 's' : ''} do navegador para a nuvem`, 'success');
+  }
+}
+
+function exportListaCSV(listaId, listaNome) {
+  fetch(`/api/listas/${listaId}/export`, {
+    headers: { 'Authorization': `Bearer ${state.token}` }
+  }).then(r => {
+    if (!r.ok) { toast('Sem permissão para exportar ou lista vazia', 'error'); return null; }
+    return r.blob();
+  }).then(blob => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `lista_${listaNome}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  });
+}
+
+async function promptBulkSalvarEmLista() {
+  const cnpjs = [...state.selected];
+  if (cnpjs.length === 0) return;
+
+  let listas;
+  try { listas = await getListas(); } catch(e) { toast('Erro ao carregar listas', 'error'); return; }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box" style="min-width:320px">
+      <h3 style="margin:0 0 16px">Salvar ${cnpjs.length} empresa${cnpjs.length > 1 ? 's' : ''} em lista</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+        ${listas.length === 0
+          ? `<p style="color:var(--text-muted)">Nenhuma lista criada ainda.</p>`
+          : listas.map(l => `
+              <button class="btn" data-lista-id="${l.id}" data-lista-nome="${l.nome.replace(/"/g, '&quot;')}"
+                style="justify-content:space-between">
+                ${l.nome}
+                <span style="color:var(--text-muted);font-size:12px">${l.total} empresa${l.total !== 1 ? 's' : ''}</span>
+              </button>`).join('')
+        }
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" id="bulk-nova-lista-btn">+ Nova lista</button>
+        <button class="btn btn-ghost" style="margin-left:auto" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelectorAll('[data-lista-id]').forEach(btn => {
+    btn.onclick = async () => {
+      const listaId = +btn.dataset.listaId;
+      const nome = btn.dataset.listaNome;
+      try {
+        const res = await apiListas(`/${listaId}/itens`, {
+          method: 'POST', body: JSON.stringify({ cnpjs })
+        });
+        overlay.remove();
+        toast(`${res.adicionados} empresa${res.adicionados !== 1 ? 's' : ''} salva${res.adicionados !== 1 ? 's' : ''} em "${nome}"!`, 'success');
+      } catch(e) {
+        toast('Erro ao salvar empresas na lista', 'error');
+      }
+    };
+  });
+
+  overlay.querySelector('#bulk-nova-lista-btn').onclick = async () => {
+    const nome = prompt('Nome da nova lista:');
+    if (!nome || !nome.trim()) return;
+    try {
+      const nova = await criarLista(nome.trim());
+      const res = await apiListas(`/${nova.id}/itens`, {
+        method: 'POST', body: JSON.stringify({ cnpjs })
+      });
+      overlay.remove();
+      toast(`${res.adicionados} empresa${res.adicionados !== 1 ? 's' : ''} salva${res.adicionados !== 1 ? 's' : ''} em "${nome.trim()}"!`, 'success');
+    } catch(e) {
+      toast('Erro ao criar lista', 'error');
+    }
+  };
 }
 
 function viewExport() {
@@ -1326,15 +1528,36 @@ function toggleRowMenu(e, cnpj) {
   m.id = "row-menu";
   m.className = "row-dropdown";
   m.style.cssText = `position:fixed;top:${rect.bottom + 4}px;left:${rect.left - 120}px;z-index:300`;
-  const listItems = getListas().map(l =>
-    `<button onclick="document.getElementById('row-menu').remove();adicionarNaLista('${l.id}','${cnpj}');toast('Empresa salva em &quot;${l.name}&quot;!','success')">${ICONS.bookmark}${l.name}</button>`
-  ).join("");
   m.innerHTML = `
     <button onclick="document.getElementById('row-menu').remove();toggleExpand('${cnpj}')">Ver detalhes</button>
     <button onclick="document.getElementById('row-menu').remove();navigator.clipboard.writeText('${fmtCNPJ(cnpj)}').then(()=>toast('CNPJ copiado!','success'))">Copiar CNPJ</button>
-    ${listItems ? `<div style="border-top:1px solid var(--border-soft);margin:3px 0"></div>${listItems}` : ""}
+    <div id="row-menu-listas-placeholder" style="border-top:1px solid var(--border-soft);margin:3px 0"></div>
     <button onclick="document.getElementById('row-menu').remove();promptNovaLista()">${ICONS.plus}Nova lista…</button>`;
   document.body.appendChild(m);
+  // Async: load lists and inject into menu
+  getListas().then(listas => {
+    const placeholder = document.getElementById('row-menu-listas-placeholder');
+    if (!placeholder) return;
+    if (listas.length > 0) {
+      const listBtns = listas.map(l => {
+        const btn = document.createElement('button');
+        btn.innerHTML = `${ICONS.bookmark}${l.nome}`;
+        btn.onclick = async () => {
+          try {
+            await adicionarNaLista(l.id, cnpj);
+            toast(`Empresa salva em "${l.nome}"!`, 'success');
+          } catch(e) {
+            toast('Erro ao salvar empresa na lista', 'error');
+          }
+          m.remove();
+        };
+        return btn;
+      });
+      listBtns.forEach(b => placeholder.parentNode.insertBefore(b, placeholder.nextSibling));
+    } else {
+      placeholder.style.display = 'none';
+    }
+  }).catch(() => {});
   const close = ev => { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener("click", close); } };
   setTimeout(() => document.addEventListener("click", close), 0);
 }
@@ -1667,6 +1890,8 @@ async function submitLogin() {
     if (res.ok) {
       const data = await res.json();
       localStorage.setItem("cnpj_token", data.token);
+      state.token = data.token;
+      await migrarListasLocais();
       location.reload();
     } else {
       authShake();
@@ -1699,6 +1924,8 @@ async function submitSignup() {
     const data = await res.json();
     if (res.ok) {
       localStorage.setItem("cnpj_token", data.token);
+      state.token = data.token;
+      await migrarListasLocais();
       location.reload();
     } else {
       authShake();
