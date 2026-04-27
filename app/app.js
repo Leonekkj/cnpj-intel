@@ -497,20 +497,33 @@ function limitBanner() {
   </div>`;
 }
 
-async function render() {
+function render() {
   const c = $("#content");
   if (!c) return;
   const t = state.tab;
+  if (t === "listas") {
+    _renderListas(); // fire and forget — intentional
+    return;
+  }
   let html = limitBanner();
   if      (t === "dashboard") html += viewDashboard();
   else if (t === "empresas")  html += viewEmpresas();
   else if (t === "busca")     html += viewBusca();
-  else if (t === "listas")    html += await viewListas();
   else if (t === "exportar")  html += viewExport();
   else if (t === "api")       html += viewAPI();
   else if (t === "clientes")  html += viewClientes();
   c.innerHTML = html;
   wireContent();
+}
+
+async function _renderListas() {
+  const main = document.getElementById('content');
+  try {
+    main.innerHTML = limitBanner() + await viewListas();
+    wireContent();
+  } catch(e) {
+    main.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px">Erro ao carregar listas</p>';
+  }
 }
 
 // ─── Dashboard ──────────────────────────────────────────────────
@@ -1058,9 +1071,15 @@ function detailRow(cnpj, baseData) {
 
 // ── Lists API helpers ─────────────────────────────────────────────────────────
 
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
 async function apiListas(path = '', opts = {}) {
   const r = await fetch(`/api/listas${path}`, {
-    headers: { 'Authorization': `Bearer ${state.token}`, 'Content-Type': 'application/json' },
+    headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
     ...opts
   });
   if (!r.ok) throw new Error(await r.text());
@@ -1077,7 +1096,6 @@ async function criarLista(nome) {
 
 async function deletarLista(id) {
   await apiListas(`/${id}`, { method: 'DELETE' });
-  render();
 }
 
 async function adicionarNaLista(listaId, cnpj) {
@@ -1147,9 +1165,9 @@ async function viewListas() {
           <div class="panel" style="padding:18px;cursor:pointer" onclick="navigateToLista(${l.id})">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
               <div class="insight-ico ac">${ICONS.bookmark}</div>
-              <button class="row-btn" title="Remover lista" onclick="event.stopPropagation();(async()=>{if(!confirm('Deletar lista &quot;${l.nome}&quot;?'))return;try{await deletarLista(${l.id});toast('Lista &quot;${l.nome}&quot; removida','info');}catch(e){toast('Erro ao deletar lista','error');}})()">${ICONS.trash}</button>
+              <button class="row-btn" title="Remover lista" onclick="event.stopPropagation();(async()=>{if(!confirm('Deletar lista &quot;${esc(l.nome)}&quot;?'))return;try{await deletarLista(${l.id});toast('Lista &quot;${esc(l.nome)}&quot; removida','info');render();}catch(e){toast('Erro ao deletar lista','error');}})()">${ICONS.trash}</button>
             </div>
-            <div style="font-weight:600;margin-bottom:4px">${l.nome}</div>
+            <div style="font-weight:600;margin-bottom:4px">${esc(l.nome)}</div>
             <div style="font-size:11.5px;color:var(--text-dim)">${l.total} empresa${l.total !== 1 ? "s" : ""}</div>
           </div>`).join("")}
       </div>`;
@@ -1166,12 +1184,12 @@ async function viewListaDetalhe(listaId) {
   const lista = await apiListas(`/${listaId}`);
   const itens = lista.itens || [];
   return `
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px" data-lista-id="${lista.id}">
       <button class="btn btn-ghost" onclick="render()">← Voltar</button>
-      <h2 style="margin:0">${lista.nome}</h2>
+      <h2 style="margin:0">${esc(lista.nome)}</h2>
       <span style="color:var(--text-muted);font-size:13px">${lista.total} empresa${lista.total !== 1 ? 's' : ''}</span>
-      <button class="btn btn-ghost" style="margin-left:auto" onclick="promptRenomearLista(${lista.id}, '${lista.nome.replace(/'/g, "\\'")}')">Renomear</button>
-      <button class="btn btn-ghost" onclick="exportListaCSV(${lista.id}, '${lista.nome.replace(/'/g, "\\'")}')">Exportar CSV</button>
+      <button class="btn btn-ghost" style="margin-left:auto" data-lista-id="${lista.id}" onclick="promptRenomearListaFromBtn(this)">Renomear</button>
+      <button class="btn btn-ghost" onclick="exportListaCSV(${lista.id})">Exportar CSV</button>
     </div>
     ${itens.length === 0
       ? `<div style="text-align:center;color:var(--text-muted);padding:40px 0"><p>Nenhuma empresa nesta lista ainda.</p></div>`
@@ -1183,12 +1201,12 @@ async function viewListaDetalhe(listaId) {
             ${itens.map(e => `
               <tr>
                 <td>
-                  <strong>${e.nome_fantasia || e.razao_social || '—'}</strong><br>
-                  <small style="color:var(--text-muted)">${e.razao_social || ''}</small>
+                  <strong>${esc(e.nome_fantasia || e.razao_social || '—')}</strong><br>
+                  <small style="color:var(--text-muted)">${esc(e.razao_social || '')}</small>
                 </td>
-                <td>${e.municipio || '—'} / ${e.uf || '—'}</td>
-                <td>${e.telefone || '—'}</td>
-                <td>${e.email || '—'}</td>
+                <td>${esc(e.municipio || '—')} / ${esc(e.uf || '—')}</td>
+                <td>${esc(e.telefone || '—')}</td>
+                <td>${esc(e.email || '—')}</td>
                 <td>
                   <button class="btn btn-ghost btn-sm"
                     onclick="removerItemListaUI(${lista.id}, '${e.cnpj}', this)"
@@ -1214,7 +1232,12 @@ async function removerItemListaUI(listaId, cnpj, btn) {
 
 async function navigateToLista(listaId) {
   const main = document.getElementById('content');
-  main.innerHTML = await viewListaDetalhe(listaId);
+  try {
+    main.innerHTML = await viewListaDetalhe(listaId);
+  } catch(e) {
+    toast('Erro ao carregar lista', 'error');
+    render();
+  }
 }
 
 async function promptRenomearLista(listaId, nomeAtual) {
@@ -1234,6 +1257,7 @@ async function migrarListasLocais() {
   const local = JSON.parse(localStorage.getItem('cnpj_listas') || '[]');
   if (local.length === 0) return;
   let migrated = 0;
+  const failed = [];
   for (const l of local) {
     try {
       const nova = await criarLista(l.name || l.nome);
@@ -1244,18 +1268,22 @@ async function migrarListasLocais() {
       }
       migrated++;
     } catch(e) {
-      // skip duplicates or errors silently
+      failed.push(l);
     }
   }
-  localStorage.removeItem('cnpj_listas');
+  if (failed.length > 0) {
+    localStorage.setItem('cnpj_listas', JSON.stringify(failed));
+  } else {
+    localStorage.removeItem('cnpj_listas');
+  }
   if (migrated > 0) {
     toast(`${migrated} lista${migrated > 1 ? 's' : ''} migrada${migrated > 1 ? 's' : ''} do navegador para a nuvem`, 'success');
   }
 }
 
-function exportListaCSV(listaId, listaNome) {
+function exportListaCSV(listaId) {
   fetch(`/api/listas/${listaId}/export`, {
-    headers: { 'Authorization': `Bearer ${state.token}` }
+    headers: { 'Authorization': `Bearer ${TOKEN}` }
   }).then(r => {
     if (!r.ok) { toast('Sem permissão para exportar ou lista vazia', 'error'); return null; }
     return r.blob();
@@ -1264,12 +1292,19 @@ function exportListaCSV(listaId, listaNome) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `lista_${listaNome}.csv`);
+    link.setAttribute('download', `lista_${listaId}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   });
+}
+
+async function promptRenomearListaFromBtn(btn) {
+  const listaId = +btn.dataset.listaId;
+  const h2 = document.querySelector('#content h2');
+  const nomeAtual = h2 ? h2.textContent : '';
+  await promptRenomearLista(listaId, nomeAtual);
 }
 
 async function promptBulkSalvarEmLista() {
@@ -1288,9 +1323,9 @@ async function promptBulkSalvarEmLista() {
         ${listas.length === 0
           ? `<p style="color:var(--text-muted)">Nenhuma lista criada ainda.</p>`
           : listas.map(l => `
-              <button class="btn" data-lista-id="${l.id}" data-lista-nome="${l.nome.replace(/"/g, '&quot;')}"
+              <button class="btn" data-lista-id="${l.id}" data-lista-nome="${esc(l.nome)}"
                 style="justify-content:space-between">
-                ${l.nome}
+                ${esc(l.nome)}
                 <span style="color:var(--text-muted);font-size:12px">${l.total} empresa${l.total !== 1 ? 's' : ''}</span>
               </button>`).join('')
         }
