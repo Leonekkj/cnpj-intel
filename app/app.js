@@ -307,7 +307,7 @@ async function loadCategories() {
 
 async function exportCSV() {
   if (state.plan === "free") {
-    alert("Exportação disponível nos planos Básico e Pro.");
+    toast("Exportação disponível nos planos Básico e Pro. Faça upgrade para exportar.", "info");
     return;
   }
   const f = state.filters;
@@ -330,14 +330,14 @@ async function exportCSV() {
   const headers = TOKEN ? { "Authorization": `Bearer ${TOKEN}` } : {};
   try {
     const r = await fetch(url, { headers });
-    if (!r.ok) { alert("Erro ao exportar. Verifique seu plano."); return; }
+    if (!r.ok) { toast("Erro ao exportar. Verifique seu plano.", "error"); return; }
     const blob = await r.blob();
     const objUrl = URL.createObjectURL(blob);
     a.href = objUrl;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(objUrl); a.remove(); }, 1000);
-  } catch (e) { alert("Erro ao exportar CSV."); }
+  } catch (e) { toast("Erro ao exportar CSV.", "error"); }
 }
 
 async function loadTokens() {
@@ -356,14 +356,15 @@ async function criarToken(tokenVal, plano) {
     await loadTokens();
     return data;
   }
-  alert("Erro ao criar token. Verifique os dados.");
+  toast("Erro ao criar token. Verifique os dados.", "error");
   return null;
 }
 
 async function deletarToken(token) {
-  if (!confirm(`Remover token "${token}"?`)) return;
-  await apiFetch(`/api/admin/tokens/${encodeURIComponent(token)}`, { method: "DELETE" });
-  await loadTokens();
+  confirmModal(`Remover o token <strong>${token}</strong>? Esta ação não pode ser desfeita.`, async () => {
+    await apiFetch(`/api/admin/tokens/${encodeURIComponent(token)}`, { method: "DELETE" });
+    await loadTokens();
+  });
 }
 
 // ─── Sidebar update ──────────────────────────────────────────────
@@ -737,8 +738,8 @@ function viewEmpresas() {
       <span class="bulk-count"><strong>${state.selected.size}</strong> selecionadas</span>
       <button class="btn btn-ghost" style="font-size:12px" onclick="clearSelection()">Limpar seleção</button>
       <div class="bulk-actions">
-        <button class="btn">${ICONS.bookmark}Salvar em lista</button>
-        <button class="btn">${ICONS.mail}Campanha</button>
+        <button class="btn" onclick="toast('Em breve — funcionalidade em desenvolvimento','info')">${ICONS.bookmark}Salvar em lista</button>
+        <button class="btn" onclick="toast('Em breve — funcionalidade em desenvolvimento','info')">${ICONS.mail}Campanha</button>
         <button class="btn btn-accent" onclick="exportCSV()">${ICONS.download}Exportar</button>
       </div>
     </div>
@@ -941,8 +942,8 @@ function row(d) {
       <td><div style="display:flex;gap:4px;flex-wrap:wrap">${telCel}${emCel}</div></td>
       <td style="color:var(--text-soft);font-size:12px">${d.socio_principal ? `<span class="${shouldBlur ? "masked" : ""}" style="color:var(--text-soft)">${d.socio_principal}</span>` : "—"}</td>
       <td style="text-align:right;padding-right:16px">
-        <div class="row-actions">
-          <button class="row-btn" title="Mais ações">${ICONS.more}</button>
+        <div class="row-actions" style="position:relative">
+          <button class="row-btn" title="Mais ações" onclick="toggleRowMenu(event,'${d.cnpj}')">${ICONS.more}</button>
           <button class="row-btn expand" title="Expandir" onclick="toggleExpand('${d.cnpj}')">${ICONS.expand}</button>
         </div>
       </td>
@@ -1016,7 +1017,7 @@ function detailRow(cnpj, baseData) {
             ${telLink  ? `<a href="${telLink}" target="_blank" class="btn">${ICONS.phone}WhatsApp</a>` : ""}
             ${d.email  ? `<a href="mailto:${d.email}" class="btn">${ICONS.mail}E-mail</a>` : ""}
             ${siteUrl  ? `<a href="${siteUrl}" target="_blank" class="btn">${ICONS.globe}Site</a>` : ""}
-            <button class="btn" onclick="navigator.clipboard.writeText('${fmtCNPJ(d.cnpj)}')">${ICONS.copy}Copiar CNPJ</button>
+            <button class="btn" onclick="navigator.clipboard.writeText('${fmtCNPJ(d.cnpj)}').then(()=>toast('CNPJ copiado!','success'))">${ICONS.copy}Copiar CNPJ</button>
           </div>
         </div>
       </div>
@@ -1035,7 +1036,7 @@ function viewListas() {
   return `
     <div class="page-head">
       <div><div class="page-title">Minhas listas</div><div class="page-sub">Leads salvos organizados por campanha</div></div>
-      <button class="btn btn-accent">${ICONS.plus}Nova lista</button>
+      <button class="btn btn-accent" onclick="toast('Listas em breve — funcionalidade em desenvolvimento','info')">${ICONS.plus}Nova lista</button>
     </div>
     <div class="panel" style="padding:32px;text-align:center;color:var(--text-dim);margin-bottom:20px">
       <div style="font-size:14px;color:var(--text-muted);margin-bottom:8px">Listas em breve</div>
@@ -1124,7 +1125,7 @@ function viewClientes() {
             </span>
           </div>
           <div>
-            <button class="btn" style="font-size:11px;padding:5px 10px" onclick="navigator.clipboard.writeText('${location.origin}?token=${t.token}').then(() => alert('Link copiado!'))">${ICONS.copy}Copiar link</button>
+            <button class="btn" style="font-size:11px;padding:5px 10px" onclick="navigator.clipboard.writeText('${location.origin}?token=${t.token}').then(() => toast('Link copiado!', 'success'))">${ICONS.copy}Copiar link</button>
           </div>
           <div>
             <button class="row-btn" title="Remover" onclick="deletarToken('${t.token}')">${ICONS.trash}</button>
@@ -1225,6 +1226,24 @@ async function toggleExpand(cnpj) {
   }
 }
 
+function toggleRowMenu(e, cnpj) {
+  e.stopPropagation();
+  const existing = document.getElementById("row-menu");
+  if (existing) { existing.remove(); return; }
+  const btn = e.currentTarget;
+  const rect = btn.getBoundingClientRect();
+  const m = document.createElement("div");
+  m.id = "row-menu";
+  m.className = "row-dropdown";
+  m.style.cssText = `position:fixed;top:${rect.bottom + 4}px;left:${rect.left - 120}px;z-index:300`;
+  m.innerHTML = `
+    <button onclick="document.getElementById('row-menu').remove();toggleExpand('${cnpj}')">Ver detalhes</button>
+    <button onclick="document.getElementById('row-menu').remove();navigator.clipboard.writeText('${fmtCNPJ(cnpj)}').then(()=>toast('CNPJ copiado!','success'))">Copiar CNPJ</button>`;
+  document.body.appendChild(m);
+  const close = ev => { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener("click", close); } };
+  setTimeout(() => document.addEventListener("click", close), 0);
+}
+
 function updateBulkBar() {
   const bar = $("#bulk-bar");
   if (!bar) return;
@@ -1240,7 +1259,11 @@ function updateBulkBar() {
 async function handleCriarToken() {
   const tokenVal = $("#new-token")?.value?.trim();
   const plano    = $("#new-plano")?.value;
-  if (!tokenVal) { alert("Informe o token/nome do cliente."); return; }
+  if (!tokenVal) {
+    const inp = $("#new-token");
+    if (inp) { inp.style.borderColor = "var(--danger)"; inp.classList.add("shake"); setTimeout(() => { inp.style.borderColor = ""; inp.classList.remove("shake"); }, 600); }
+    return;
+  }
   const result = await criarToken(tokenVal, plano);
   if (result) {
     const link = `${location.origin}?token=${result.token}`;
@@ -1297,6 +1320,46 @@ function wireContent() {
       }
     });
   }
+}
+
+// ─── Toast notifications ─────────────────────────────────────────
+let _toastCount = 0;
+function toast(message, type = "info") {
+  _toastCount++;
+  const id = "toast-" + _toastCount;
+  const t = document.createElement("div");
+  t.id = id;
+  t.className = `toast toast-${type}`;
+  t.textContent = message;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add("toast-show"));
+  setTimeout(() => {
+    t.classList.remove("toast-show");
+    t.addEventListener("transitionend", () => t.remove(), { once: true });
+  }, 3000);
+}
+
+// ─── Confirm modal ───────────────────────────────────────────────
+function confirmModal(message, onConfirm) {
+  const existing = document.getElementById("confirm-modal");
+  if (existing) existing.remove();
+  const m = document.createElement("div");
+  m.id = "confirm-modal";
+  m.className = "modal-overlay";
+  m.innerHTML = `<div class="modal-box" style="width:min(400px,90vw)">
+    <div class="modal-header">
+      <h3>Confirmar ação</h3>
+      <button class="modal-close" onclick="document.getElementById('confirm-modal').remove()">×</button>
+    </div>
+    <div class="modal-body" style="font-size:13.5px;color:var(--text-muted)">${message}</div>
+    <div class="modal-footer">
+      <button class="btn" onclick="document.getElementById('confirm-modal').remove()">Cancelar</button>
+      <button class="btn btn-danger" id="confirm-ok">Confirmar</button>
+    </div>
+  </div>`;
+  m.addEventListener("click", e => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+  document.getElementById("confirm-ok").onclick = () => { m.remove(); onConfirm(); };
 }
 
 // ─── Modals ──────────────────────────────────────────────────────

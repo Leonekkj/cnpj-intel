@@ -929,6 +929,69 @@ tr.detail-row td {
 }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
+/* ─── Toast notifications ────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  padding: 10px 16px;
+  border-radius: var(--r);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-hi);
+  box-shadow: var(--sh-pop);
+  z-index: 600;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  max-width: 360px;
+}
+.toast.toast-show { opacity: 1; transform: translateY(0); }
+.toast-info    { border-color: var(--info);   background: oklch(0.74 0.13 240 / 0.12); }
+.toast-success { border-color: var(--accent); background: oklch(0.72 0.14 160 / 0.12); }
+.toast-warning { border-color: var(--warn);   background: oklch(0.80 0.14 75  / 0.12); }
+.toast-error   { border-color: var(--danger); background: oklch(0.70 0.17 25  / 0.12); }
+
+/* ─── Row context menu dropdown ──────────────────────────────── */
+.row-dropdown {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r);
+  box-shadow: var(--sh-pop);
+  min-width: 150px;
+  overflow: hidden;
+}
+.row-dropdown button {
+  display: block; width: 100%;
+  text-align: left;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  transition: background 0.1s, color 0.1s;
+  background: none; border: none; cursor: pointer;
+}
+.row-dropdown button:hover { background: var(--surface-2); color: var(--text); }
+
+/* ─── Danger button ──────────────────────────────────────────── */
+.btn-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.btn-danger:hover { background: oklch(0.70 0.17 25 / 0.22); }
+
+/* ─── Shake animation ────────────────────────────────────────── */
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20%      { transform: translateX(-6px); }
+  40%      { transform: translateX(6px); }
+  60%      { transform: translateX(-4px); }
+  80%      { transform: translateX(4px); }
+}
+.shake { animation: shake 0.5s ease; }
+
 /* Admin form */
 .admin-form {
   display: grid;
