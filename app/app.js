@@ -392,7 +392,7 @@ function updateSidebar() {
       elBar.style.background = "linear-gradient(90deg, var(--danger) 0%, oklch(0.85 0.17 25) 100%)";
     }
     if (elBadge) { elBadge.textContent = "Limitado"; elBadge.style.color = "var(--danger)"; }
-    if (elStats) elStats.innerHTML = `<span class="mono" style="color:var(--danger)">${statsText}</span><br><a href="#upgrade" class="plan-upgrade-link">Fazer upgrade →</a>`;
+    if (elStats) elStats.innerHTML = `<span class="mono" style="color:var(--danger)">${statsText}</span><br><a href="javascript:void(0)" onclick="showUpgradeModal()" class="plan-upgrade-link">Fazer upgrade →</a>`;
   } else if (info.limite_dia) {
     pct = Math.min(100, (info.cnpjs_hoje / info.limite_dia) * 100);
     statsText = `${fmt(info.cnpjs_hoje)} / ${fmt(info.limite_dia)} hoje`;
@@ -465,7 +465,7 @@ function limitBanner() {
       Você ainda pode navegar e ver os dados, mas não pode abrir detalhes.
       Renova amanhã às 00:00 ou
     </span>
-    <a href="#upgrade" class="limit-banner-cta">faça upgrade →</a>
+    <a href="javascript:void(0)" onclick="showUpgradeModal()" class="limit-banner-cta">faça upgrade →</a>
   </div>`;
 }
 
@@ -968,7 +968,7 @@ function detailRow(cnpj, baseData) {
         <div class="limit-reached-icon">${ICONS.lock}</div>
         <div class="limit-reached-title">Limite diário atingido</div>
         <div class="limit-reached-sub">Você consumiu todos os ${limite} detalhes do plano <strong>${nomePlano}</strong> disponíveis hoje.<br>Renova amanhã às 00:00 ou faça upgrade para ver mais empresas.</div>
-        <a href="#upgrade" class="btn limit-reached-btn">${ICONS.bolt}Fazer upgrade</a>
+        <a href="javascript:void(0)" onclick="showUpgradeModal()" class="btn limit-reached-btn">${ICONS.bolt}Fazer upgrade</a>
       </div>
     </td></tr>`;
   }
@@ -1299,6 +1299,84 @@ function wireContent() {
   }
 }
 
+// ─── Modals ──────────────────────────────────────────────────────
+function showUpgradeModal() {
+  const existing = document.getElementById("upgrade-modal");
+  if (existing) { existing.remove(); return; }
+  const m = document.createElement("div");
+  m.id = "upgrade-modal";
+  m.className = "modal-overlay";
+  m.innerHTML = `<div class="modal-box">
+    <div class="modal-header">
+      <h3>Planos disponíveis</h3>
+      <button class="modal-close" onclick="document.getElementById('upgrade-modal').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="upgrade-grid">
+        <div class="upgrade-plan">
+          <div class="upgrade-plan-name">Gratuito</div>
+          <div class="upgrade-plan-features">
+            <div>10 CNPJs / dia</div>
+            <div>Acesso ao dashboard</div>
+            <div style="color:var(--text-dim)">Sem exportação CSV</div>
+            <div style="color:var(--text-dim)">Sem API</div>
+          </div>
+        </div>
+        <div class="upgrade-plan featured">
+          <div class="upgrade-plan-name">Básico</div>
+          <div class="upgrade-plan-features">
+            <div>500 CNPJs / dia</div>
+            <div>Acesso ao dashboard</div>
+            <div>Exportação CSV</div>
+            <div style="color:var(--text-dim)">Sem API</div>
+          </div>
+        </div>
+        <div class="upgrade-plan featured-pro">
+          <div class="upgrade-plan-name">Pro</div>
+          <div class="upgrade-plan-features">
+            <div>Ilimitado</div>
+            <div>Acesso ao dashboard</div>
+            <div>Exportação CSV</div>
+            <div>Acesso via API</div>
+          </div>
+        </div>
+      </div>
+      <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--text-dim)">Entre em contato para fazer upgrade do seu plano.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="document.getElementById('upgrade-modal').remove()">Fechar</button>
+    </div>
+  </div>`;
+  m.addEventListener("click", e => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+}
+
+function showHelpModal() {
+  const existing = document.getElementById("help-modal");
+  if (existing) { existing.remove(); return; }
+  const m = document.createElement("div");
+  m.id = "help-modal";
+  m.className = "modal-overlay";
+  m.innerHTML = `<div class="modal-box">
+    <div class="modal-header">
+      <h3>Ajuda</h3>
+      <button class="modal-close" onclick="document.getElementById('help-modal').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--text-muted);margin-bottom:12px">O <strong>CNPJ Intel</strong> é uma plataforma B2B para busca e enriquecimento de dados de empresas brasileiras via CNPJ.</p>
+      <p style="color:var(--text-muted);margin-bottom:16px">Pesquise por filtros como UF, porte, setor, data de abertura e exporte listas com contatos (telefone, e-mail, Instagram, site).</p>
+      <div style="border-top:1px solid var(--border-soft);padding-top:12px">
+        <a href="/docs" target="_blank" class="btn btn-accent" style="display:inline-flex">Documentação da API →</a>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="document.getElementById('help-modal').remove()">Fechar</button>
+    </div>
+  </div>`;
+  m.addEventListener("click", e => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+}
+
 // ─── Tweaks ──────────────────────────────────────────────────────
 function openTweaks()  { $("#tweaks-panel")?.classList.add("open"); }
 function closeTweaks() { $("#tweaks-panel")?.classList.remove("open"); }
@@ -1331,7 +1409,53 @@ function initTweaksUI() {
 
 // ─── Init ────────────────────────────────────────────────────────
 async function init() {
-  $$(".nav-item").forEach(n => { if (n.dataset.tab) n.onclick = () => showTab(n.dataset.tab); });
+  // No token — show login screen instead of loading dashboard
+  if (!TOKEN) {
+    document.body.innerHTML = `<div class="token-overlay">
+      <div class="token-box">
+        <div class="token-logo">
+          <svg viewBox="0 0 24 24" fill="none" width="40" height="40"><path d="M4 8L12 4L20 8V16L12 20L4 16V8Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 12L20 8M12 12V20M12 12L4 8" stroke="currentColor" stroke-width="1.5"/></svg>
+        </div>
+        <div class="token-brand">CNPJ Intel</div>
+        <h2 class="token-title">Acesse sua conta</h2>
+        <input id="token-input" class="token-input" type="text" placeholder="Cole seu token de acesso" autocomplete="off">
+        <button class="btn btn-accent token-btn" id="token-submit">Entrar</button>
+      </div>
+    </div>`;
+    const submitFn = () => {
+      const v = document.getElementById("token-input")?.value?.trim();
+      if (v) { localStorage.setItem("cnpj_token", v); location.reload(); }
+    };
+    document.getElementById("token-submit").onclick = submitFn;
+    document.getElementById("token-input").addEventListener("keydown", e => { if (e.key === "Enter") submitFn(); });
+    return;
+  }
+
+  // Wire nav items (also closes mobile sidebar)
+  $$(".nav-item").forEach(n => {
+    if (n.dataset.tab) n.onclick = () => {
+      document.querySelector(".app")?.classList.remove("sidebar-open");
+      showTab(n.dataset.tab);
+    };
+  });
+
+  // ⌘K / Ctrl+K → focus global search
+  document.addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      e.preventDefault();
+      document.getElementById("global-search")?.focus();
+    }
+  });
+
+  // Help button
+  const helpBtn = document.getElementById("help-btn");
+  if (helpBtn) helpBtn.onclick = showHelpModal;
+
+  // Hamburger (mobile sidebar toggle)
+  const hamburger = document.getElementById("hamburger-btn");
+  const overlay   = document.getElementById("sidebar-overlay");
+  if (hamburger) hamburger.onclick = () => document.querySelector(".app")?.classList.toggle("sidebar-open");
+  if (overlay)   overlay.onclick   = () => document.querySelector(".app")?.classList.remove("sidebar-open");
 
   applyTweaks();
   initTweaksUI();
