@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Query, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -492,6 +492,31 @@ def delete_item_lista(lista_id: int, cnpj: str, token_info=Depends(get_token_inf
     if not ok:
         raise HTTPException(status_code=404, detail="Item não encontrado")
     return {"ok": True}
+
+
+@app.get("/api/listas/{lista_id}/export")
+def export_lista(lista_id: int, token_info=Depends(get_token_info_soft)):
+    token = token_info["token"]
+    plano = token_info.get("plano", "free")
+    if plano not in ("basico", "pro", "admin"):
+        raise HTTPException(status_code=403, detail="Plano basico ou superior necessário para exportar")
+
+    lista = db.obter_lista(token, lista_id)
+    if not lista:
+        raise HTTPException(status_code=404, detail="Lista não encontrada")
+
+    output = io.StringIO()
+    if lista["itens"]:
+        writer = csv.DictWriter(output, fieldnames=lista["itens"][0].keys())
+        writer.writeheader()
+        writer.writerows(lista["itens"])
+    content = "﻿" + output.getvalue()  # UTF-8 BOM for Excel
+    nome_safe = lista["nome"].replace(" ", "_")
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="lista_{nome_safe}.csv"'}
+    )
 
 
 # ─── Admin ─────────────────────────────────────────────────────────────────────
