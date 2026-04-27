@@ -828,6 +828,54 @@ class Database:
                         f"ON empresas({col}) WHERE {col} IS NOT NULL AND {col} != ''"
                     )
             conn.commit()
+        self.criar_tabela_listas()
+
+    def criar_tabela_listas(self):
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS listas (
+                        id          SERIAL PRIMARY KEY,
+                        token       TEXT NOT NULL REFERENCES tokens(token) ON DELETE CASCADE,
+                        nome        TEXT NOT NULL,
+                        criada_em   TEXT NOT NULL,
+                        UNIQUE(token, nome)
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS lista_itens (
+                        id            SERIAL PRIMARY KEY,
+                        lista_id      INTEGER NOT NULL REFERENCES listas(id) ON DELETE CASCADE,
+                        cnpj          TEXT NOT NULL,
+                        adicionado_em TEXT NOT NULL,
+                        UNIQUE(lista_id, cnpj)
+                    )
+                """)
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_listas_token ON listas(token)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_lista_itens_lista ON lista_itens(lista_id)")
+            else:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS listas (
+                        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                        token     TEXT NOT NULL,
+                        nome      TEXT NOT NULL,
+                        criada_em TEXT NOT NULL,
+                        UNIQUE(token, nome)
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS lista_itens (
+                        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                        lista_id      INTEGER NOT NULL,
+                        cnpj          TEXT NOT NULL,
+                        adicionado_em TEXT NOT NULL,
+                        UNIQUE(lista_id, cnpj)
+                    )
+                """)
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_listas_token ON listas(token)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_lista_itens_lista ON lista_itens(lista_id)")
+            conn.commit()
 
     def criar_tabela_progresso(self):
         with _conn() as conn:
