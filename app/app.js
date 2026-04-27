@@ -214,9 +214,13 @@ async function loadStats() {
 
   const navTotal = $("#nav-total");
   if (navTotal) navTotal.textContent = fmtK(data.total);
-  const agSub = $("#agent-sub");
-  if (agSub && data.progresso_agente !== undefined)
-    agSub.textContent = `Posição ${fmt(data.progresso_agente)}`;
+  const agSub   = $("#agent-sub");
+  const agPulse = $(".agent-pulse");
+  if (data.progresso_agente !== undefined) {
+    const active = data.progresso_agente > 0;
+    if (agSub)   agSub.textContent = active ? `Posição ${fmt(data.progresso_agente)} — Ativo` : "Parado";
+    if (agPulse) { agPulse.classList.toggle("agent-active", active); agPulse.classList.toggle("agent-stopped", !active); }
+  }
 
   if (state.tab !== "dashboard") return;
 
@@ -365,6 +369,22 @@ async function deletarToken(token) {
     await apiFetch(`/api/admin/tokens/${encodeURIComponent(token)}`, { method: "DELETE" });
     await loadTokens();
   });
+}
+
+async function adminTool(tool) {
+  const dangerous = tool === "reset-database";
+  const run = async () => {
+    const data = await apiFetch(`/api/admin/${tool}`, { method: "POST" });
+    if (!data || data._err) { toast(`Erro ao executar ${tool}.`, "error"); return; }
+    if (tool === "agente")        toast(data.status || "Agente iniciado.", "success");
+    else if (tool === "limpar-sites") toast(`${data.registros_limpos ?? 0} registros limpos.`, "success");
+    else toast(data.mensagem || "Concluído.", "success");
+  };
+  if (dangerous) {
+    confirmModal("Isso irá <strong>apagar todas as empresas e o progresso do agente</strong>. Esta ação não pode ser desfeita.", run);
+  } else {
+    await run();
+  }
 }
 
 // ─── Sidebar update ──────────────────────────────────────────────
@@ -787,6 +807,7 @@ function filterBar(showDates = false) {
           <option value="">Estado</option>
           ${ufs.map(u => `<option ${f.uf===u?"selected":""}>${u}</option>`).join("")}
         </select>
+        ${f.uf ? `<button class="filter-clear" onclick="updateFilter('uf','')">×</button>` : ""}
       </div>
       <div class="chip select">
         <select onchange="updateFilter('porte', this.value)">
@@ -796,12 +817,14 @@ function filterBar(showDates = false) {
           <option value="EMPRESA DE PEQUENO PORTE" ${f.porte==="EMPRESA DE PEQUENO PORTE"?"selected":""}>EPP</option>
           <option value="DEMAIS" ${f.porte==="DEMAIS"?"selected":""}>Médio+</option>
         </select>
+        ${f.porte ? `<button class="filter-clear" onclick="updateFilter('porte','')">×</button>` : ""}
       </div>
       <div class="chip select">
         <select onchange="onSetorChange(this.value)">
           <option value="">Setor</option>
           ${cats.map(c => `<option ${f.categoria===c?"selected":""}>${c}</option>`).join("")}
         </select>
+        ${f.categoria ? `<button class="filter-clear" onclick="onSetorChange('')">×</button>` : ""}
       </div>
       ${(() => {
         const setorSel = f.categoria;
@@ -1009,6 +1032,7 @@ function detailRow(cnpj, baseData) {
           <div class="detail-field"><div class="k">E-mail</div><div class="v" style="word-break:break-all">${emailVal}</div></div>
           <div class="detail-field"><div class="k">Site</div><div class="v">${siteVal}</div></div>
           <div class="detail-field"><div class="k">Instagram</div><div class="v">${instaVal}</div></div>
+          ${d.rating_google ? `<div class="detail-field"><div class="k">Avaliação Google</div><div class="v">⭐ ${d.rating_google} <span style="color:var(--text-dim)">(${d.avaliacoes || 0} avaliações)</span></div></div>` : ""}
         </div>
         <div class="detail-col">
           <h4>Quadro societário</h4>
@@ -1065,6 +1089,7 @@ function viewExport() {
         <div style="font-size:14px;font-weight:600;margin-bottom:8px">Exportar base atual</div>
         <div style="color:var(--text-dim);margin-bottom:20px">Use os filtros nas páginas <strong>Empresas</strong> ou <strong>Busca avançada</strong> e clique em "Exportar CSV".</div>
         <button class="btn btn-accent" onclick="exportCSV()">${ICONS.download}Exportar CSV agora</button>
+        <p class="export-limit-note">Seu plano exporta até <strong>${state.planInfo?.plano === "basico" ? "500" : "5.000"} linhas</strong> por arquivo.</p>
       ` : `
         <div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text-muted)">Exportação não disponível</div>
         <div style="color:var(--text-dim)">Faça upgrade para o plano Básico ou Pro para exportar listas em CSV.</div>
@@ -1156,9 +1181,18 @@ function viewClientes() {
       </div>
       <div id="token-result" style="margin-top:12px;display:none"></div>
     </div>
-    <div class="panel" style="padding:18px 20px">
+    <div class="panel" style="padding:18px 20px;margin-bottom:16px">
       <div class="panel-title" style="margin-bottom:14px">Tokens ativos — ${state.tokens.length}</div>
       ${tokenList}
+    </div>
+    <div class="panel" style="padding:18px 20px">
+      <div class="panel-title" style="margin-bottom:14px">Ferramentas administrativas</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" onclick="adminTool('agente')">▶ Iniciar agente</button>
+        <button class="btn" onclick="adminTool('limpar-sites')">🧹 Limpar sites inválidos</button>
+        <button class="btn btn-danger" onclick="adminTool('reset-database')">⚠ Reset database</button>
+        <button class="btn" onclick="adminTool('vacuum')">🗜 Vacuum banco</button>
+      </div>
     </div>`;
 }
 
@@ -1455,6 +1489,7 @@ function initTweaksUI() {
     b.classList.toggle("on", b.dataset.val === state.density);
     b.onclick = () => {
       state.density = b.dataset.val;
+      localStorage.setItem("cnpj_density", b.dataset.val);
       $$("button", dens).forEach(x => x.classList.toggle("on", x === b));
       render();
     };
@@ -1464,6 +1499,7 @@ function initTweaksUI() {
     b.classList.toggle("on", b.dataset.val === state.radius);
     b.onclick = () => {
       state.radius = b.dataset.val;
+      localStorage.setItem("cnpj_radius", b.dataset.val);
       $$("button", rad).forEach(x => x.classList.toggle("on", x === b));
       applyTweaks();
     };
@@ -1520,6 +1556,8 @@ async function init() {
   if (hamburger) hamburger.onclick = () => document.querySelector(".app")?.classList.toggle("sidebar-open");
   if (overlay)   overlay.onclick   = () => document.querySelector(".app")?.classList.remove("sidebar-open");
 
+  state.density = localStorage.getItem("cnpj_density") || "normal";
+  state.radius  = localStorage.getItem("cnpj_radius")  || "soft";
   applyTweaks();
   initTweaksUI();
 

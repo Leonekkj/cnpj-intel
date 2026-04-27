@@ -1095,6 +1095,17 @@ tr.detail-row td {
 }
 .limit-reached-btn:hover { background: oklch(0.28 0.06 55); }
 
+/* ─── P2 additions ───────────────────────────────────────────── */
+.agent-stopped { background: var(--text-dim) !important; animation: none !important; }
+.export-limit-note { font-size: 11.5px; color: var(--text-dim); margin-top: 10px; }
+.filter-clear {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-dim); font-size: 13px; line-height: 1;
+  padding: 0 2px; margin-left: -4px;
+  transition: color 0.12s;
+}
+.filter-clear:hover { color: var(--danger); }
+
 /* ─── Token login overlay ─────────────────────────────────────── */
 .token-overlay {
   position: fixed; inset: 0;
