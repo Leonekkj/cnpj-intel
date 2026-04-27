@@ -35,6 +35,7 @@ def _run_db_fast():
     """Operações mínimas antes de liberar a API. Deve completar em < 1s."""
     db.criar_tabelas()
     db.criar_tabela_tokens()
+    db.criar_tabela_listas()
     for _t in [t.strip() for t in os.environ.get("TOKENS", "").split(",") if t.strip()]:
         if _t != ADMIN_TOKEN:
             db.criar_token(_t, "pro")

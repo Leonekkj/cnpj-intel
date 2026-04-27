@@ -828,7 +828,6 @@ class Database:
                         f"ON empresas({col}) WHERE {col} IS NOT NULL AND {col} != ''"
                     )
             conn.commit()
-        self.criar_tabela_listas()
 
     def criar_tabela_listas(self):
         with _conn() as conn:
