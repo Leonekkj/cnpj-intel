@@ -1198,7 +1198,7 @@ async function viewListaDetalhe(listaId) {
     </div>
     ${itens.length === 0
       ? `<div style="text-align:center;color:var(--text-muted);padding:40px 0"><p>Nenhuma empresa nesta lista ainda.</p></div>`
-      : `<table class="tabela-empresas">
+      : `<div class="panel" style="padding:0"><div class="table-wrap"><table class="data">
           <thead><tr>
             <th>Empresa</th><th>Município / UF</th><th>Telefone</th><th>Email</th><th></th>
           </tr></thead>
@@ -1221,7 +1221,7 @@ async function viewListaDetalhe(listaId) {
               </tr>
             `).join('')}
           </tbody>
-        </table>`
+        </table></div></div>`
     }
   `;
 }

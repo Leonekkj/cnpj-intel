@@ -37,6 +37,9 @@ def _run_db_fast():
     db.criar_tabelas()
     db.criar_tabela_tokens()
     db.criar_tabela_listas()
+    # Ensure ADMIN_TOKEN exists in tokens table so FK on listas works
+    if ADMIN_TOKEN:
+        db.criar_token(ADMIN_TOKEN, "admin")
     for _t in [t.strip() for t in os.environ.get("TOKENS", "").split(",") if t.strip()]:
         if _t != ADMIN_TOKEN:
             db.criar_token(_t, "pro")
@@ -434,9 +437,10 @@ def post_criar_lista(body: CriarListaBody, token_info=Depends(get_token_info_sof
     try:
         return db.criar_lista(token, nome)
     except Exception as e:
+        _log_api.error(f"criar_lista error [{type(e).__name__}]: {e}")
         if "unique" in str(e).lower():
             raise HTTPException(status_code=409, detail="Já existe uma lista com esse nome")
-        raise
+        raise HTTPException(status_code=500, detail=f"Erro ao criar lista: {type(e).__name__}: {str(e)[:300]}")
 
 
 @app.get("/api/listas/{lista_id}")
