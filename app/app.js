@@ -1144,7 +1144,12 @@ function promptNovaLista() {
       toast(`Lista "${name}" criada!`, "success");
       render();
     } catch(e) {
-      toast('Erro ao criar lista. Nome já existe?', 'error');
+      const msg = e.message || '';
+      if (msg.includes('409') || msg.toLowerCase().includes('existe')) {
+        toast('Já existe uma lista com esse nome', 'error');
+      } else {
+        toast(`Erro ao criar lista (${msg || 'verifique o console'})`, 'error');
+      }
     }
   };
   document.getElementById("lista-criar-btn").onclick = criar;
