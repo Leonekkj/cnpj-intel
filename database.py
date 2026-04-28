@@ -632,7 +632,7 @@ class Database:
             if cur.fetchone():
                 raise ValueError("E-mail já cadastrado")
         token = secrets.token_urlsafe(32)
-        pw_hash = _bcrypt.hash(password.encode()[:72].decode("utf-8", errors="ignore"))
+        pw_hash = _bcrypt.hash(password.encode("utf-8")[:72])
         agora = datetime.utcnow().isoformat()
         hoje  = str(date_type.today())
         with _conn() as conn:
@@ -662,7 +662,7 @@ class Database:
         token, pw_hash, ativo = row[0], row[1], row[2]
         if not ativo or not pw_hash:
             return None
-        if not _bcrypt.verify(password.encode()[:72].decode("utf-8", errors="ignore"), pw_hash):
+        if not _bcrypt.verify(password.encode("utf-8")[:72], pw_hash):
             return None
         return token
 

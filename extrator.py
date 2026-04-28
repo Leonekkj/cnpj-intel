@@ -92,6 +92,7 @@ COLUNAS_SOCIOS = [
 
 # Mapeia código de porte (Receita) → texto compatível com BrasilAPI
 PORTE_MAP = {
+    "00": "MEI",
     "01": "MICRO EMPRESA",
     "03": "EMPRESA DE PEQUENO PORTE",
     "05": "DEMAIS",
@@ -214,17 +215,24 @@ def carregar_socios(arquivo):
     print(f"Carregando Socios: {arquivo} ({tamanho_mb:.0f} MB)...")
 
     resultado = {}
+    _debug_socios_samples = []
     with open(arquivo, encoding="latin-1", errors="ignore") as f:
         reader = csv.reader(f, delimiter=";", quotechar='"')
         for linha in reader:
             if len(linha) < 3:
                 continue
-            cnpj_basico = linha[0].strip().zfill(8)
+            raw = linha[0]
+            cnpj_basico = raw.strip().zfill(8)
+            if len(_debug_socios_samples) < 5:
+                _debug_socios_samples.append((repr(raw), cnpj_basico))
             nome = linha[2].strip()
             if nome:
                 resultado.setdefault(cnpj_basico, nome)
 
     print(f"  {len(resultado):,} cnpj_basico com sócio identificado")
+    print(f"  [DEBUG Socios] Primeiros 5 cnpj_basico (raw -> padded):")
+    for raw_r, padded in _debug_socios_samples:
+        print(f"    raw={raw_r} -> padded={padded!r}")
     return resultado
 
 
@@ -272,8 +280,10 @@ def extrair_cnpjs(
     encontrados = 0
     com_telefone = 0
     com_email = 0
+    com_socio = 0
     processados = 0
     ignorados   = 0
+    _debug_estab_count = 0
 
     with open(arquivo, encoding="latin-1", errors="ignore") as f_in, \
          open(saida, "w", encoding="utf-8") as f_out:
@@ -302,6 +312,10 @@ def extrair_cnpjs(
             except IndexError:
                 ignorados += 1
                 continue
+
+            if _debug_estab_count < 5:
+                print(f"  [DEBUG Estab] cnpj_basico raw={linha[0]!r} -> padded={cnpj_base.zfill(8)!r}")
+                _debug_estab_count += 1
 
             # Filtro: situação ativa (02)
             if apenas_ativas and situacao != "02":
@@ -361,6 +375,8 @@ def extrair_cnpjs(
                     razao_social, porte_txt = rp
             if socios_dict:
                 socio_princ = socios_dict.get(cnpj_basico_padded, "")
+                if socio_princ:
+                    com_socio += 1
 
             # Sanitiza valores para não quebrar TSV (tab/newline nos dados brutos)
             def _clean(s):
@@ -384,16 +400,18 @@ def extrair_cnpjs(
                 print(f"\nLimite de {limite:,} CNPJs atingido.")
                 break
 
-    pct_tel = (com_telefone / encontrados * 100) if encontrados else 0
-    pct_email = (com_email / encontrados * 100) if encontrados else 0
+    pct_tel   = (com_telefone / encontrados * 100) if encontrados else 0
+    pct_email = (com_email    / encontrados * 100) if encontrados else 0
+    pct_socio = (com_socio    / encontrados * 100) if encontrados else 0
 
     print(f"\n{'='*50}")
     print(f"Concluído!")
-    print(f"  Linhas processadas : {processados:,}")
-    print(f"  CNPJs extraídos    : {encontrados:,}")
-    print(f"  Com telefone       : {com_telefone:,} ({pct_tel:.1f}%)")
-    print(f"  Com email          : {com_email:,} ({pct_email:.1f}%)")
-    print(f"  Arquivo gerado     : {saida}")
+    print(f"  Linhas processadas   : {processados:,}")
+    print(f"  CNPJs extraídos      : {encontrados:,}")
+    print(f"  Com telefone         : {com_telefone:,} ({pct_tel:.1f}%)")
+    print(f"  Com email            : {com_email:,} ({pct_email:.1f}%)")
+    print(f"  Com sócio principal  : {com_socio:,} ({pct_socio:.1f}%)")
+    print(f"  Arquivo gerado       : {saida}")
     print(f"{'='*50}")
     print(f"\nAgora rode: python agent/agent.py")
 

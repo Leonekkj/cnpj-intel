@@ -1,0 +1,830 @@
+{
+  "working": [
+    {
+      "msg": "Hamburger button present on mobile (P0 fix verified)",
+      "context": "chromium/mobile/iPhone_14"
+    },
+    {
+      "msg": "Hamburger click opens sidebar drawer",
+      "context": "chromium/mobile/iPhone_14"
+    },
+    {
+      "msg": "Anonymous visitor sees login/token overlay (P0 fix verified)",
+      "context": "chromium/anonymous"
+    },
+    {
+      "msg": "Plan name renders: \"Plano Gratuito\"",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Admin section correctly hidden for plan \"free\"",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Ctrl+K shortcut focuses global search (P0 fix verified)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Help button opens modal (P0 fix verified)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "User chip opens tweaks panel",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Agent pulse has status class: \"agent-pulse agent-active\"",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Agent sub-text renders: \"Posição 810.000 — Ativo\"",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Dashboard metric #mv-total = \"652.535\"",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Activity chart SVG renders",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Chart tooltip shows on hover",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "15 table rows loaded",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Contact data masked for plan \"free\" (expected)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Pagination bar renders",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "'Salvar em lista' bulk button fires toast (P1 wired)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "'Campanha' bulk button fires toast (P1 wired)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Toast auto-dismisses after 3s (P1)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Admin tools hidden from non-admin plan \"free\"",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Density change persists to localStorage: \"comfort\" (P2)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Radius change persists to localStorage: \"sharp\" (P2)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Filter × clear button appears when UF filter active (P2)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Filter × clears UF and reloads (P2)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Clicking column header sends sort_by/sort_dir to API (P3 server-side sort)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Active sort column has visual indicator (sort-asc/sort-desc class)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Clicking same header again toggles sort direction",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "'Nova lista' button present in Listas tab (P3)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "'Nova lista' opens creation modal (P3)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Empty list name prevents creation (validation active)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Valid list name creates list and closes modal (P3)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "List card appears after creation (P3)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Date range inputs present in Busca avançada",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Plan name renders: \"Plano Básico\"",
+      "context": "chromium/basico"
+    },
+    {
+      "msg": "Admin section correctly hidden for plan \"basico\"",
+      "context": "chromium/basico"
+    },
+    {
+      "msg": "Dashboard metric #mv-total = \"652.984\"",
+      "context": "chromium/basico"
+    },
+    {
+      "msg": "Contact data masked for plan \"basico\" (expected)",
+      "context": "chromium/basico"
+    },
+    {
+      "msg": "Admin tools hidden from non-admin plan \"basico\"",
+      "context": "chromium/basico"
+    },
+    {
+      "msg": "Básico plan sees export button",
+      "context": "chromium/basico"
+    },
+    {
+      "msg": "Plan name renders: \"Plano Pro\"",
+      "context": "chromium/pro"
+    },
+    {
+      "msg": "Admin section correctly hidden for plan \"pro\"",
+      "context": "chromium/pro"
+    },
+    {
+      "msg": "Dashboard metric #mv-total = \"653.438\"",
+      "context": "chromium/pro"
+    },
+    {
+      "msg": "Admin tools hidden from non-admin plan \"pro\"",
+      "context": "chromium/pro"
+    },
+    {
+      "msg": "Pro/Admin plan sees export button",
+      "context": "chromium/pro"
+    },
+    {
+      "msg": "API tab has /docs Swagger link for pro/admin",
+      "context": "chromium/pro"
+    },
+    {
+      "msg": "oklch() colors supported (oklch(0.72 0.14 160))",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Plan name renders: \"Plano Admin\"",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Admin section visible for admin plan",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Dashboard metric #mv-total = \"653.875\"",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Dangerous action opens custom confirmModal instead of native confirm() (P1 fix verified)",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "confirmModal cancel button closes modal without acting",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Confirm button in modal has danger styling",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Admin tool \"Iniciar agente\" button present (P2)",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Admin tool \"Limpar sites inválidos\" button present (P2)",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Admin tool \"Reset database\" button present (P2)",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Admin tool \"Vacuum banco\" button present (P2)",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Admin 'Iniciar agente' fires toast feedback (P2 + P1)",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Tweaks preferences persist across page reload (P2 localStorage)",
+      "context": "chromium/admin"
+    },
+    {
+      "msg": "Dashboard metric #mv-total = \"654.906\"",
+      "context": "firefox/free"
+    },
+    {
+      "msg": "Dashboard metric #mv-total = \"655.013\"",
+      "context": "firefox/basico"
+    },
+    {
+      "msg": "Dashboard metric #mv-total = \"655.084\"",
+      "context": "firefox/pro"
+    },
+    {
+      "msg": "Agent sub-text renders: \"Posição 815.000 — Ativo\"",
+      "context": "firefox/admin"
+    },
+    {
+      "msg": "Dashboard metric #mv-total = \"655.156\"",
+      "context": "firefox/admin"
+    },
+    {
+      "msg": "Dashboard metric #mv-total = \"655.643\"",
+      "context": "webkit/free"
+    },
+    {
+      "msg": "Dashboard metric #mv-total = \"656.119\"",
+      "context": "webkit/pro"
+    },
+    {
+      "msg": "Dashboard metric #mv-total = \"656.594\"",
+      "context": "webkit/admin"
+    }
+  ],
+  "bugs": [
+    {
+      "msg": "Empty token submit does not trigger shake animation",
+      "context": "chromium/anonymous"
+    },
+    {
+      "msg": "Row ⋮ button click opens no context menu — dead button",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Row expand does not show detail row",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Lists not restored from localStorage after reload (P3 persistence broken)",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Free plan: Exportar tab should show export-unavailable message",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "API tab should show Pro-only message for plan \"free\"",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Básico plan: export limit (500 linhas) not shown in Exportar tab",
+      "context": "chromium/basico"
+    },
+    {
+      "msg": "API tab should show Pro-only message for plan \"basico\"",
+      "context": "chromium/basico"
+    },
+    {
+      "msg": "Pro/Admin plan: export limit (5.000 linhas) not shown in Exportar tab",
+      "context": "chromium/pro"
+    }
+  ],
+  "missingFeatures": [],
+  "uxIssues": [
+    {
+      "msg": "Dashboard 4th metric (Exports no mês) still shows hardcoded '—'",
+      "context": "chromium/free"
+    },
+    {
+      "msg": "Created list 'Lista Teste Playwright' not showing in row menu options",
+      "context": "chromium/free"
+    }
+  ],
+  "browserSpecific": [],
+  "consoleErrors": [],
+  "networkErrors": [],
+  "screenshots": [
+    {
+      "label": "chromium_mobile_iPhone_14",
+      "file": "001_chromium_mobile_iPhone_14.png"
+    },
+    {
+      "label": "chromium_mobile_Pixel_7",
+      "file": "002_chromium_mobile_Pixel_7.png"
+    },
+    {
+      "label": "chromium_anonymous_homepage",
+      "file": "003_chromium_anonymous_homepage.png"
+    },
+    {
+      "label": "chromium_free_dashboard",
+      "file": "004_chromium_free_dashboard.png"
+    },
+    {
+      "label": "chromium_free_empresas",
+      "file": "005_chromium_free_empresas.png"
+    },
+    {
+      "label": "chromium_free_tweaks",
+      "file": "006_chromium_free_tweaks.png"
+    },
+    {
+      "label": "chromium_free_sorting",
+      "file": "007_chromium_free_sorting.png"
+    },
+    {
+      "label": "chromium_free_listas_empty",
+      "file": "008_chromium_free_listas_empty.png"
+    },
+    {
+      "label": "chromium_free_nova_lista_modal",
+      "file": "009_chromium_free_nova_lista_modal.png"
+    },
+    {
+      "label": "chromium_free_listas_with_card",
+      "file": "010_chromium_free_listas_with_card.png"
+    },
+    {
+      "label": "chromium_free_busca",
+      "file": "011_chromium_free_busca.png"
+    },
+    {
+      "label": "chromium_free_busca_date_filter",
+      "file": "012_chromium_free_busca_date_filter.png"
+    },
+    {
+      "label": "chromium_free_exportar",
+      "file": "013_chromium_free_exportar.png"
+    },
+    {
+      "label": "chromium_free_api",
+      "file": "014_chromium_free_api.png"
+    },
+    {
+      "label": "chromium_basico_dashboard",
+      "file": "015_chromium_basico_dashboard.png"
+    },
+    {
+      "label": "chromium_basico_empresas",
+      "file": "016_chromium_basico_empresas.png"
+    },
+    {
+      "label": "chromium_basico_tweaks",
+      "file": "017_chromium_basico_tweaks.png"
+    },
+    {
+      "label": "chromium_basico_sorting",
+      "file": "018_chromium_basico_sorting.png"
+    },
+    {
+      "label": "chromium_basico_listas_empty",
+      "file": "019_chromium_basico_listas_empty.png"
+    },
+    {
+      "label": "chromium_basico_nova_lista_modal",
+      "file": "020_chromium_basico_nova_lista_modal.png"
+    },
+    {
+      "label": "chromium_basico_listas_with_card",
+      "file": "021_chromium_basico_listas_with_card.png"
+    },
+    {
+      "label": "chromium_basico_busca",
+      "file": "022_chromium_basico_busca.png"
+    },
+    {
+      "label": "chromium_basico_busca_date_filter",
+      "file": "023_chromium_basico_busca_date_filter.png"
+    },
+    {
+      "label": "chromium_basico_exportar",
+      "file": "024_chromium_basico_exportar.png"
+    },
+    {
+      "label": "chromium_basico_api",
+      "file": "025_chromium_basico_api.png"
+    },
+    {
+      "label": "chromium_pro_dashboard",
+      "file": "026_chromium_pro_dashboard.png"
+    },
+    {
+      "label": "chromium_pro_empresas",
+      "file": "027_chromium_pro_empresas.png"
+    },
+    {
+      "label": "chromium_pro_tweaks",
+      "file": "028_chromium_pro_tweaks.png"
+    },
+    {
+      "label": "chromium_pro_sorting",
+      "file": "029_chromium_pro_sorting.png"
+    },
+    {
+      "label": "chromium_pro_listas_empty",
+      "file": "030_chromium_pro_listas_empty.png"
+    },
+    {
+      "label": "chromium_pro_nova_lista_modal",
+      "file": "031_chromium_pro_nova_lista_modal.png"
+    },
+    {
+      "label": "chromium_pro_listas_with_card",
+      "file": "032_chromium_pro_listas_with_card.png"
+    },
+    {
+      "label": "chromium_pro_busca",
+      "file": "033_chromium_pro_busca.png"
+    },
+    {
+      "label": "chromium_pro_busca_date_filter",
+      "file": "034_chromium_pro_busca_date_filter.png"
+    },
+    {
+      "label": "chromium_pro_exportar",
+      "file": "035_chromium_pro_exportar.png"
+    },
+    {
+      "label": "chromium_pro_api",
+      "file": "036_chromium_pro_api.png"
+    },
+    {
+      "label": "chromium_admin_dashboard",
+      "file": "037_chromium_admin_dashboard.png"
+    },
+    {
+      "label": "chromium_admin_empresas",
+      "file": "038_chromium_admin_empresas.png"
+    },
+    {
+      "label": "chromium_admin_confirm_modal",
+      "file": "039_chromium_admin_confirm_modal.png"
+    },
+    {
+      "label": "chromium_admin_admin_tools",
+      "file": "040_chromium_admin_admin_tools.png"
+    },
+    {
+      "label": "chromium_admin_tweaks",
+      "file": "041_chromium_admin_tweaks.png"
+    },
+    {
+      "label": "chromium_admin_sorting",
+      "file": "042_chromium_admin_sorting.png"
+    },
+    {
+      "label": "chromium_admin_listas_empty",
+      "file": "043_chromium_admin_listas_empty.png"
+    },
+    {
+      "label": "chromium_admin_nova_lista_modal",
+      "file": "044_chromium_admin_nova_lista_modal.png"
+    },
+    {
+      "label": "chromium_admin_listas_with_card",
+      "file": "045_chromium_admin_listas_with_card.png"
+    },
+    {
+      "label": "chromium_admin_busca",
+      "file": "046_chromium_admin_busca.png"
+    },
+    {
+      "label": "chromium_admin_busca_date_filter",
+      "file": "047_chromium_admin_busca_date_filter.png"
+    },
+    {
+      "label": "chromium_admin_exportar",
+      "file": "048_chromium_admin_exportar.png"
+    },
+    {
+      "label": "chromium_admin_api",
+      "file": "049_chromium_admin_api.png"
+    },
+    {
+      "label": "firefox_anonymous_homepage",
+      "file": "050_firefox_anonymous_homepage.png"
+    },
+    {
+      "label": "firefox_free_dashboard",
+      "file": "051_firefox_free_dashboard.png"
+    },
+    {
+      "label": "firefox_free_empresas",
+      "file": "052_firefox_free_empresas.png"
+    },
+    {
+      "label": "firefox_free_listas_empty",
+      "file": "053_firefox_free_listas_empty.png"
+    },
+    {
+      "label": "firefox_free_nova_lista_modal",
+      "file": "054_firefox_free_nova_lista_modal.png"
+    },
+    {
+      "label": "firefox_free_listas_with_card",
+      "file": "055_firefox_free_listas_with_card.png"
+    },
+    {
+      "label": "firefox_free_busca",
+      "file": "056_firefox_free_busca.png"
+    },
+    {
+      "label": "firefox_free_busca_date_filter",
+      "file": "057_firefox_free_busca_date_filter.png"
+    },
+    {
+      "label": "firefox_free_exportar",
+      "file": "058_firefox_free_exportar.png"
+    },
+    {
+      "label": "firefox_free_api",
+      "file": "059_firefox_free_api.png"
+    },
+    {
+      "label": "firefox_basico_dashboard",
+      "file": "060_firefox_basico_dashboard.png"
+    },
+    {
+      "label": "firefox_basico_empresas",
+      "file": "061_firefox_basico_empresas.png"
+    },
+    {
+      "label": "firefox_basico_listas_empty",
+      "file": "062_firefox_basico_listas_empty.png"
+    },
+    {
+      "label": "firefox_basico_nova_lista_modal",
+      "file": "063_firefox_basico_nova_lista_modal.png"
+    },
+    {
+      "label": "firefox_basico_listas_with_card",
+      "file": "064_firefox_basico_listas_with_card.png"
+    },
+    {
+      "label": "firefox_basico_busca",
+      "file": "065_firefox_basico_busca.png"
+    },
+    {
+      "label": "firefox_basico_busca_date_filter",
+      "file": "066_firefox_basico_busca_date_filter.png"
+    },
+    {
+      "label": "firefox_basico_exportar",
+      "file": "067_firefox_basico_exportar.png"
+    },
+    {
+      "label": "firefox_basico_api",
+      "file": "068_firefox_basico_api.png"
+    },
+    {
+      "label": "firefox_pro_dashboard",
+      "file": "069_firefox_pro_dashboard.png"
+    },
+    {
+      "label": "firefox_pro_empresas",
+      "file": "070_firefox_pro_empresas.png"
+    },
+    {
+      "label": "firefox_pro_listas_empty",
+      "file": "071_firefox_pro_listas_empty.png"
+    },
+    {
+      "label": "firefox_pro_nova_lista_modal",
+      "file": "072_firefox_pro_nova_lista_modal.png"
+    },
+    {
+      "label": "firefox_pro_listas_with_card",
+      "file": "073_firefox_pro_listas_with_card.png"
+    },
+    {
+      "label": "firefox_pro_busca",
+      "file": "074_firefox_pro_busca.png"
+    },
+    {
+      "label": "firefox_pro_busca_date_filter",
+      "file": "075_firefox_pro_busca_date_filter.png"
+    },
+    {
+      "label": "firefox_pro_exportar",
+      "file": "076_firefox_pro_exportar.png"
+    },
+    {
+      "label": "firefox_pro_api",
+      "file": "077_firefox_pro_api.png"
+    },
+    {
+      "label": "firefox_admin_dashboard",
+      "file": "078_firefox_admin_dashboard.png"
+    },
+    {
+      "label": "firefox_admin_empresas",
+      "file": "079_firefox_admin_empresas.png"
+    },
+    {
+      "label": "firefox_admin_confirm_modal",
+      "file": "080_firefox_admin_confirm_modal.png"
+    },
+    {
+      "label": "firefox_admin_admin_tools",
+      "file": "081_firefox_admin_admin_tools.png"
+    },
+    {
+      "label": "firefox_admin_listas_empty",
+      "file": "082_firefox_admin_listas_empty.png"
+    },
+    {
+      "label": "firefox_admin_nova_lista_modal",
+      "file": "083_firefox_admin_nova_lista_modal.png"
+    },
+    {
+      "label": "firefox_admin_listas_with_card",
+      "file": "084_firefox_admin_listas_with_card.png"
+    },
+    {
+      "label": "firefox_admin_busca",
+      "file": "085_firefox_admin_busca.png"
+    },
+    {
+      "label": "firefox_admin_busca_date_filter",
+      "file": "086_firefox_admin_busca_date_filter.png"
+    },
+    {
+      "label": "firefox_admin_exportar",
+      "file": "087_firefox_admin_exportar.png"
+    },
+    {
+      "label": "firefox_admin_api",
+      "file": "088_firefox_admin_api.png"
+    },
+    {
+      "label": "webkit_anonymous_homepage",
+      "file": "089_webkit_anonymous_homepage.png"
+    },
+    {
+      "label": "webkit_free_dashboard",
+      "file": "090_webkit_free_dashboard.png"
+    },
+    {
+      "label": "webkit_free_empresas",
+      "file": "091_webkit_free_empresas.png"
+    },
+    {
+      "label": "webkit_free_listas_empty",
+      "file": "092_webkit_free_listas_empty.png"
+    },
+    {
+      "label": "webkit_free_nova_lista_modal",
+      "file": "093_webkit_free_nova_lista_modal.png"
+    },
+    {
+      "label": "webkit_free_listas_with_card",
+      "file": "094_webkit_free_listas_with_card.png"
+    },
+    {
+      "label": "webkit_free_busca",
+      "file": "095_webkit_free_busca.png"
+    },
+    {
+      "label": "webkit_free_busca_date_filter",
+      "file": "096_webkit_free_busca_date_filter.png"
+    },
+    {
+      "label": "webkit_free_exportar",
+      "file": "097_webkit_free_exportar.png"
+    },
+    {
+      "label": "webkit_free_api",
+      "file": "098_webkit_free_api.png"
+    },
+    {
+      "label": "webkit_basico_dashboard",
+      "file": "099_webkit_basico_dashboard.png"
+    },
+    {
+      "label": "webkit_basico_empresas",
+      "file": "100_webkit_basico_empresas.png"
+    },
+    {
+      "label": "webkit_basico_listas_empty",
+      "file": "101_webkit_basico_listas_empty.png"
+    },
+    {
+      "label": "webkit_basico_nova_lista_modal",
+      "file": "102_webkit_basico_nova_lista_modal.png"
+    },
+    {
+      "label": "webkit_basico_listas_with_card",
+      "file": "103_webkit_basico_listas_with_card.png"
+    },
+    {
+      "label": "webkit_basico_busca",
+      "file": "104_webkit_basico_busca.png"
+    },
+    {
+      "label": "webkit_basico_busca_date_filter",
+      "file": "105_webkit_basico_busca_date_filter.png"
+    },
+    {
+      "label": "webkit_basico_exportar",
+      "file": "106_webkit_basico_exportar.png"
+    },
+    {
+      "label": "webkit_basico_api",
+      "file": "107_webkit_basico_api.png"
+    },
+    {
+      "label": "webkit_pro_dashboard",
+      "file": "108_webkit_pro_dashboard.png"
+    },
+    {
+      "label": "webkit_pro_empresas",
+      "file": "109_webkit_pro_empresas.png"
+    },
+    {
+      "label": "webkit_pro_listas_empty",
+      "file": "110_webkit_pro_listas_empty.png"
+    },
+    {
+      "label": "webkit_pro_nova_lista_modal",
+      "file": "111_webkit_pro_nova_lista_modal.png"
+    },
+    {
+      "label": "webkit_pro_listas_with_card",
+      "file": "112_webkit_pro_listas_with_card.png"
+    },
+    {
+      "label": "webkit_pro_busca",
+      "file": "113_webkit_pro_busca.png"
+    },
+    {
+      "label": "webkit_pro_busca_date_filter",
+      "file": "114_webkit_pro_busca_date_filter.png"
+    },
+    {
+      "label": "webkit_pro_exportar",
+      "file": "115_webkit_pro_exportar.png"
+    },
+    {
+      "label": "webkit_pro_api",
+      "file": "116_webkit_pro_api.png"
+    },
+    {
+      "label": "webkit_admin_dashboard",
+      "file": "117_webkit_admin_dashboard.png"
+    },
+    {
+      "label": "webkit_admin_empresas",
+      "file": "118_webkit_admin_empresas.png"
+    },
+    {
+      "label": "webkit_admin_confirm_modal",
+      "file": "119_webkit_admin_confirm_modal.png"
+    },
+    {
+      "label": "webkit_admin_admin_tools",
+      "file": "120_webkit_admin_admin_tools.png"
+    },
+    {
+      "label": "webkit_admin_listas_empty",
+      "file": "121_webkit_admin_listas_empty.png"
+    },
+    {
+      "label": "webkit_admin_nova_lista_modal",
+      "file": "122_webkit_admin_nova_lista_modal.png"
+    },
+    {
+      "label": "webkit_admin_listas_with_card",
+      "file": "123_webkit_admin_listas_with_card.png"
+    },
+    {
+      "label": "webkit_admin_busca",
+      "file": "124_webkit_admin_busca.png"
+    },
+    {
+      "label": "webkit_admin_busca_date_filter",
+      "file": "125_webkit_admin_busca_date_filter.png"
+    },
+    {
+      "label": "webkit_admin_exportar",
+      "file": "126_webkit_admin_exportar.png"
+    },
+    {
+      "label": "webkit_admin_api",
+      "file": "127_webkit_admin_api.png"
+    }
+  ]
+}
