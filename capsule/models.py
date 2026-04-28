@@ -25,4 +25,5 @@ class Symbol:
 class Import:
     file_path: str
     module: str
+    symbol: Optional[str] = None
     alias: Optional[str] = None
