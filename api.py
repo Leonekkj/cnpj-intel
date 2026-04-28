@@ -511,7 +511,7 @@ def export_lista(lista_id: int, token_info=Depends(get_token_info_soft)):
         writer.writeheader()
         writer.writerows(lista["itens"])
     content = "﻿" + output.getvalue()  # UTF-8 BOM for Excel
-    nome_safe = lista["nome"].replace(" ", "_")
+    nome_safe = re.sub(r'[^\w\-]', '_', lista["nome"])
     return Response(
         content=content.encode("utf-8"),
         media_type="text/csv",

@@ -943,19 +943,18 @@ class Database:
             if not cur.fetchone():
                 return 0
             agora = datetime.utcnow().isoformat()
-            added = 0
-            for cnpj in cnpjs:
-                if USE_POSTGRES:
-                    cur.execute(
-                        "INSERT INTO lista_itens (lista_id, cnpj, adicionado_em) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
-                        (lista_id, cnpj, agora)
-                    )
-                else:
-                    cur.execute(
-                        "INSERT OR IGNORE INTO lista_itens (lista_id, cnpj, adicionado_em) VALUES (?, ?, ?)",
-                        (lista_id, cnpj, agora)
-                    )
-                added += cur.rowcount
+            params = [(lista_id, cnpj, agora) for cnpj in cnpjs]
+            if USE_POSTGRES:
+                cur.executemany(
+                    "INSERT INTO lista_itens (lista_id, cnpj, adicionado_em) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                    params
+                )
+            else:
+                cur.executemany(
+                    "INSERT OR IGNORE INTO lista_itens (lista_id, cnpj, adicionado_em) VALUES (?, ?, ?)",
+                    params
+                )
+            added = cur.rowcount
             conn.commit()
         return added
 

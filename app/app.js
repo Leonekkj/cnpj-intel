@@ -1209,7 +1209,8 @@ async function viewListaDetalhe(listaId) {
                 <td>${esc(e.email || '—')}</td>
                 <td>
                   <button class="btn btn-ghost btn-sm"
-                    onclick="removerItemListaUI(${lista.id}, '${e.cnpj}', this)"
+                    data-lista-id="${lista.id}" data-cnpj="${e.cnpj}"
+                    onclick="removerItemListaUI(+this.dataset.listaId, this.dataset.cnpj, this)"
                     title="Remover da lista">✕</button>
                 </td>
               </tr>
