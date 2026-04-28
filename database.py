@@ -695,12 +695,12 @@ class Database:
         hoje = str(date_type.today())
         with _conn() as conn:
             cur = conn.cursor()
-            cur.execute(f"SELECT plano, cnpjs_hoje, data_reset, ativo FROM tokens WHERE token = {PH}", (token,))
+            cur.execute(f"SELECT plano, cnpjs_hoje, data_reset, ativo, nome FROM tokens WHERE token = {PH}", (token,))
             row = cur.fetchone()
             if not row:
                 return None
 
-            plano, cnpjs_hoje, data_reset, ativo = row[0], row[1], row[2], row[3]
+            plano, cnpjs_hoje, data_reset, ativo, nome = row[0], row[1], row[2], row[3], row[4]
 
             if not ativo:
                 return None
@@ -721,6 +721,7 @@ class Database:
                 "token":       token,
                 "plano":       plano,
                 "nome_plano":  info_plano["nome"],
+                "nome":        nome or "",
                 "cnpjs_hoje":  cnpjs_hoje,
                 "limite_dia":  limite,
                 "restante":    (limite - cnpjs_hoje) if limite is not None else None,

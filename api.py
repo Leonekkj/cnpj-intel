@@ -122,6 +122,7 @@ def get_token_info(credentials: HTTPAuthorizationCredentials = Depends(security)
             "token": token,
             "plano": "admin",
             "nome_plano": "Admin",
+            "nome": "Admin",
             "cnpjs_hoje": 0,
             "limite_dia": None,
             "restante": None,
@@ -162,6 +163,7 @@ def get_token_info_soft(credentials: HTTPAuthorizationCredentials = Depends(secu
             "token": token,
             "plano": "admin",
             "nome_plano": "Admin",
+            "nome": "Admin",
             "cnpjs_hoje": 0,
             "limite_dia": None,
             "restante": None,
@@ -248,6 +250,7 @@ def meu_plano(info: dict = Depends(get_token_info_soft)):
     return {
         "plano":           info["plano"],
         "nome_plano":      info["nome_plano"],
+        "nome":            info.get("nome") or "",
         "cnpjs_hoje":      info["cnpjs_hoje"],
         "limite_dia":      info["limite_dia"],
         "restante":        info["restante"],

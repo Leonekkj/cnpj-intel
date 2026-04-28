@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "capsule": {
+      "command": "python",
+      "args": ["-m", "capsule.server"],
+      "cwd": "c:\\Users\\ideia\\OneDrive\\Desktop\\CNPJ\\.worktrees\\capsule-mcp"
+    }
+  }
+}

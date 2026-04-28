@@ -439,9 +439,10 @@ function updateSidebar() {
     if (elStats) elStats.innerHTML = `<span class="mono">${statsText}</span>`;
   }
 
-  if (elUser)  elUser.textContent  = nomePlano;
-  if (elSub)   elSub.textContent   = info.plano;
-  if (elAvatar) elAvatar.textContent = nomePlano.slice(0, 2).toUpperCase();
+  const nomeExibido = info.nome || nomePlano;
+  if (elUser)  elUser.textContent  = nomeExibido;
+  if (elSub)   elSub.textContent   = info.nome ? nomePlano : info.plano;
+  if (elAvatar) elAvatar.textContent = nomeExibido.slice(0, 2).toUpperCase();
 
   // Show admin section
   const adminSection  = $("#admin-section");
