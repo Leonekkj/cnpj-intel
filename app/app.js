@@ -1191,9 +1191,10 @@ async function viewListaDetalhe(listaId) {
   return `
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px" data-lista-id="${lista.id}">
       <button class="btn btn-ghost" onclick="render()">← Voltar</button>
-      <h2 style="margin:0">${esc(lista.nome)}</h2>
+      <div class="page-title" style="margin:0">${esc(lista.nome)}</div>
       <span style="color:var(--text-muted);font-size:13px">${lista.total} empresa${lista.total !== 1 ? 's' : ''}</span>
-      <button class="btn btn-ghost" style="margin-left:auto" data-lista-id="${lista.id}" onclick="promptRenomearListaFromBtn(this)">Renomear</button>
+      <button class="btn btn-accent" style="margin-left:auto" onclick="promptAdicionarNaLista(${lista.id})">+ Adicionar</button>
+      <button class="btn btn-ghost" data-lista-id="${lista.id}" onclick="promptRenomearListaFromBtn(this)">Renomear</button>
       <button class="btn btn-ghost" onclick="exportListaCSV(${lista.id})">Exportar CSV</button>
     </div>
     ${itens.length === 0
@@ -1234,6 +1235,111 @@ async function removerItemListaUI(listaId, cnpj, btn) {
   } catch(e) {
     toast('Erro ao remover empresa', 'error');
   }
+}
+
+async function promptAdicionarNaLista(listaId) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box" style="width:min(600px,96vw)">
+      <div class="modal-header">
+        <h3>Adicionar empresas à lista</h3>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
+        <input id="add-lista-q" class="token-input"
+          placeholder="Buscar por nome, CNPJ ou cidade…" autocomplete="off">
+        <div id="add-lista-results"
+          style="display:flex;flex-direction:column;min-height:60px;max-height:320px;overflow-y:auto">
+          <div style="color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">
+            Digite para buscar empresas
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
+        <button class="btn btn-accent" id="add-lista-confirmar" disabled>Adicionar 0 selecionadas</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const input     = overlay.querySelector('#add-lista-q');
+  const results   = overlay.querySelector('#add-lista-results');
+  const confirmar = overlay.querySelector('#add-lista-confirmar');
+  const selected  = new Set();
+
+  function updateBtn() {
+    confirmar.textContent = `Adicionar ${selected.size} selecionada${selected.size !== 1 ? 's' : ''}`;
+    confirmar.disabled = selected.size === 0;
+  }
+
+  async function buscar(q) {
+    if (!q.trim()) {
+      results.innerHTML = `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">Digite para buscar empresas</div>`;
+      return;
+    }
+    results.innerHTML = `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">Buscando…</div>`;
+    try {
+      const r = await fetch(
+        `/api/empresas?q=${encodeURIComponent(q)}&por_pagina=20&com_contato=true`,
+        { headers: { 'Authorization': `Bearer ${TOKEN}` } }
+      );
+      const data = await r.json();
+      const rows = data.items || [];
+      if (rows.length === 0) {
+        results.innerHTML = `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">Nenhuma empresa encontrada</div>`;
+        return;
+      }
+      results.innerHTML = rows.map(e => {
+        const chk = selected.has(e.cnpj) ? 'checked' : '';
+        return `
+          <label style="display:flex;align-items:center;gap:10px;padding:8px 4px;cursor:pointer;border-bottom:1px solid var(--border-soft)">
+            <input type="checkbox" data-cnpj="${esc(e.cnpj)}" ${chk}
+              style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
+            <div style="min-width:0">
+              <div style="font-weight:500;font-size:13px">${esc(e.nome_fantasia || e.razao_social || '—')}</div>
+              <div style="font-size:11.5px;color:var(--text-dim)">
+                ${esc(e.cnpj)} · ${esc(e.municipio || '—')}/${esc(e.uf || '—')}
+              </div>
+            </div>
+          </label>`;
+      }).join('');
+      results.querySelectorAll('input[type=checkbox]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          if (cb.checked) selected.add(cb.dataset.cnpj);
+          else selected.delete(cb.dataset.cnpj);
+          updateBtn();
+        });
+      });
+    } catch {
+      results.innerHTML = `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">Erro ao buscar</div>`;
+    }
+  }
+
+  let debounce;
+  input.addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => buscar(input.value), 350);
+  });
+
+  confirmar.addEventListener('click', async () => {
+    if (selected.size === 0) return;
+    try {
+      const res = await apiListas(`/${listaId}/itens`, {
+        method: 'POST',
+        body: JSON.stringify({ cnpjs: [...selected] })
+      });
+      overlay.remove();
+      toast(`${res.adicionados} empresa${res.adicionados !== 1 ? 's' : ''} adicionada${res.adicionados !== 1 ? 's' : ''} à lista`, 'success');
+      const main = document.getElementById('main');
+      main.innerHTML = await viewListaDetalhe(listaId);
+    } catch {
+      toast('Erro ao adicionar empresas', 'error');
+    }
+  });
+
+  input.focus();
 }
 
 async function navigateToLista(listaId) {
@@ -1323,9 +1429,12 @@ async function promptBulkSalvarEmLista() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal-box" style="min-width:320px">
-      <h3 style="margin:0 0 16px">Salvar ${cnpjs.length} empresa${cnpjs.length > 1 ? 's' : ''} em lista</h3>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+    <div class="modal-box" style="min-width:340px">
+      <div class="modal-header">
+        <h3>Salvar ${cnpjs.length} empresa${cnpjs.length > 1 ? 's' : ''} em lista</h3>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:8px">
         ${listas.length === 0
           ? `<p style="color:var(--text-muted)">Nenhuma lista criada ainda.</p>`
           : listas.map(l => `
@@ -1336,9 +1445,9 @@ async function promptBulkSalvarEmLista() {
               </button>`).join('')
         }
       </div>
-      <div style="display:flex;gap:8px">
+      <div class="modal-footer">
         <button class="btn btn-ghost" id="bulk-nova-lista-btn">+ Nova lista</button>
-        <button class="btn btn-ghost" style="margin-left:auto" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
+        <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
       </div>
     </div>
   `;
