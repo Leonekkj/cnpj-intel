@@ -99,7 +99,7 @@ def _extract_docstring(source: bytes, body_node: Node) -> str:
     return ""
 
 
-def _extract_symbols(source: bytes, root: Node, file_path: str) -> tuple[list[Symbol], list[Import]]:
+def _extract_py_symbols(source: bytes, root: Node, file_path: str) -> tuple[list[Symbol], list[Import]]:
     symbols: list[Symbol] = []
     imports: list[Import] = []
 
@@ -165,13 +165,17 @@ def _extract_symbols(source: bytes, root: Node, file_path: str) -> tuple[list[Sy
             module = _node_text(source, mod_node) if mod_node else ""
             for child in node.named_children:
                 if child.type == "dotted_name" and child != mod_node:
-                    imports.append(Import(file_path=file_path, module=module, alias=None))
+                    symbol_name = _node_text(source, child)
+                    imports.append(Import(file_path=file_path, module=module, symbol=symbol_name))
                     break
                 elif child.type == "aliased_import":
+                    name_node = child.child_by_field_name("name")
                     alias_node = child.child_by_field_name("alias")
+                    symbol_name = _node_text(source, name_node) if name_node else None
                     imports.append(Import(
                         file_path=file_path,
                         module=module,
+                        symbol=symbol_name,
                         alias=_node_text(source, alias_node) if alias_node else None,
                     ))
 
@@ -197,15 +201,15 @@ def index_file(conn: sqlite3.Connection, path: Path) -> None:
     file_id = conn.execute("SELECT id FROM files WHERE path = ?", (file_path,)).fetchone()[0]
 
     tree = _parser.parse(source)
-    symbols, imports = _extract_symbols(source, tree.root_node, file_path)
+    symbols, imports = _extract_py_symbols(source, tree.root_node, file_path)
 
     conn.executemany(
         "INSERT INTO symbols (file_id, name, kind, start_line, end_line, signature, docstring, body) VALUES (?,?,?,?,?,?,?,?)",
         [(file_id, s.name, s.kind, s.start_line, s.end_line, s.signature, s.docstring, s.body) for s in symbols],
     )
     conn.executemany(
-        "INSERT INTO imports (file_id, module, alias) VALUES (?,?,?)",
-        [(file_id, i.module, i.alias) for i in imports],
+        "INSERT INTO imports (file_id, module, symbol, alias) VALUES (?,?,?,?)",
+        [(file_id, i.module, i.symbol, i.alias) for i in imports],
     )
     conn.commit()
 

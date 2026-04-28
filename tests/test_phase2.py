@@ -51,3 +51,24 @@ def test_migration_idempotent(tmp_path: Path) -> None:
     # sentinel file must still exist — no migration triggered, files not cleared
     count = conn2.execute("SELECT COUNT(*) FROM files").fetchone()[0]
     assert count == 1
+
+
+def test_import_from_stores_symbol(tmp_path: Path) -> None:
+    src = tmp_path / "consumer.py"
+    src.write_text("from api import autenticar_token\n", encoding="utf-8")
+    conn = init_db(tmp_path / ".capsule" / "index.db")
+    index_file(conn, src)
+    row = conn.execute("SELECT symbol FROM imports WHERE module = 'api'").fetchone()
+    assert row is not None
+    assert row[0] == "autenticar_token"
+
+
+def test_import_from_aliased_stores_symbol(tmp_path: Path) -> None:
+    src = tmp_path / "consumer.py"
+    src.write_text("from api import autenticar_token as auth\n", encoding="utf-8")
+    conn = init_db(tmp_path / ".capsule" / "index.db")
+    index_file(conn, src)
+    row = conn.execute("SELECT symbol, alias FROM imports WHERE module = 'api'").fetchone()
+    assert row is not None
+    assert row[0] == "autenticar_token"
+    assert row[1] == "auth"
