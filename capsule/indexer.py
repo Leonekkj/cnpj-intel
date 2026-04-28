@@ -56,19 +56,20 @@ def init_db(db_path: Path) -> sqlite3.Connection:
 
     migrated = False
     sym_cols = {c[1] for c in conn.execute("PRAGMA table_info(symbols)").fetchall()}
-    if "language" not in sym_cols:
-        conn.execute("ALTER TABLE symbols ADD COLUMN language TEXT DEFAULT 'python'")
-        migrated = True
-
     imp_cols = {c[1] for c in conn.execute("PRAGMA table_info(imports)").fetchall()}
-    if "symbol" not in imp_cols:
-        conn.execute("ALTER TABLE imports ADD COLUMN symbol TEXT")
-        migrated = True
 
-    if migrated:
-        conn.execute("DELETE FROM files")
+    with conn:
+        if "language" not in sym_cols:
+            conn.execute("ALTER TABLE symbols ADD COLUMN language TEXT DEFAULT 'python'")
+            migrated = True
+        if "symbol" not in imp_cols:
+            conn.execute("ALTER TABLE imports ADD COLUMN symbol TEXT")
+            migrated = True
+        if migrated:
+            conn.execute("DELETE FROM symbols")
+            conn.execute("DELETE FROM imports")
+            conn.execute("DELETE FROM files")
 
-    conn.commit()
     return conn
 
 
