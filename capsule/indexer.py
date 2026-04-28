@@ -41,12 +41,14 @@ def init_db(db_path: Path) -> sqlite3.Connection:
             end_line INTEGER,
             signature TEXT,
             docstring TEXT,
-            body TEXT
+            body TEXT,
+            language TEXT DEFAULT 'python'
         );
         CREATE TABLE IF NOT EXISTS imports (
             id INTEGER PRIMARY KEY,
             file_id INTEGER,
             module TEXT,
+            symbol TEXT,
             alias TEXT
         );
         CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
