@@ -49,7 +49,25 @@ def init_db(db_path: Path) -> sqlite3.Connection:
             module TEXT,
             alias TEXT
         );
+        CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
+            name, docstring, content='symbols', content_rowid='id'
+        );
     """)
+
+    migrated = False
+    sym_cols = {c[1] for c in conn.execute("PRAGMA table_info(symbols)").fetchall()}
+    if "language" not in sym_cols:
+        conn.execute("ALTER TABLE symbols ADD COLUMN language TEXT DEFAULT 'python'")
+        migrated = True
+
+    imp_cols = {c[1] for c in conn.execute("PRAGMA table_info(imports)").fetchall()}
+    if "symbol" not in imp_cols:
+        conn.execute("ALTER TABLE imports ADD COLUMN symbol TEXT")
+        migrated = True
+
+    if migrated:
+        conn.execute("DELETE FROM files")
+
     conn.commit()
     return conn
 
