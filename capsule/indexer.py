@@ -194,6 +194,14 @@ def index_file(conn: sqlite3.Connection, path: Path) -> None:
     file_hash = hashlib.sha256(source).hexdigest()
     file_path = str(path)
 
+    # Clean up FTS5 BEFORE deleting symbols (FTS5 references symbol rowids)
+    old_file_row = conn.execute("SELECT id FROM files WHERE path = ?", (file_path,)).fetchone()
+    if old_file_row:
+        conn.execute(
+            "DELETE FROM symbols_fts WHERE rowid IN (SELECT id FROM symbols WHERE file_id = ?)",
+            (old_file_row[0],),
+        )
+
     conn.execute("DELETE FROM symbols WHERE file_id = (SELECT id FROM files WHERE path = ?)", (file_path,))
     conn.execute("DELETE FROM imports WHERE file_id = (SELECT id FROM files WHERE path = ?)", (file_path,))
     conn.execute(
@@ -222,6 +230,11 @@ def index_file(conn: sqlite3.Connection, path: Path) -> None:
     conn.executemany(
         "INSERT INTO imports (file_id, module, symbol, alias) VALUES (?,?,?,?)",
         [(file_id, i.module, i.symbol, i.alias) for i in imports],
+    )
+    conn.execute(
+        "INSERT INTO symbols_fts(rowid, name, docstring)"
+        " SELECT id, name, COALESCE(docstring, '') FROM symbols WHERE file_id = ?",
+        (file_id,),
     )
     conn.commit()
 

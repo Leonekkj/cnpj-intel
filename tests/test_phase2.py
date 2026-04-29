@@ -104,3 +104,17 @@ def test_typescript_indexing(tmp_path: Path) -> None:
     assert by_name["User"][0] == "interface"
     assert "UserId" in by_name
     assert by_name["UserId"][0] == "type"
+
+
+def test_fts5_populated_after_index(tmp_path: Path) -> None:
+    src = tmp_path / "api.py"
+    src.write_text(
+        'def autenticar_token(token: str) -> bool:\n'
+        '    """Verifica se o token Bearer é válido."""\n'
+        '    return True\n',
+        encoding="utf-8",
+    )
+    conn = init_db(tmp_path / ".capsule" / "index.db")
+    index_file(conn, src)
+    count = conn.execute("SELECT COUNT(*) FROM symbols_fts").fetchone()[0]
+    assert count > 0
