@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from capsule.indexer import init_db, index_file
+from capsule.ts_parser import TS_AVAILABLE
 
 
 def test_migration_adds_language_column(tmp_path: Path) -> None:
@@ -72,3 +73,34 @@ def test_import_from_aliased_stores_symbol(tmp_path: Path) -> None:
     assert row is not None
     assert row[0] == "autenticar_token"
     assert row[1] == "auth"
+
+
+SAMPLE_TS = """\
+function greet(name: string): string {
+    return `Hello, ${name}`;
+}
+
+interface User {
+    id: number;
+    name: string;
+}
+
+type UserId = number;
+"""
+
+
+def test_typescript_indexing(tmp_path: Path) -> None:
+    if not TS_AVAILABLE:
+        pytest.skip("tree-sitter-typescript not installed")
+    src = tmp_path / "sample.ts"
+    src.write_text(SAMPLE_TS, encoding="utf-8")
+    conn = init_db(tmp_path / ".capsule" / "index.db")
+    index_file(conn, src)
+    rows = conn.execute("SELECT name, kind, language FROM symbols").fetchall()
+    by_name = {r[0]: (r[1], r[2]) for r in rows}
+    assert "greet" in by_name
+    assert by_name["greet"] == ("function", "typescript")
+    assert "User" in by_name
+    assert by_name["User"][0] == "interface"
+    assert "UserId" in by_name
+    assert by_name["UserId"][0] == "type"

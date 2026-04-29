@@ -202,12 +202,23 @@ def index_file(conn: sqlite3.Connection, path: Path) -> None:
     )
     file_id = conn.execute("SELECT id FROM files WHERE path = ?", (file_path,)).fetchone()[0]
 
-    tree = _parser.parse(source)
-    symbols, imports = _extract_py_symbols(source, tree.root_node, file_path)
+    if path.suffix in (".ts", ".tsx"):
+        from capsule.ts_parser import extract_ts_symbols, TS_AVAILABLE as _TS_AVAIL
+        if not _TS_AVAIL:
+            conn.commit()
+            return
+        symbols, imports = extract_ts_symbols(source, file_path, tsx=path.suffix == ".tsx")
+        language = "typescript"
+    else:
+        tree = _parser.parse(source)
+        symbols, imports = _extract_py_symbols(source, tree.root_node, file_path)
+        language = "python"
 
     conn.executemany(
-        "INSERT INTO symbols (file_id, name, kind, start_line, end_line, signature, docstring, body) VALUES (?,?,?,?,?,?,?,?)",
-        [(file_id, s.name, s.kind, s.start_line, s.end_line, s.signature, s.docstring, s.body) for s in symbols],
+        "INSERT INTO symbols (file_id, name, kind, start_line, end_line, signature, docstring, body, language)"
+        " VALUES (?,?,?,?,?,?,?,?,?)",
+        [(file_id, s.name, s.kind, s.start_line, s.end_line, s.signature, s.docstring, s.body, language)
+         for s in symbols],
     )
     conn.executemany(
         "INSERT INTO imports (file_id, module, symbol, alias) VALUES (?,?,?,?)",
@@ -219,9 +230,10 @@ def index_file(conn: sqlite3.Connection, path: Path) -> None:
 def index_project(root: Path) -> sqlite3.Connection:
     db_path = root / ".capsule" / "index.db"
     conn = init_db(db_path)
-    for py_file in root.rglob("*.py"):
-        if ".capsule" in py_file.parts or ".worktrees" in py_file.parts:
-            continue
-        if is_stale(conn, py_file):
-            index_file(conn, py_file)
+    for ext in ("*.py", "*.ts", "*.tsx"):
+        for src_file in root.rglob(ext):
+            if any(skip in src_file.parts for skip in (".capsule", ".worktrees")):
+                continue
+            if is_stale(conn, src_file):
+                index_file(conn, src_file)
     return conn
