@@ -84,7 +84,7 @@ def get_context_capsule(task: str, max_symbols: int = 20) -> str:
 
 
 @app.tool()
-def get_impact_graph(symbol: str, depth: int = 2) -> str:
+def get_impact_graph(symbol: str, depth: int = 1) -> str:
     """Return files affected if symbol changes, using symbol-level import tracking."""
     conn = _get_conn()
 

@@ -188,7 +188,7 @@ def test_impact_graph_with_dependents(tmp_path: Path) -> None:
 
     for i in range(3):
         consumer = tmp_path / f"consumer{i}.py"
-        consumer.write_text(f"from api import shared_util\n", encoding="utf-8")
+        consumer.write_text("from api import shared_util\n", encoding="utf-8")
         index_file(conn, consumer)
 
     importers = conn.execute(
