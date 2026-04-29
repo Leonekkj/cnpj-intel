@@ -34,6 +34,9 @@ def search_symbols(conn: sqlite3.Connection, query: str, max_results: int = 20) 
         if rows:
             return [_row_to_symbol(r) for r in rows]
     except sqlite3.OperationalError:
+        # Covers both missing symbols_fts table and invalid FTS5 query syntax.
+        # FTS5 zero-results (valid query, no matches) does NOT fall through — LIKE
+        # is a structural fallback only, not a recall enhancement.
         pass
 
     # LIKE fallback
