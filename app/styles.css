@@ -973,6 +973,7 @@ tr.detail-row td {
   background: none; border: none; cursor: pointer;
 }
 .row-dropdown button:hover { background: var(--surface-2); color: var(--text); }
+.row-dropdown button svg { width: 13px; height: 13px; vertical-align: middle; margin-right: 6px; flex-shrink: 0; }
 
 /* ─── Danger button ──────────────────────────────────────────── */
 .btn-danger {

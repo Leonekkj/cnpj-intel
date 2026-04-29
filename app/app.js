@@ -824,14 +824,14 @@ function filterBar(showDates = false) {
       <div class="chip-sep"></div>
       <div class="chip select">
         <select onchange="updateFilter('uf', this.value)">
-          <option value="">Estado</option>
+          <option value="" hidden>Estado</option>
           ${ufs.map(u => `<option ${f.uf===u?"selected":""}>${u}</option>`).join("")}
         </select>
         ${f.uf ? `<button class="filter-clear" onclick="updateFilter('uf','')">×</button>` : ""}
       </div>
       <div class="chip select">
         <select onchange="updateFilter('porte', this.value)">
-          <option value="">Porte</option>
+          <option value="" hidden>Porte</option>
           <option value="MEI" ${f.porte==="MEI"?"selected":""}>MEI</option>
           <option value="MICRO EMPRESA" ${f.porte==="MICRO EMPRESA"?"selected":""}>ME</option>
           <option value="EMPRESA DE PEQUENO PORTE" ${f.porte==="EMPRESA DE PEQUENO PORTE"?"selected":""}>EPP</option>
@@ -841,7 +841,7 @@ function filterBar(showDates = false) {
       </div>
       <div class="chip select">
         <select onchange="onSetorChange(this.value)">
-          <option value="">Setor</option>
+          <option value="" hidden>Setor</option>
           ${cats.map(c => `<option ${f.categoria===c?"selected":""}>${c}</option>`).join("")}
         </select>
         ${f.categoria ? `<button class="filter-clear" onclick="onSetorChange('')">×</button>` : ""}
