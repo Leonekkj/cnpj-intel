@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from capsule.indexer import init_db, index_file
+from capsule.search import search_symbols
 from capsule.ts_parser import TS_AVAILABLE
 
 
@@ -144,3 +145,17 @@ def test_fts5_reindex_replaces_entries(tmp_path: Path) -> None:
     assert "first_function" not in names
     assert "second_function" in names
     assert "third_function" in names
+
+
+def test_fts5_search_returns_result(tmp_path: Path) -> None:
+    src = tmp_path / "api.py"
+    src.write_text(
+        'def autenticar_token(token: str) -> bool:\n'
+        '    """Verifica se o token Bearer é válido."""\n'
+        '    return True\n',
+        encoding="utf-8",
+    )
+    conn = init_db(tmp_path / ".capsule" / "index.db")
+    index_file(conn, src)
+    results = search_symbols(conn, "autenticar_token")
+    assert any(s.name == "autenticar_token" for s in results)
