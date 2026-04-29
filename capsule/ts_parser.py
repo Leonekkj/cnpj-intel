@@ -11,7 +11,7 @@ try:
     _TS_PARSER = TSParser(_TS_LANGUAGE)
     _TSX_PARSER = TSParser(_TSX_LANGUAGE)
     TS_AVAILABLE = True
-except (ImportError, AttributeError, Exception):
+except (ImportError, AttributeError, OSError):
     TS_AVAILABLE = False
     warnings.warn("[capsule] tree-sitter-typescript not installed — TS/TSX files skipped")
 
