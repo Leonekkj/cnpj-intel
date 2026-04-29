@@ -551,25 +551,24 @@ function viewDashboard() {
   const stats = state.statsData || { total: 0, com_telefone: 0, com_email: 0 };
   const activity = state.atividadeData || DASH_MOCK.activity;
   const { insights } = DASH_MOCK;
-  const spark14 = activity.slice(-14);
+  const hist     = stats.historico || [];
+  const ontem    = stats.ontem    || {};
+  const spark14  = activity.slice(-14);
   const sparks = {
-    coletadas:    spark14.map(d => d.coletadas),
-    enriquecidas: spark14.map(d => d.enriquecidas),
-    contatos:     spark14.map(d => d.com_email || 0),
-    export:       spark14.map(() => 0),
+    coletadas: hist.length >= 3 ? hist.map(s => s.total)        : spark14.map(d => d.coletadas),
+    contatos:  hist.length >= 3 ? hist.map(s => s.com_telefone) : spark14.map(d => d.enriquecidas),
+    emails:    hist.length >= 3 ? hist.map(s => s.com_email)    : spark14.map(d => d.enriquecidas),
+    export:    spark14.map(() => 0),
   };
-  function pctDelta(arr) {
-    const mid = Math.floor(arr.length / 2);
-    const prev = arr.slice(0, mid).reduce((s, x) => s + x, 0);
-    const curr = arr.slice(mid).reduce((s, x) => s + x, 0);
-    if (!prev && !curr) return { val: "—", up: true };
-    if (arr.filter(x => x > 0).length < 3) return { val: "—", up: true };
-    const p = (curr - prev) / prev * 100;
+  function pctSnapshot(current, prev) {
+    if (prev == null || prev === 0) return { val: "—", up: true };
+    const p = (current - prev) / prev * 100;
+    if (!isFinite(p)) return { val: "—", up: true };
     return { val: (p >= 0 ? "+" : "") + p.toFixed(1) + "%", up: p >= 0 };
   }
-  const dTotal = pctDelta(sparks.coletadas);
-  const dTel   = pctDelta(sparks.contatos);
-  const dEmail = pctDelta(sparks.enriquecidas);
+  const dTotal = pctSnapshot(stats.total,        ontem.total);
+  const dTel   = pctSnapshot(stats.com_telefone, ontem.com_telefone);
+  const dEmail = pctSnapshot(stats.com_email,    ontem.com_email);
 
   const _PORTE_DISPLAY = {
     "MEI":                      { label: "MEI",    color: "in" },
@@ -608,9 +607,9 @@ function viewDashboard() {
 
   const metrics = `
     <div class="metrics">
-      ${metric("Total de CNPJs",  fmt(stats.total),         dTotal.val, dTotal.up, sparkline(sparks.coletadas,    "oklch(0.72 0.14 160)"), "building", "ac", "mv-total")}
-      ${metric("Com telefone",    fmt(stats.com_telefone),  dTel.val,   dTel.up,   sparkline(sparks.contatos,     "oklch(0.74 0.13 240)"), "phone",    "in", "mv-tel")}
-      ${metric("Com e-mail",      fmt(stats.com_email),     dEmail.val, dEmail.up, sparkline(sparks.enriquecidas, "oklch(0.80 0.14 75)"),  "mail",     "wa", "mv-email")}
+      ${metric("Total de CNPJs",  fmt(stats.total),         dTotal.val, dTotal.up, sparkline(sparks.coletadas, "oklch(0.72 0.14 160)"), "building", "ac", "mv-total")}
+      ${metric("Com telefone",    fmt(stats.com_telefone),  dTel.val,   dTel.up,   sparkline(sparks.contatos,  "oklch(0.74 0.13 240)"), "phone",    "in", "mv-tel")}
+      ${metric("Com e-mail",      fmt(stats.com_email),     dEmail.val, dEmail.up, sparkline(sparks.emails,    "oklch(0.80 0.14 75)"),  "mail",     "wa", "mv-email")}
       ${metric("Exports no mês",  "—",                      "—",      true,  sparkline(sparks.export,       "oklch(0.72 0.14 295)"), "download", "pu")}
     </div>`;
 

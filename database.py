@@ -1734,6 +1734,71 @@ class Database:
         return [{"data": d, "coletadas": rows.get(d, (0, 0))[0],
                  "enriquecidas": rows.get(d, (0, 0))[1]} for d in dates]
 
+    def criar_tabela_stats_snapshots(self):
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS stats_snapshots (
+                    data         TEXT PRIMARY KEY,
+                    total        INTEGER,
+                    com_telefone INTEGER,
+                    com_email    INTEGER
+                )
+            """)
+            conn.commit()
+
+    def salvar_snapshot_diario(self, total: int, com_telefone: int, com_email: int):
+        from datetime import date
+        today = date.today().isoformat()
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("""
+                    INSERT INTO stats_snapshots (data, total, com_telefone, com_email)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (data) DO UPDATE SET
+                        total        = EXCLUDED.total,
+                        com_telefone = EXCLUDED.com_telefone,
+                        com_email    = EXCLUDED.com_email
+                """, (today, total, com_telefone, com_email))
+            else:
+                cur.execute("""
+                    INSERT OR REPLACE INTO stats_snapshots (data, total, com_telefone, com_email)
+                    VALUES (?, ?, ?, ?)
+                """, (today, total, com_telefone, com_email))
+            conn.commit()
+
+    def get_snapshot_anterior(self) -> dict | None:
+        from datetime import date
+        today = date.today().isoformat()
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT data, total, com_telefone, com_email FROM stats_snapshots "
+                "WHERE data < %s ORDER BY data DESC LIMIT 1" if USE_POSTGRES else
+                "SELECT data, total, com_telefone, com_email FROM stats_snapshots "
+                "WHERE data < ? ORDER BY data DESC LIMIT 1",
+                (today,)
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        return {"data": row[0], "total": row[1], "com_telefone": row[2], "com_email": row[3]}
+
+    def get_snapshots_historico(self, dias: int = 14) -> list:
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT data, total, com_telefone, com_email FROM stats_snapshots "
+                "ORDER BY data DESC LIMIT %s" if USE_POSTGRES else
+                "SELECT data, total, com_telefone, com_email FROM stats_snapshots "
+                "ORDER BY data DESC LIMIT ?",
+                (dias,)
+            )
+            rows = cur.fetchall()
+        return [{"data": r[0], "total": r[1], "com_telefone": r[2], "com_email": r[3]}
+                for r in reversed(rows)]
+
     def diagnostico_telefone(self) -> dict:
         """Retorna contagens e últimos registros para diagnóstico de persistência de telefone."""
         _tel_valido = (

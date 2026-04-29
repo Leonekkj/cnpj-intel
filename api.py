@@ -37,6 +37,7 @@ def _run_db_fast():
     db.criar_tabelas()
     db.criar_tabela_tokens()
     db.criar_tabela_listas()
+    db.criar_tabela_stats_snapshots()
     # Ensure ADMIN_TOKEN exists in tokens table so FK on listas works
     if ADMIN_TOKEN:
         db.criar_token(ADMIN_TOKEN, "admin")
@@ -311,6 +312,13 @@ def estatisticas(info: dict = Depends(get_token_info_soft)):
     if _stats_cache["data"] and (agora - _stats_cache["ts"]) < _STATS_TTL:
         return _stats_cache["data"]
     data = db.estatisticas()
+    db.salvar_snapshot_diario(data["total"], data["com_telefone"], data["com_email"])
+    ontem = db.get_snapshot_anterior()
+    if ontem:
+        data["ontem"] = ontem
+    historico = db.get_snapshots_historico(14)
+    if historico:
+        data["historico"] = historico
     _stats_cache["data"] = data
     _stats_cache["ts"] = agora
     return data
