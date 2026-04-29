@@ -277,8 +277,37 @@ async function loadEmpresas() {
   render();
 }
 
+const DETAIL_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+function detailCacheKey(cnpj) {
+  return `cnpj_detail_${TOKEN}_${cnpj}`;
+}
+
+function detailCacheGet(cnpj) {
+  try {
+    const raw = localStorage.getItem(detailCacheKey(cnpj));
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > DETAIL_CACHE_TTL) { localStorage.removeItem(detailCacheKey(cnpj)); return null; }
+    return data;
+  } catch { return null; }
+}
+
+function detailCacheSet(cnpj, data) {
+  try { localStorage.setItem(detailCacheKey(cnpj), JSON.stringify({ data, ts: Date.now() })); } catch {}
+}
+
 async function loadDetail(cnpj) {
   if (state.expandedData[cnpj] === "LOADING" || (state.expandedData[cnpj] && !state.expandedData[cnpj]._notfound && !state.expandedData[cnpj]._limitReached)) return;
+
+  const cached = detailCacheGet(cnpj);
+  if (cached) {
+    state.expandedData[cnpj] = cached;
+    state.revealed.add(cnpj);
+    render();
+    return;
+  }
+
   state.expandedData[cnpj] = "LOADING";
   render();
   const data = await apiFetch(`/api/empresa/${cnpj}`);
@@ -292,6 +321,7 @@ async function loadDetail(cnpj) {
   if (data && !data._err) {
     state.expandedData[cnpj] = data;
     state.revealed.add(cnpj);
+    detailCacheSet(cnpj, data);
   } else {
     state.expandedData[cnpj] = { _notfound: true };
   }
