@@ -118,3 +118,29 @@ def test_fts5_populated_after_index(tmp_path: Path) -> None:
     index_file(conn, src)
     count = conn.execute("SELECT COUNT(*) FROM symbols_fts").fetchone()[0]
     assert count > 0
+
+
+def test_fts5_reindex_replaces_entries(tmp_path: Path) -> None:
+    src = tmp_path / "api.py"
+    src.write_text(
+        'def first_function(): pass\n',
+        encoding="utf-8",
+    )
+    conn = init_db(tmp_path / ".capsule" / "index.db")
+    index_file(conn, src)
+    count_after_first = conn.execute("SELECT COUNT(*) FROM symbols_fts").fetchone()[0]
+    assert count_after_first == 1
+
+    # Rewrite file with different content
+    src.write_text(
+        'def second_function(): pass\ndef third_function(): pass\n',
+        encoding="utf-8",
+    )
+    index_file(conn, src)
+    count_after_second = conn.execute("SELECT COUNT(*) FROM symbols_fts").fetchone()[0]
+    # Should have exactly 2 entries (old ones replaced, not accumulated)
+    assert count_after_second == 2
+    names = {r[0] for r in conn.execute("SELECT name FROM symbols_fts").fetchall()}
+    assert "first_function" not in names
+    assert "second_function" in names
+    assert "third_function" in names

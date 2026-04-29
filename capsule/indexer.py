@@ -213,6 +213,7 @@ def index_file(conn: sqlite3.Connection, path: Path) -> None:
     if path.suffix in (".ts", ".tsx"):
         from capsule.ts_parser import extract_ts_symbols, TS_AVAILABLE as _TS_AVAIL
         if not _TS_AVAIL:
+            conn.rollback()
             return
         symbols, imports = extract_ts_symbols(source, file_path, tsx=path.suffix == ".tsx")
         language = "typescript"
