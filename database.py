@@ -1255,7 +1255,7 @@ class Database:
 
     def buscar_empresas(self, q="", uf="", porte="", cnae="", categoria="", departamento="",
                         abertura_de="", abertura_ate="",
-                        com_email=False, com_instagram=False,
+                        com_email=False, com_socio=False,
                         com_telefone=False, com_site=False,
                         com_contato=False,
                         pagina=1, por_pagina=50,
@@ -1294,8 +1294,8 @@ class Database:
             params.append(abertura_ate)
         if com_email:
             filtros.append("email IS NOT NULL AND email != ''")
-        if com_instagram:
-            filtros.append("instagram IS NOT NULL AND instagram != ''")
+        if com_socio:
+            filtros.append("socio_principal IS NOT NULL AND socio_principal != ''")
         _tel_valido_sql = (
             "telefone IS NOT NULL AND TRIM(telefone) != '' "
             "AND LOWER(telefone) NOT IN ('n/a','none','null','nan','-')"

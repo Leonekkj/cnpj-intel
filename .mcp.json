@@ -3,7 +3,11 @@
     "capsule": {
       "command": "python",
       "args": ["-m", "capsule.server"],
+<<<<<<< HEAD
       "cwd": "c:\\Users\\ideia\\OneDrive\\Desktop\\CNPJ\\.worktrees\\capsule-mcp"
+=======
+      "cwd": "c:\\Users\\ideia\\OneDrive\\Desktop\\CNPJ"
+>>>>>>> feature/capsule-mcp
     }
   }
 }

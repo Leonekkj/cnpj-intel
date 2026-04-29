@@ -59,7 +59,7 @@ const state = {
   departamentos: [],
   tokens: [],
   tokensLoading: false,
-  filters: { q: "", uf: "", porte: "", categoria: "", departamento: "", tel: false, email: false, site: false, insta: false, abertura_de: "", abertura_ate: "" },
+  filters: { q: "", uf: "", porte: "", categoria: "", departamento: "", tel: false, email: false, site: false, socio: false, abertura_de: "", abertura_ate: "" },
   sort: { key: null, dir: "asc" },
   page: 1,
   perPage: 15,
@@ -261,7 +261,7 @@ async function loadEmpresas() {
   if (f.tel)        params.set("com_telefone", "true");
   if (f.email)      params.set("com_email", "true");
   if (f.site)       params.set("com_site", "true");
-  if (f.insta)      params.set("com_instagram", "true");
+  if (f.socio)      params.set("com_socio", "true");
   if (f.abertura_de)  params.set("abertura_de", f.abertura_de);
   if (f.abertura_ate) params.set("abertura_ate", f.abertura_ate);
   if (state.sort.key) { params.set("sort_by", state.sort.key); params.set("sort_dir", state.sort.dir); }
@@ -361,7 +361,7 @@ async function exportCSV() {
   if (f.tel)        params.set("com_telefone", "true");
   if (f.email)      params.set("com_email", "true");
   if (f.site)       params.set("com_site", "true");
-  if (f.insta)      params.set("com_instagram", "true");
+  if (f.socio)      params.set("com_socio", "true");
   if (f.abertura_de)  params.set("abertura_de", f.abertura_de);
   if (f.abertura_ate) params.set("abertura_ate", f.abertura_ate);
   const url = `${API_BASE}/api/export?${params}`;
@@ -892,7 +892,7 @@ function filterBar(showDates = false) {
       <button class="chip ${f.tel?"on":""}"   onclick="toggleF('tel')">${ICONS.phone}Com telefone</button>
       <button class="chip ${f.email?"on in":""}" onclick="toggleF('email')">${ICONS.mail}Com e-mail</button>
       <button class="chip ${f.site?"on pu":""}"  onclick="toggleF('site')">${ICONS.globe}Com site</button>
-      <button class="chip ${f.insta?"on wa":""}" onclick="toggleF('insta')">${ICONS.insta}Instagram</button>
+      <button class="chip ${f.socio?"on wa":""}" onclick="toggleF('socio')">${ICONS.users}Com sócio</button>
       ${showDates ? `
       <div class="chip-sep"></div>
       <div class="chip select" style="gap:6px">
@@ -1653,7 +1653,7 @@ function toggleF(k) {
   loadEmpresas();
 }
 function clearFilters() {
-  state.filters = { q:"", uf:"", porte:"", categoria:"", departamento:"", tel:false, email:false, site:false, insta:false, abertura_de:"", abertura_ate:"" };
+  state.filters = { q:"", uf:"", porte:"", categoria:"", departamento:"", tel:false, email:false, site:false, socio:false, abertura_de:"", abertura_ate:"" };
   state.page = 1;
   loadEmpresas();
 }

@@ -274,7 +274,7 @@ def listar_empresas(
     abertura_de:   str  = Query("", description="Data de abertura inicial YYYY-MM-DD"),
     abertura_ate:  str  = Query("", description="Data de abertura final YYYY-MM-DD"),
     com_email:     bool = Query(False),
-    com_instagram: bool = Query(False),
+    com_socio:     bool = Query(False),
     com_telefone:  bool = Query(False),
     com_site:      bool = Query(False),
     com_contato:   bool = Query(False, description="Padrão: retorna todos os CNPJs"),
@@ -289,7 +289,7 @@ def listar_empresas(
     resultado = db.buscar_empresas(
         q=q, uf=uf, porte=porte, cnae=cnae, categoria=categoria, departamento=departamento,
         abertura_de=abertura_de, abertura_ate=abertura_ate,
-        com_email=com_email, com_instagram=com_instagram,
+        com_email=com_email, com_socio=com_socio,
         com_telefone=com_telefone, com_site=com_site,
         com_contato=com_contato,
         pagina=pagina, por_pagina=por_pagina,
@@ -387,7 +387,7 @@ def exportar_csv(
     abertura_de:   str  = Query(""),
     abertura_ate:  str  = Query(""),
     com_email:     bool = Query(False),
-    com_instagram: bool = Query(False),
+    com_socio:     bool = Query(False),
     com_telefone:  bool = Query(False),
     com_site:      bool = Query(False),
     info:          dict = Depends(require_export),
@@ -397,7 +397,7 @@ def exportar_csv(
     resultado = db.buscar_empresas(
         q=q, uf=uf, porte=porte, cnae=cnae, categoria=categoria, departamento=departamento,
         abertura_de=abertura_de, abertura_ate=abertura_ate,
-        com_email=com_email, com_instagram=com_instagram,
+        com_email=com_email, com_socio=com_socio,
         com_telefone=com_telefone, com_site=com_site,
         pagina=1, por_pagina=limite_export,
     )
