@@ -83,6 +83,42 @@ def get_context_capsule(task: str, max_symbols: int = 20) -> str:
     return yaml.dump(data, allow_unicode=True, default_flow_style=False)
 
 
+@app.tool()
+def get_impact_graph(symbol: str, depth: int = 2) -> str:
+    """Return files affected if symbol changes, using symbol-level import tracking."""
+    conn = _get_conn()
+
+    defined_row = conn.execute(
+        "SELECT f.path FROM symbols s JOIN files f ON s.file_id = f.id WHERE s.name = ? LIMIT 1",
+        (symbol,),
+    ).fetchone()
+
+    if not defined_row:
+        return yaml.dump({"error": f"Symbol '{symbol}' not found in index."})
+
+    defined_in = defined_row[0]
+
+    import_rows = conn.execute(
+        "SELECT DISTINCT f.path FROM imports i JOIN files f ON i.file_id = f.id WHERE i.symbol = ?",
+        (symbol,),
+    ).fetchall()
+    imported_by = [r[0] for r in import_rows]
+    count = len(imported_by)
+
+    risk_level = "low" if count == 0 else ("medium" if count <= 2 else "high")
+
+    data: dict = {
+        "symbol": symbol,
+        "defined_in": defined_in,
+        "imported_by": imported_by,
+        "risk_level": risk_level,
+    }
+    if depth > 1:
+        data["note"] = "depth > 1 not yet implemented"
+
+    return yaml.dump(data, allow_unicode=True, default_flow_style=False)
+
+
 if __name__ == "__main__":
     root = get_project_root()
     print(f"[capsule] Indexing {root} ...")

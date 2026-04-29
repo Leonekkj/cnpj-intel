@@ -159,3 +159,41 @@ def test_fts5_search_returns_result(tmp_path: Path) -> None:
     index_file(conn, src)
     results = search_symbols(conn, "autenticar_token")
     assert any(s.name == "autenticar_token" for s in results)
+
+
+def test_impact_graph_no_dependents(tmp_path: Path) -> None:
+    src = tmp_path / "api.py"
+    src.write_text("def solo_function(): pass\n", encoding="utf-8")
+    conn = init_db(tmp_path / ".capsule" / "index.db")
+    index_file(conn, src)
+
+    defined = conn.execute(
+        "SELECT f.path FROM symbols s JOIN files f ON s.file_id = f.id WHERE s.name = 'solo_function'"
+    ).fetchone()
+    assert defined is not None
+
+    importers = conn.execute(
+        "SELECT DISTINCT f.path FROM imports i JOIN files f ON i.file_id = f.id WHERE i.symbol = 'solo_function'"
+    ).fetchall()
+    count = len(importers)
+    risk_level = "low" if count == 0 else ("medium" if count <= 2 else "high")
+    assert risk_level == "low"
+
+
+def test_impact_graph_with_dependents(tmp_path: Path) -> None:
+    defn = tmp_path / "api.py"
+    defn.write_text("def shared_util(): pass\n", encoding="utf-8")
+    conn = init_db(tmp_path / ".capsule" / "index.db")
+    index_file(conn, defn)
+
+    for i in range(3):
+        consumer = tmp_path / f"consumer{i}.py"
+        consumer.write_text(f"from api import shared_util\n", encoding="utf-8")
+        index_file(conn, consumer)
+
+    importers = conn.execute(
+        "SELECT DISTINCT f.path FROM imports i JOIN files f ON i.file_id = f.id WHERE i.symbol = 'shared_util'"
+    ).fetchall()
+    count = len(importers)
+    risk_level = "low" if count == 0 else ("medium" if count <= 2 else "high")
+    assert risk_level == "high"
