@@ -679,16 +679,17 @@ def checkout_url(plano: str = Query(..., pattern="^(basico|pro)$"),
 
 
 @app.post("/api/webhook/kiwify")
-async def webhook_kiwify(request: Request):
+async def webhook_kiwify(request: Request, token: str = ""):
     """Recebe eventos da Kiwify e atualiza plano do usuário.
 
-    Eventos tratados:
-      PURCHASE_APPROVED  → ativa plano basico ou pro
-      PURCHASE_CANCELED  → reverte para free
-      PURCHASE_REFUNDED  → reverte para free
-      SUBSCRIPTION_CANCELED → reverte para free
+    Token validado via query param: /api/webhook/kiwify?token=xxx
+    Eventos: order_approved → ativa plano | refund_created / subscription_canceled → free
     """
     import json
+
+    # Token vem como query param na URL do webhook configurada no Kiwify
+    if KIWIFY_WEBHOOK_TOKEN and token != KIWIFY_WEBHOOK_TOKEN:
+        raise HTTPException(401, "Token inválido")
 
     body_bytes = await request.body()
     try:
@@ -696,40 +697,31 @@ async def webhook_kiwify(request: Request):
     except Exception:
         raise HTTPException(400, "Payload inválido")
 
-    # DEBUG TEMPORÁRIO
-    import logging
-    logging.warning(f"[KIWIFY DEBUG] headers={dict(request.headers)}")
-    logging.warning(f"[KIWIFY DEBUG] payload={payload}")
+    event = payload.get("webhook_event_type", "")
 
-    # Verificação do token secreto (configurado no painel Kiwify → Webhooks)
-    if KIWIFY_WEBHOOK_TOKEN and payload.get("token") != KIWIFY_WEBHOOK_TOKEN:
-        raise HTTPException(401, "Token inválido")
-
-    event   = payload.get("event", "")
-    data    = payload.get("data", {})
-    # Kiwify envia o e-mail em data.customer.email
-    customer = data.get("customer", {})
+    # Email em Product.Customer.email
+    customer = payload.get("Product", {}).get("Customer", {})
     email    = customer.get("email", "").lower().strip()
 
     if not email:
         return {"status": "ignored", "reason": "no email"}
 
-    # Diferencia Básico/Pro pelo preço pago (em reais)
-    amount = float(data.get("purchase", {}).get("price", {}).get("value", 0) or 0)
-    plano = "pro" if amount >= 90 else "basico"
+    # Preço em centavos em Product.Commissions.product_base_price
+    amount_cents = int(payload.get("Product", {}).get("Commissions", {}).get("product_base_price", 0) or 0)
+    amount = amount_cents / 100
+    plano  = "pro" if amount >= 90 else "basico"
 
-    subscription_id = data.get("subscription", {}).get("id", "")
-    period_end      = data.get("subscription", {}).get("next_payment", "") or ""
+    order_id = payload.get("order_id", "")
 
-    if event == "PURCHASE_APPROVED":
-        db.atualizar_plano_pagarme(email, plano, subscription_id, "active", period_end)
+    if event == "order_approved":
+        db.atualizar_plano_pagarme(email, plano, order_id, "active", "")
         _stats_cache["data"] = None
 
-    elif event in ("PURCHASE_CANCELED", "PURCHASE_REFUNDED", "SUBSCRIPTION_CANCELED"):
-        db.atualizar_plano_pagarme(email, "free", subscription_id, "canceled", "")
+    elif event in ("refund_created", "subscription_canceled", "subscription_chargeback"):
+        db.atualizar_plano_pagarme(email, "free", order_id, "canceled", "")
         _stats_cache["data"] = None
 
-    return {"status": "ok"}
+    return {"status": "ok", "event": event, "email": email}
 
 
 @app.get("/api/billing-portal")
