@@ -2138,6 +2138,7 @@ async function submitSignup() {
     const data = await res.json();
     if (res.ok) {
       localStorage.setItem("cnpj_token", data.token);
+      localStorage.removeItem("cnpj_onboarded");
       state.token = data.token;
       await migrarListasLocais();
       location.reload();
