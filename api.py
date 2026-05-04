@@ -249,15 +249,17 @@ def login_email(body: LoginBody):
 def meu_plano(info: dict = Depends(get_token_info_soft)):
     """Retorna informações do plano do token atual."""
     return {
-        "plano":           info["plano"],
-        "nome_plano":      info["nome_plano"],
-        "nome":            info.get("nome") or "",
-        "cnpjs_hoje":      info["cnpjs_hoje"],
-        "limite_dia":      info["limite_dia"],
-        "restante":        info["restante"],
-        "export":          info["export"],
-        "api":             info["api"],
-        "limite_atingido": info["limite_atingido"],
+        "plano":                   info["plano"],
+        "nome_plano":              info["nome_plano"],
+        "nome":                    info.get("nome") or "",
+        "cnpjs_hoje":              info["cnpjs_hoje"],
+        "limite_dia":              info["limite_dia"],
+        "restante":                info["restante"],
+        "export":                  info["export"],
+        "api":                     info["api"],
+        "limite_atingido":         info["limite_atingido"],
+        "subscription_status":     info.get("subscription_status") or "free",
+        "subscription_period_end": info.get("subscription_period_end"),
     }
 
 
@@ -644,6 +646,107 @@ def vacuum_banco(_: str = Depends(require_admin)):
     """Executa VACUUM ANALYZE no Postgres para liberar espaço após DELETE em massa."""
     db.vacuum()
     return {"status": "ok", "mensagem": "VACUUM ANALYZE executado"}
+
+
+# ─── Kiwify / Pagamento ────────────────────────────────────────────────────────
+# Kiwify não exige CNPJ — funciona com CPF.
+# Env vars necessárias:
+#   KIWIFY_CHECKOUT_BASICO  — ex: https://pay.kiwify.com.br/xxxxxxx
+#   KIWIFY_CHECKOUT_PRO     — ex: https://pay.kiwify.com.br/yyyyyyy
+#   KIWIFY_WEBHOOK_TOKEN    — token secreto configurado no painel Kiwify
+KIWIFY_CHECKOUT_BASICO  = os.environ.get("KIWIFY_CHECKOUT_BASICO", "")
+KIWIFY_CHECKOUT_PRO     = os.environ.get("KIWIFY_CHECKOUT_PRO", "")
+KIWIFY_WEBHOOK_TOKEN    = os.environ.get("KIWIFY_WEBHOOK_TOKEN", "")
+
+_KIWIFY_CHECKOUT_MAP = {
+    "basico": KIWIFY_CHECKOUT_BASICO,
+    "pro":    KIWIFY_CHECKOUT_PRO,
+}
+
+
+@app.get("/api/checkout-url")
+def checkout_url(plano: str = Query(..., pattern="^(basico|pro)$"),
+                 info: dict = Depends(get_token_info_soft)):
+    """Retorna URL do checkout Kiwify com e-mail do usuário pré-preenchido."""
+    base_url = _KIWIFY_CHECKOUT_MAP.get(plano, "")
+    if not base_url:
+        raise HTTPException(503, "Link de pagamento não configurado. Entre em contato com o suporte.")
+
+    email = info.get("email", "")
+    # Kiwify aceita ?email= na query string para pré-preencher o campo
+    url = f"{base_url}?email={email}" if email else base_url
+    return {"checkout_url": url}
+
+
+@app.post("/api/webhook/kiwify")
+async def webhook_kiwify(request: Request):
+    """Recebe eventos da Kiwify e atualiza plano do usuário.
+
+    Eventos tratados:
+      PURCHASE_APPROVED  → ativa plano basico ou pro
+      PURCHASE_CANCELED  → reverte para free
+      PURCHASE_REFUNDED  → reverte para free
+      SUBSCRIPTION_CANCELED → reverte para free
+    """
+    import json
+
+    body_bytes = await request.body()
+    try:
+        payload = json.loads(body_bytes)
+    except Exception:
+        raise HTTPException(400, "Payload inválido")
+
+    # Verificação do token secreto (configurado no painel Kiwify → Webhooks)
+    if KIWIFY_WEBHOOK_TOKEN and payload.get("token") != KIWIFY_WEBHOOK_TOKEN:
+        raise HTTPException(401, "Token inválido")
+
+    event   = payload.get("event", "")
+    data    = payload.get("data", {})
+    # Kiwify envia o e-mail em data.customer.email
+    customer = data.get("customer", {})
+    email    = customer.get("email", "").lower().strip()
+
+    if not email:
+        return {"status": "ignored", "reason": "no email"}
+
+    # Diferencia Básico/Pro pelo preço pago (em reais)
+    amount = float(data.get("purchase", {}).get("price", {}).get("value", 0) or 0)
+    plano = "pro" if amount >= 90 else "basico"
+
+    subscription_id = data.get("subscription", {}).get("id", "")
+    period_end      = data.get("subscription", {}).get("next_payment", "") or ""
+
+    if event == "PURCHASE_APPROVED":
+        db.atualizar_plano_pagarme(email, plano, subscription_id, "active", period_end)
+        _stats_cache["data"] = None
+
+    elif event in ("PURCHASE_CANCELED", "PURCHASE_REFUNDED", "SUBSCRIPTION_CANCELED"):
+        db.atualizar_plano_pagarme(email, "free", subscription_id, "canceled", "")
+        _stats_cache["data"] = None
+
+    return {"status": "ok"}
+
+
+@app.get("/api/billing-portal")
+def billing_portal(info: dict = Depends(get_token_info_soft)):
+    """Retorna URL do portal Kiwify para o cliente gerenciar a assinatura."""
+    if info.get("plano") == "free":
+        raise HTTPException(404, "Nenhuma assinatura ativa encontrada.")
+    # Kiwify não tem portal via API — o cliente acessa diretamente pelo e-mail
+    return {"portal_url": "https://kiwify.com.br/customer"}
+
+
+# ─── Stats públicos (sem auth — para landing page) ────────────────────────────
+
+@app.get("/api/public-stats")
+def public_stats():
+    """Estatísticas públicas para a landing page — sem autenticação."""
+    stats = db.estatisticas()
+    return {
+        "total_empresas":     stats.get("total", 0),
+        "total_com_telefone": stats.get("com_telefone", 0),
+        "total_com_email":    stats.get("com_email", 0),
+    }
 
 
 app.mount("/app", StaticFiles(directory="app"), name="app_static")

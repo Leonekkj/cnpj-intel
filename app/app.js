@@ -462,7 +462,10 @@ function updateSidebar() {
         ? "linear-gradient(90deg, var(--warn) 0%, oklch(0.90 0.14 75) 100%)"
         : "";
     }
-    if (elStats) elStats.innerHTML = `<span class="mono">${statsText}</span>`;
+    const upgradeLink = pct >= 80
+      ? `<br><a href="javascript:void(0)" onclick="showUpgradeModal()" class="plan-upgrade-link">Fazer upgrade →</a>`
+      : "";
+    if (elStats) elStats.innerHTML = `<span class="mono">${statsText}</span>${upgradeLink}`;
   } else {
     statsText = `${fmt(info.cnpjs_hoje)} / ilimitado hoje`;
     if (elBar) { elBar.style.width = "0%"; elBar.style.background = ""; }
@@ -473,6 +476,12 @@ function updateSidebar() {
   if (elUser)  elUser.textContent  = nomeExibido;
   if (elSub)   elSub.textContent   = info.nome ? nomePlano : info.plano;
   if (elAvatar) elAvatar.textContent = nomeExibido.slice(0, 2).toUpperCase();
+
+  // Show billing portal link for paid plans
+  const billingWrap = $("#billing-portal-wrap");
+  if (billingWrap) {
+    billingWrap.style.display = (info.plano !== "free" && info.pagarme_customer_id) ? "" : "none";
+  }
 
   // Show admin section
   const adminSection  = $("#admin-section");
@@ -991,7 +1000,7 @@ function row(d) {
   const isFree = state.plan === "free" || state.plan === "basico";
   const shouldBlur = isFree && !state.revealed.has(d.cnpj);
   const telCel = d.telefone
-    ? `<span class="contact-pill ac${shouldBlur ? " masked" : ""}">${ICONS.phone}${d.telefone}</span>`
+    ? `<span class="contact-pill ac${shouldBlur ? " masked" : ""}"><span style="color:var(--accent);font-size:10px;margin-right:2px" title="Celular verificado">✓</span>${ICONS.phone}${d.telefone}</span>`
     : `<span class="contact-em">—</span>`;
   const emCel = d.email
     ? `<span class="contact-pill in${shouldBlur ? " masked" : ""}">${ICONS.mail}${d.email.length > 22 ? d.email.slice(0,22)+"…" : d.email}</span>`
@@ -1861,51 +1870,76 @@ function confirmModal(message, onConfirm) {
 }
 
 // ─── Modals ──────────────────────────────────────────────────────
+async function iniciarCheckout(plano) {
+  const btn = document.getElementById(`btn-checkout-${plano}`);
+  if (btn) { btn.disabled = true; btn.textContent = "Redirecionando…"; }
+  try {
+    const data = await apiFetch(`/api/checkout-url?plano=${plano}`);
+    if (data.checkout_url) window.open(data.checkout_url, "_blank");
+    else toast("Erro ao iniciar pagamento. Tente novamente.", "error");
+  } catch (e) {
+    toast("Erro ao iniciar pagamento. Tente novamente.", "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = plano === "basico" ? "Assinar Básico" : "Assinar Pro"; }
+  }
+}
+
 function showUpgradeModal() {
   const existing = document.getElementById("upgrade-modal");
   if (existing) { existing.remove(); return; }
+  const currentPlan = state.plan || "free";
   const m = document.createElement("div");
   m.id = "upgrade-modal";
   m.className = "modal-overlay";
-  m.innerHTML = `<div class="modal-box">
+  m.innerHTML = `<div class="modal-box" style="max-width:600px">
     <div class="modal-header">
-      <h3>Planos disponíveis</h3>
+      <h3>Escolha seu plano</h3>
       <button class="modal-close" onclick="document.getElementById('upgrade-modal').remove()">×</button>
     </div>
     <div class="modal-body">
       <div class="upgrade-grid">
         <div class="upgrade-plan">
           <div class="upgrade-plan-name">Gratuito</div>
+          <div style="font-size:22px;font-weight:700;margin:8px 0">R$0</div>
           <div class="upgrade-plan-features">
-            <div>10 CNPJs / dia</div>
-            <div>Acesso ao dashboard</div>
-            <div style="color:var(--text-dim)">Sem exportação CSV</div>
-            <div style="color:var(--text-dim)">Sem API</div>
+            <div>✓ 10 CNPJs / dia</div>
+            <div>✓ Filtros completos</div>
+            <div style="color:var(--text-dim)">✗ Exportar CSV</div>
+            <div style="color:var(--text-dim)">✗ API</div>
           </div>
+          ${currentPlan === "free" ? '<div style="margin-top:12px;font-size:12px;color:var(--text-dim)">Plano atual</div>' : ""}
         </div>
         <div class="upgrade-plan featured">
           <div class="upgrade-plan-name">Básico</div>
+          <div style="font-size:22px;font-weight:700;margin:8px 0">R$50<span style="font-size:13px;font-weight:400;color:var(--text-dim)">/mês</span></div>
           <div class="upgrade-plan-features">
-            <div>500 CNPJs / dia</div>
-            <div>Acesso ao dashboard</div>
-            <div>Exportação CSV</div>
-            <div style="color:var(--text-dim)">Sem API</div>
+            <div>✓ 500 CNPJs / dia</div>
+            <div>✓ Filtros completos</div>
+            <div>✓ Exportar CSV (500 linhas)</div>
+            <div style="color:var(--text-dim)">✗ API</div>
           </div>
+          ${currentPlan !== "basico" && currentPlan !== "pro"
+            ? `<button id="btn-checkout-basico" class="btn" style="margin-top:14px;width:100%" onclick="iniciarCheckout('basico')">Assinar Básico</button>`
+            : currentPlan === "basico" ? '<div style="margin-top:12px;font-size:12px;color:var(--text-dim)">Plano atual</div>' : ""}
         </div>
         <div class="upgrade-plan featured-pro">
           <div class="upgrade-plan-name">Pro</div>
+          <div style="font-size:22px;font-weight:700;margin:8px 0">R$99<span style="font-size:13px;font-weight:400;color:var(--text-dim)">/mês</span></div>
           <div class="upgrade-plan-features">
-            <div>Ilimitado</div>
-            <div>Acesso ao dashboard</div>
-            <div>Exportação CSV</div>
-            <div>Acesso via API</div>
+            <div>✓ Ilimitado</div>
+            <div>✓ Filtros completos</div>
+            <div>✓ Exportar CSV (5.000 linhas)</div>
+            <div>✓ Acesso via API</div>
           </div>
+          ${currentPlan !== "pro"
+            ? `<button id="btn-checkout-pro" class="btn" style="margin-top:14px;width:100%;background:var(--accent)" onclick="iniciarCheckout('pro')">Assinar Pro</button>`
+            : '<div style="margin-top:12px;font-size:12px;color:var(--text-dim)">Plano atual</div>'}
         </div>
       </div>
-      <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--text-dim)">Entre em contato para fazer upgrade do seu plano.</p>
+      <p style="text-align:center;margin-top:14px;font-size:12px;color:var(--text-dim)">Pagamento seguro via PIX, boleto ou cartão. Cancele quando quiser.</p>
     </div>
     <div class="modal-footer">
-      <button class="btn" onclick="document.getElementById('upgrade-modal').remove()">Fechar</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('upgrade-modal').remove()">Fechar</button>
     </div>
   </div>`;
   m.addEventListener("click", e => { if (e.target === m) m.remove(); });
@@ -2177,10 +2211,94 @@ async function init() {
   render();
   showTab("dashboard");
 
+  // Wire billing portal link — Kiwify customer portal (no API call needed)
+  const billingLink = document.getElementById("billing-portal-link");
+  if (billingLink) {
+    billingLink.href = "https://kiwify.com.br/customer";
+    billingLink.target = "_blank";
+    billingLink.rel = "noopener noreferrer";
+    billingLink.onclick = null;
+  }
+
+  // Show onboarding modal once on first login
+  if (!localStorage.getItem("cnpj_onboarded")) {
+    setTimeout(showOnboardingModal, 800);
+  }
+
   // Auto-refresh
   setInterval(loadStats,      10000);
   setInterval(loadPlan,       15000);
   setInterval(loadCategories, 60000);
+}
+
+function showOnboardingModal() {
+  const m = document.createElement("div");
+  m.id = "onboarding-modal";
+  m.className = "modal-overlay";
+  let step = 1;
+
+  function renderStep() {
+    const steps = [
+      {
+        n: 1, title: "Filtre por setor e estado",
+        body: `<p style="color:var(--text-dim);margin-bottom:16px">Escolha uma categoria, o estado e o porte da empresa. Em segundos você tem uma lista segmentada.</p>
+          <div style="background:var(--surface);border-radius:8px;padding:12px 14px;font-size:12px;display:flex;gap:10px;flex-wrap:wrap">
+            <span style="background:var(--card);padding:4px 10px;border-radius:6px">🍽 Alimentação</span>
+            <span style="background:var(--card);padding:4px 10px;border-radius:6px">📍 SP</span>
+            <span style="background:var(--card);padding:4px 10px;border-radius:6px">📞 Com celular</span>
+          </div>`,
+      },
+      {
+        n: 2, title: "Veja o contato verificado",
+        body: `<p style="color:var(--text-dim);margin-bottom:16px">Cada empresa traz celular mobile validado, e-mail com MX verificado e o nome do sócio da Receita Federal.</p>
+          <div style="background:var(--surface);border-radius:8px;padding:12px 14px;font-size:12px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px"><span style="color:var(--accent);font-weight:600">✓</span><span>📱 11 9 9999-8888</span><span style="color:var(--text-dim);font-size:10px">celular verificado</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="color:var(--accent);font-weight:600">✓</span><span>✉️ contato@empresa.com</span><span style="color:var(--text-dim);font-size:10px">MX válido</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="color:var(--accent);font-weight:600">✓</span><span>👤 João Silva</span><span style="color:var(--text-dim);font-size:10px">sócio oficial (Receita Federal)</span></div>
+          </div>`,
+      },
+      {
+        n: 3, title: "Exporte pra CRM ou WhatsApp",
+        body: `<p style="color:var(--text-dim);margin-bottom:16px">Com o plano Básico ou Pro, exporte até 5.000 empresas em CSV — compatível com qualquer CRM, planilha ou automação.</p>
+          <div style="background:var(--surface);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--text-dim)">Selecione as empresas → clique em <strong style="color:var(--text)">Exportar CSV</strong> → importe no seu CRM.</div>`,
+      },
+    ];
+    const s = steps[step - 1];
+    m.querySelector(".ob-title").textContent = s.title;
+    m.querySelector(".ob-body").innerHTML = s.body;
+    m.querySelector(".ob-step-ind").textContent = `${s.n} / 3`;
+    m.querySelector(".ob-back").style.visibility = step === 1 ? "hidden" : "visible";
+    m.querySelector(".ob-next").textContent = step === 3 ? "Começar →" : "Próximo →";
+  }
+
+  m.innerHTML = `<div class="modal-box" style="max-width:480px">
+    <div class="modal-header">
+      <h3>Bem-vindo ao CNPJ Intel 👋</h3>
+      <button class="modal-close" onclick="document.getElementById('onboarding-modal').remove();localStorage.setItem('cnpj_onboarded','1')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px"><span class="ob-step-ind">1 / 3</span></div>
+      <div style="font-size:17px;font-weight:600;margin-bottom:14px" class="ob-title"></div>
+      <div class="ob-body"></div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn btn-ghost ob-back">← Voltar</button>
+      <button class="btn ob-next">Próximo →</button>
+    </div>
+  </div>`;
+
+  m.querySelector(".ob-back").onclick = () => { if (step > 1) { step--; renderStep(); } };
+  m.querySelector(".ob-next").onclick = () => {
+    if (step < 3) { step++; renderStep(); }
+    else {
+      localStorage.setItem("cnpj_onboarded", "1");
+      m.remove();
+      showTab("empresas");
+    }
+  };
+
+  renderStep();
+  document.body.appendChild(m);
 }
 
 document.addEventListener("DOMContentLoaded", init);

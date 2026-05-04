@@ -607,6 +607,7 @@ class Database:
             conn.commit()
         # Migrate: add email/password/nome columns if missing
         self._migrar_colunas_auth()
+        self._migrar_colunas_pagarme()
 
     def _migrar_colunas_auth(self):
         with _conn() as conn:
@@ -621,6 +622,37 @@ class Database:
                         cur.execute(f"ALTER TABLE tokens ADD COLUMN {col} {defn}")
                     except Exception:
                         conn.rollback()
+            conn.commit()
+
+    def _migrar_colunas_pagarme(self):
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS pagarme_customer_id TEXT")
+                cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS subscription_status TEXT DEFAULT 'free'")
+                cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS subscription_period_end TEXT")
+            else:
+                for col, defn in [
+                    ("pagarme_customer_id", "TEXT"),
+                    ("subscription_status", "TEXT DEFAULT 'free'"),
+                    ("subscription_period_end", "TEXT"),
+                ]:
+                    try:
+                        cur.execute(f"ALTER TABLE tokens ADD COLUMN {col} {defn}")
+                    except Exception:
+                        conn.rollback()
+            conn.commit()
+
+    def atualizar_plano_pagarme(self, email: str, plano: str, customer_id: str, status: str, period_end: str):
+        """Atualiza plano e dados de assinatura Pagar.me pelo email do usuário."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"""UPDATE tokens SET plano = {PH}, pagarme_customer_id = {PH},
+                    subscription_status = {PH}, subscription_period_end = {PH}
+                    WHERE email = {PH}""",
+                (plano, customer_id, status, period_end, email.strip().lower())
+            )
             conn.commit()
 
     def criar_conta_email(self, email: str, password: str, nome: str) -> str:
@@ -695,12 +727,20 @@ class Database:
         hoje = str(date_type.today())
         with _conn() as conn:
             cur = conn.cursor()
-            cur.execute(f"SELECT plano, cnpjs_hoje, data_reset, ativo, nome FROM tokens WHERE token = {PH}", (token,))
+            cur.execute(
+                f"SELECT plano, cnpjs_hoje, data_reset, ativo, nome, email, "
+                f"pagarme_customer_id, subscription_status, subscription_period_end "
+                f"FROM tokens WHERE token = {PH}",
+                (token,)
+            )
             row = cur.fetchone()
             if not row:
                 return None
 
-            plano, cnpjs_hoje, data_reset, ativo, nome = row[0], row[1], row[2], row[3], row[4]
+            (plano, cnpjs_hoje, data_reset, ativo, nome, email,
+             pagarme_customer_id, subscription_status, subscription_period_end) = (
+                row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8]
+            )
 
             if not ativo:
                 return None
@@ -722,12 +762,16 @@ class Database:
                 "plano":       plano,
                 "nome_plano":  info_plano["nome"],
                 "nome":        nome or "",
+                "email":       email or "",
                 "cnpjs_hoje":  cnpjs_hoje,
                 "limite_dia":  limite,
                 "restante":    (limite - cnpjs_hoje) if limite is not None else None,
                 "export":      info_plano["export"],
                 "api":         info_plano["api"],
                 "limite_atingido": limite is not None and cnpjs_hoje >= limite,
+                "pagarme_customer_id":    pagarme_customer_id,
+                "subscription_status":    subscription_status or "free",
+                "subscription_period_end": subscription_period_end,
             }
 
     def consumir_quota_atomico(self, token: str, quantidade: int, limite) -> bool:
