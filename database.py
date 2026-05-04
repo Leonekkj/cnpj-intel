@@ -1769,8 +1769,9 @@ class Database:
             conn.commit()
 
     def get_snapshot_anterior(self) -> dict | None:
-        from datetime import date
+        from datetime import date, timedelta
         today = date.today().isoformat()
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
         with _conn() as conn:
             cur = conn.cursor()
             cur.execute(
@@ -1781,9 +1782,35 @@ class Database:
                 (today,)
             )
             row = cur.fetchone()
-        if not row:
-            return None
-        return {"data": row[0], "total": row[1], "com_telefone": row[2], "com_email": row[3]}
+        if row:
+            return {"data": row[0], "total": row[1], "com_telefone": row[2], "com_email": row[3]}
+        # No stored snapshot yet — derive "before today" counts from atualizado_em
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("""
+                    SELECT
+                        COUNT(*),
+                        COUNT(*) FILTER (WHERE telefone IS NOT NULL AND TRIM(telefone) != ''
+                            AND LOWER(telefone) NOT IN ('n/a','none','null','nan','-')),
+                        COUNT(*) FILTER (WHERE email IS NOT NULL AND email != '')
+                    FROM empresas
+                    WHERE DATE(atualizado_em::timestamp) < %s
+                """, (today,))
+            else:
+                cur.execute("""
+                    SELECT
+                        COUNT(*),
+                        SUM(CASE WHEN telefone IS NOT NULL AND TRIM(telefone) != ''
+                            AND LOWER(telefone) NOT IN ('n/a','none','null','nan','-') THEN 1 ELSE 0 END),
+                        SUM(CASE WHEN email IS NOT NULL AND email != '' THEN 1 ELSE 0 END)
+                    FROM empresas
+                    WHERE DATE(atualizado_em) < ?
+                """, (today,))
+            row = cur.fetchone()
+        if row and row[0]:
+            return {"data": yesterday, "total": row[0], "com_telefone": row[1] or 0, "com_email": row[2] or 0}
+        return None
 
     def get_snapshots_historico(self, dias: int = 14) -> list:
         with _conn() as conn:
