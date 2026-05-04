@@ -696,6 +696,11 @@ async def webhook_kiwify(request: Request):
     except Exception:
         raise HTTPException(400, "Payload inválido")
 
+    # DEBUG TEMPORÁRIO
+    import logging
+    logging.warning(f"[KIWIFY DEBUG] headers={dict(request.headers)}")
+    logging.warning(f"[KIWIFY DEBUG] payload={payload}")
+
     # Verificação do token secreto (configurado no painel Kiwify → Webhooks)
     if KIWIFY_WEBHOOK_TOKEN and payload.get("token") != KIWIFY_WEBHOOK_TOKEN:
         raise HTTPException(401, "Token inválido")
