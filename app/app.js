@@ -2034,24 +2034,15 @@ function showAuthOverlay(msg = "") {
     <svg class="auth-logo" viewBox="0 0 24 24" fill="none"><path d="M4 8L12 4L20 8V16L12 20L4 16V8Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 12L20 8M12 12V20M12 12L4 8" stroke="currentColor" stroke-width="1.5"/></svg>
     <div class="auth-brand">CNPJ Intel</div>
     <div class="auth-sub">Plataforma B2B de prospecção de empresas</div>
-    <div class="auth-tabs">
-      <button class="auth-tab on" id="tab-login" onclick="authSwitchTab('login')">Entrar</button>
-      <button class="auth-tab" id="tab-signup" onclick="authSwitchTab('signup')">Criar conta</button>
-    </div>
     <div id="auth-form-login">
       <div class="auth-field"><label>E-mail</label><input id="login-email" class="auth-input" type="email" placeholder="seu@email.com" autocomplete="email"></div>
       <div class="auth-field"><label>Senha</label><input id="login-password" class="auth-input" type="password" placeholder="••••••••" autocomplete="current-password"></div>
       <button class="auth-btn" id="login-btn" onclick="submitLogin()">Entrar</button>
     </div>
-    <div id="auth-form-signup" style="display:none">
-      <div class="auth-field"><label>Nome</label><input id="signup-nome" class="auth-input" type="text" placeholder="Seu nome" autocomplete="name"></div>
-      <div class="auth-field"><label>E-mail</label><input id="signup-email" class="auth-input" type="email" placeholder="seu@email.com" autocomplete="email"></div>
-      <div class="auth-field"><label>Senha</label><input id="signup-password" class="auth-input" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div>
-      <div class="auth-field"><label>Confirmar senha</label><input id="signup-password2" class="auth-input" type="password" placeholder="Repita a senha" autocomplete="new-password"></div>
-      <button class="auth-btn" id="signup-btn" onclick="submitSignup()">Criar conta grátis</button>
-    </div>
     <div class="auth-err" id="auth-err">${msg}</div>
     <div class="auth-divider">ou</div>
+    <div id="google-signin-btn" style="display:flex;justify-content:center;margin-bottom:4px"></div>
+    <div class="auth-divider" style="margin:16px 0 0">ou</div>
     <div class="auth-token-link" onclick="authSwitchTab('token')">Tenho um token de acesso →</div>
     <div id="auth-form-token" style="display:none">
       <div class="auth-field" style="margin-top:12px"><label>Token de acesso</label><input id="token-input" class="auth-input" type="text" placeholder="Cole seu token" autocomplete="off"></div>
@@ -2062,16 +2053,16 @@ function showAuthOverlay(msg = "") {
 
   document.getElementById("login-password")?.addEventListener("keydown", e => { if (e.key === "Enter") submitLogin(); });
   document.getElementById("login-email")?.addEventListener("keydown",    e => { if (e.key === "Enter") submitLogin(); });
-  document.getElementById("signup-password2")?.addEventListener("keydown", e => { if (e.key === "Enter") submitSignup(); });
   document.getElementById("token-input")?.addEventListener("keydown", e => { if (e.key === "Enter") submitToken(); });
+
+  // Init Google Sign-In after DOM is ready
+  const _GCI = "404333091844-0g0ioa5lqi3nesvsud520lrhdph8eg7c.apps.googleusercontent.com";
+  _initGoogleSignIn(_GCI);
 }
 
 function authSwitchTab(tab) {
-  document.getElementById("auth-form-login").style.display  = tab === "login"  ? "" : "none";
-  document.getElementById("auth-form-signup").style.display = tab === "signup" ? "" : "none";
-  document.getElementById("auth-form-token").style.display  = tab === "token"  ? "" : "none";
-  document.getElementById("tab-login")?.classList.toggle("on",  tab === "login");
-  document.getElementById("tab-signup")?.classList.toggle("on", tab === "signup");
+  document.getElementById("auth-form-login").style.display = tab === "login" ? "" : "none";
+  document.getElementById("auth-form-token").style.display = tab === "token" ? "" : "none";
   document.getElementById("auth-err").textContent = "";
 }
 
@@ -2119,21 +2110,35 @@ async function submitLogin() {
   }
 }
 
-async function submitSignup() {
-  const nome      = document.getElementById("signup-nome")?.value.trim();
-  const email     = document.getElementById("signup-email")?.value.trim();
-  const password  = document.getElementById("signup-password")?.value;
-  const password2 = document.getElementById("signup-password2")?.value;
-  if (!nome || !email || !password) { authShake(); authSetError("Preencha todos os campos."); return; }
-  if (password !== password2)       { authShake(); authSetError("As senhas não coincidem."); return; }
-  if (password.length < 6)          { authShake(); authSetError("Senha deve ter ao menos 6 caracteres."); return; }
-  const btn = document.getElementById("signup-btn");
-  if (btn) { btn.disabled = true; btn.textContent = "Criando conta…"; }
+function _initGoogleSignIn(clientId) {
+  if (!window.google?.accounts?.id) {
+    // GIS script may not be loaded yet — retry once after a short delay
+    setTimeout(() => _initGoogleSignIn(clientId), 500);
+    return;
+  }
+  google.accounts.id.initialize({
+    client_id: clientId,
+    callback: _handleGoogleCredential,
+    auto_select: false,
+  });
+  const el = document.getElementById("google-signin-btn");
+  if (el) {
+    google.accounts.id.renderButton(el, {
+      theme: "outline",
+      size: "large",
+      text: "continue_with",
+      locale: "pt-BR",
+      width: "328",
+    });
+  }
+}
+
+async function _handleGoogleCredential(response) {
   try {
-    const res = await fetch("/api/signup", {
+    const res = await fetch("/api/auth/google", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome, email, password }),
+      body: JSON.stringify({ credential: response.credential }),
     });
     const data = await res.json();
     if (res.ok) {
@@ -2144,13 +2149,11 @@ async function submitSignup() {
       location.reload();
     } else {
       authShake();
-      authSetError(data.detail || "Erro ao criar conta.");
-      if (btn) { btn.disabled = false; btn.textContent = "Criar conta grátis"; }
+      authSetError(data.detail || "Erro ao entrar com Google.");
     }
   } catch {
     authShake();
     authSetError("Erro de conexão. Tente novamente.");
-    if (btn) { btn.disabled = false; btn.textContent = "Criar conta grátis"; }
   }
 }
 

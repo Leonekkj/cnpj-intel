@@ -224,15 +224,15 @@ class LoginBody(BaseModel):
     email: str
     password: str
 
+class GoogleAuthBody(BaseModel):
+    credential: str  # Google ID token (JWT) from Google Identity Services
+
 @app.post("/api/signup")
 def signup(body: SignupBody):
-    if len(body.password) < 6:
-        raise HTTPException(400, "Senha deve ter ao menos 6 caracteres")
-    try:
-        token = db.criar_conta_email(body.email, body.password, body.nome)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return {"token": token, "plano": "free"}
+    raise HTTPException(
+        status_code=410,
+        detail="Cadastro por e-mail desativado. Use 'Entrar com Google'."
+    )
 
 @app.post("/api/login")
 def login_email(body: LoginBody):
@@ -241,6 +241,33 @@ def login_email(body: LoginBody):
         raise HTTPException(401, "E-mail ou senha incorretos")
     info = db.verificar_token_db(token)
     return {"token": token, "plano": info["plano"], "nome_plano": info["nome_plano"]}
+
+@app.post("/api/auth/google")
+def auth_google(body: GoogleAuthBody):
+    """Autentica via Google OAuth. Cria conta automaticamente se não existir."""
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(503, "Login com Google não configurado.")
+    from google.oauth2 import id_token as _id_token
+    from google.auth.transport import requests as _grequests
+    try:
+        idinfo = _id_token.verify_oauth2_token(
+            body.credential, _grequests.Request(), GOOGLE_CLIENT_ID
+        )
+    except ValueError:
+        raise HTTPException(401, "Token Google inválido ou expirado.")
+    google_sub = idinfo["sub"]
+    email = idinfo.get("email", "").lower().strip()
+    nome  = idinfo.get("name", "") or (email.split("@")[0] if email else "")
+    if not email:
+        raise HTTPException(400, "Conta Google sem e-mail verificado.")
+    token = db.criar_conta_google(google_sub, email, nome)
+    info  = db.verificar_token_db(token)
+    return {"token": token, "plano": info["plano"], "nome_plano": info["nome_plano"]}
+
+@app.get("/api/config/google")
+def google_config():
+    """Retorna o GOOGLE_CLIENT_ID público para o frontend."""
+    return {"client_id": GOOGLE_CLIENT_ID}
 
 
 # ─── Plano do usuário ──────────────────────────────────────────────────────────
@@ -282,8 +309,8 @@ def listar_empresas(
     com_contato:   bool = Query(False, description="Padrão: retorna todos os CNPJs"),
     pagina:        int  = Query(1, ge=1),
     por_pagina:    int  = Query(50, le=200),
-    sort_by:       str  = Query("razao_social", description="Campo para ordenar"),
-    sort_dir:      str  = Query("asc", description="asc ou desc"),
+    sort_by:       str  = Query("completeness", description="Campo para ordenar"),
+    sort_dir:      str  = Query("desc", description="asc ou desc"),
     info:          dict = Depends(get_token_info_soft),
 ):
     plano = info["plano"]
@@ -657,6 +684,7 @@ def vacuum_banco(_: str = Depends(require_admin)):
 KIWIFY_CHECKOUT_BASICO  = os.environ.get("KIWIFY_CHECKOUT_BASICO", "")
 KIWIFY_CHECKOUT_PRO     = os.environ.get("KIWIFY_CHECKOUT_PRO", "")
 KIWIFY_WEBHOOK_TOKEN    = os.environ.get("KIWIFY_WEBHOOK_TOKEN", "")
+GOOGLE_CLIENT_ID        = os.environ.get("GOOGLE_CLIENT_ID", "")
 
 _KIWIFY_CHECKOUT_MAP = {
     "basico": KIWIFY_CHECKOUT_BASICO,

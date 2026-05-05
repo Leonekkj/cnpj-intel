@@ -608,6 +608,7 @@ class Database:
         # Migrate: add email/password/nome columns if missing
         self._migrar_colunas_auth()
         self._migrar_colunas_pagarme()
+        self._migrar_colunas_google()
 
     def _migrar_colunas_auth(self):
         with _conn() as conn:
@@ -617,11 +618,15 @@ class Database:
                 cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS password_hash TEXT")
                 cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS nome TEXT")
             else:
-                for col, defn in [("email", "TEXT UNIQUE"), ("password_hash", "TEXT"), ("nome", "TEXT")]:
-                    try:
-                        cur.execute(f"ALTER TABLE tokens ADD COLUMN {col} {defn}")
-                    except Exception:
-                        conn.rollback()
+                cur.execute("PRAGMA table_info(tokens)")
+                existing = {row[1] for row in cur.fetchall()}
+                if "email" not in existing:
+                    cur.execute("ALTER TABLE tokens ADD COLUMN email TEXT")
+                if "password_hash" not in existing:
+                    cur.execute("ALTER TABLE tokens ADD COLUMN password_hash TEXT")
+                if "nome" not in existing:
+                    cur.execute("ALTER TABLE tokens ADD COLUMN nome TEXT")
+                cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_email ON tokens(email) WHERE email IS NOT NULL")
             conn.commit()
 
     def _migrar_colunas_pagarme(self):
@@ -632,16 +637,72 @@ class Database:
                 cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS subscription_status TEXT DEFAULT 'free'")
                 cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS subscription_period_end TEXT")
             else:
-                for col, defn in [
-                    ("pagarme_customer_id", "TEXT"),
-                    ("subscription_status", "TEXT DEFAULT 'free'"),
-                    ("subscription_period_end", "TEXT"),
-                ]:
-                    try:
-                        cur.execute(f"ALTER TABLE tokens ADD COLUMN {col} {defn}")
-                    except Exception:
-                        conn.rollback()
+                cur.execute("PRAGMA table_info(tokens)")
+                existing = {row[1] for row in cur.fetchall()}
+                if "pagarme_customer_id" not in existing:
+                    cur.execute("ALTER TABLE tokens ADD COLUMN pagarme_customer_id TEXT")
+                if "subscription_status" not in existing:
+                    cur.execute("ALTER TABLE tokens ADD COLUMN subscription_status TEXT DEFAULT 'free'")
+                if "subscription_period_end" not in existing:
+                    cur.execute("ALTER TABLE tokens ADD COLUMN subscription_period_end TEXT")
             conn.commit()
+
+    def _migrar_colunas_google(self):
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS google_sub TEXT UNIQUE")
+            else:
+                cur.execute("PRAGMA table_info(tokens)")
+                existing = {row[1] for row in cur.fetchall()}
+                if "google_sub" not in existing:
+                    cur.execute("ALTER TABLE tokens ADD COLUMN google_sub TEXT")
+                cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_google_sub ON tokens(google_sub) WHERE google_sub IS NOT NULL")
+            conn.commit()
+
+    def criar_conta_google(self, google_sub: str, email: str, nome: str) -> str:
+        """Cria ou recupera conta vinculada ao Google OAuth.
+        Prioridade: google_sub → email existente → nova conta.
+        """
+        with _conn() as conn:
+            cur = conn.cursor()
+            # 1. Existing account by google_sub
+            cur.execute(f"SELECT token FROM tokens WHERE google_sub = {PH}", (google_sub,))
+            row = cur.fetchone()
+            if row:
+                return row[0]
+            # 2. Existing email/password account — bind google_sub
+            cur.execute(f"SELECT token FROM tokens WHERE email = {PH}", (email,))
+            row = cur.fetchone()
+            if row:
+                cur.execute(
+                    f"UPDATE tokens SET google_sub = {PH} WHERE email = {PH}",
+                    (google_sub, email)
+                )
+                conn.commit()
+                return row[0]
+        # 3. New account
+        token = secrets.token_urlsafe(32)
+        agora = datetime.utcnow().isoformat()
+        hoje  = str(date_type.today())
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute(
+                    """INSERT INTO tokens
+                       (token, plano, cnpjs_hoje, data_reset, ativo, criado_em, email, nome, google_sub)
+                       VALUES (%s, 'free', 0, %s, TRUE, %s, %s, %s, %s)""",
+                    (token, hoje, agora, email, nome, google_sub)
+                )
+            else:
+                cur.execute(
+                    """INSERT INTO tokens
+                       (token, plano, cnpjs_hoje, data_reset, ativo, criado_em, email, nome, google_sub)
+                       VALUES (?, 'free', 0, ?, 1, ?, ?, ?, ?)""",
+                    (token, hoje, agora, email, nome, google_sub)
+                )
+            conn.commit()
+        return token
 
     def atualizar_plano_pagarme(self, email: str, plano: str, customer_id: str, status: str, period_end: str):
         """Atualiza plano e dados de assinatura Pagar.me pelo email do usuário."""
@@ -1303,7 +1364,7 @@ class Database:
                         com_telefone=False, com_site=False,
                         com_contato=False,
                         pagina=1, por_pagina=50,
-                        sort_by="razao_social", sort_dir="asc") -> dict:
+                        sort_by="completeness", sort_dir="desc") -> dict:
         filtros = ["1=1"]
         params = []
 
@@ -1355,17 +1416,32 @@ class Database:
         where = " AND ".join(filtros)
         offset = (pagina - 1) * por_pagina
 
-        _ALLOWED_SORT = {"razao_social", "cnpj", "porte", "municipio", "abertura", "atualizado_em"}
+        _ALLOWED_SORT = {"razao_social", "cnpj", "porte", "municipio", "abertura", "atualizado_em", "completeness"}
         if sort_by not in _ALLOWED_SORT:
-            sort_by = "razao_social"
+            sort_by = "completeness"
         direction = "ASC" if sort_dir.lower() != "desc" else "DESC"
+
+        if sort_by == "completeness":
+            _tel_score = (
+                "CASE WHEN telefone IS NOT NULL AND TRIM(telefone) != '' "
+                "AND LOWER(telefone) NOT IN ('n/a','none','null','nan','-') THEN 1 ELSE 0 END"
+            )
+            order_clause = (
+                f"(CASE WHEN razao_social IS NOT NULL AND razao_social != '' THEN 1 ELSE 0 END"
+                f" + {_tel_score}"
+                f" + CASE WHEN email IS NOT NULL AND email != '' THEN 1 ELSE 0 END"
+                f" + CASE WHEN socio_principal IS NOT NULL AND socio_principal != '' THEN 1 ELSE 0 END"
+                f") DESC, razao_social ASC"
+            )
+        else:
+            order_clause = f"{sort_by} {direction}"
 
         with _conn() as conn:
             cur = conn.cursor()
             cur.execute(f"SELECT COUNT(*) FROM empresas WHERE {where}", params)
             total = cur.fetchone()[0]
             cur.execute(
-                f"SELECT * FROM empresas WHERE {where} ORDER BY {sort_by} {direction} LIMIT {PH} OFFSET {PH}",
+                f"SELECT * FROM empresas WHERE {where} ORDER BY {order_clause} LIMIT {PH} OFFSET {PH}",
                 params + [por_pagina, offset]
             )
             cols = [d[0] for d in cur.description]
