@@ -596,7 +596,9 @@ def criar_token(
     """Cria um novo token de acesso para um cliente."""
     if plano not in ("free", "basico", "pro"):
         raise HTTPException(status_code=400, detail="Plano inválido. Use: free, basico, pro")
-    return db.criar_token(token, plano)
+    result = db.criar_token(token, plano)
+    _log_api.info(f"ADMIN criar_token token={token[:8]}... plano={plano}")
+    return result
 
 
 @app.get("/api/admin/tokens")
@@ -609,12 +611,14 @@ def listar_tokens(_: str = Depends(require_admin)):
 def excluir_token(token: str, _: str = Depends(require_admin)):
     """Exclui permanentemente um token de acesso."""
     db.excluir_token(token)
+    _log_api.info(f"ADMIN excluir_token token={token[:8]}...")
     return {"status": "excluido", "token": token}
 
 
 @app.post("/api/admin/reset-database")
 def reset_database(_: str = Depends(require_admin)):
     """Apaga todos os dados de empresas e zera o progresso do agente."""
+    _log_api.warning("ADMIN reset_database — APAGANDO TODA A BASE")
     db.reset_completo()
     _stats_cache["data"] = None
     return {"status": "ok", "mensagem": "Base zerada com sucesso"}
@@ -626,6 +630,7 @@ def iniciar_agente(_: str = Depends(require_admin)):
     if _agente_proc is not None and _agente_proc.poll() is None:
         return {"status": "Agente já está rodando", "pid": _agente_proc.pid}
     _agente_proc = subprocess.Popen([sys.executable, "agent/agent.py"])
+    _log_api.info(f"ADMIN iniciar_agente pid={_agente_proc.pid}")
     return {"status": "Agente iniciado", "pid": _agente_proc.pid}
 
 

@@ -1,8 +1,15 @@
 // ─── CNPJ Intel Dashboard ───────────────────────────────────────
 
 const API_BASE = location.hostname === "localhost" ? "http://localhost:8000" : "";
-const TOKEN = new URLSearchParams(location.search).get("token") || localStorage.getItem("cnpj_token") || "";
-if (TOKEN) localStorage.setItem("cnpj_token", TOKEN);
+const _urlToken = new URLSearchParams(location.search).get("token");
+if (_urlToken) {
+  localStorage.setItem("cnpj_token", _urlToken);
+  // Remove token from URL so it doesn't appear in browser history or referer headers
+  const _clean = new URL(location.href);
+  _clean.searchParams.delete("token");
+  history.replaceState(null, "", _clean.pathname + (_clean.search || ""));
+}
+const TOKEN = _urlToken || localStorage.getItem("cnpj_token") || "";
 const H = TOKEN ? { "Authorization": "Bearer " + TOKEN } : {};
 
 async function apiFetch(path, opts = {}) {
