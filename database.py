@@ -919,6 +919,25 @@ class Database:
             cur.execute(f"DELETE FROM tokens WHERE token = {PH}", (token,))
             conn.commit()
 
+    def deletar_conta(self, token: str) -> bool:
+        """Remove conta e todos os dados do usuário (LGPD art. 18).
+        PostgreSQL: CASCADE elimina listas/itens automaticamente.
+        SQLite: deleção manual em ordem para respeitar FKs.
+        Retorna True se a conta existia e foi removida."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            if not USE_POSTGRES:
+                # SQLite sem FK cascade: deletar na ordem certa
+                cur.execute(f"""
+                    DELETE FROM lista_itens WHERE lista_id IN (
+                        SELECT id FROM listas WHERE token = {PH}
+                    )
+                """, (token,))
+                cur.execute(f"DELETE FROM listas WHERE token = {PH}", (token,))
+            cur.execute(f"DELETE FROM tokens WHERE token = {PH}", (token,))
+            conn.commit()
+            return cur.rowcount > 0
+
     def criar_tabelas(self):
         with _conn() as conn:
             cur = conn.cursor()

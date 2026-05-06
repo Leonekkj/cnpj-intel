@@ -296,6 +296,22 @@ def meu_plano(info: dict = Depends(get_token_info_soft)):
     }
 
 
+@app.delete("/api/conta")
+def deletar_conta(info: dict = Depends(get_token_info_soft)):
+    """Remove a conta e todos os dados do usuário (LGPD art. 18, direito ao apagamento).
+    Cascateia: listas salvas, itens de listas e o token são deletados permanentemente.
+    """
+    token = info.get("token", "")
+    if not token:
+        raise HTTPException(400, "Token inválido")
+    if info.get("plano") == "admin":
+        raise HTTPException(403, "Contas admin não podem ser deletadas por esta rota")
+    removido = db.deletar_conta(token)
+    if not removido:
+        raise HTTPException(404, "Conta não encontrada")
+    return {"status": "deleted", "message": "Conta e todos os dados removidos com sucesso"}
+
+
 # ─── Dados ─────────────────────────────────────────────────────────────────────
 
 @app.get("/api/empresas")
