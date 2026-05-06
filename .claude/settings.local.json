@@ -3,5 +3,9 @@
     "allow": [
       "Read(//c/Users/ideia/.claude/**)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "capsule",
+    "postgres"
+  ]
 }

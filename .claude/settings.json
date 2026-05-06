@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ruff check $CLAUDE_FILE_PATH 2>&1 || true"
+            "command": "python3 -c \"import sys,json; data=json.load(sys.stdin); open('C:/Users/ideia/OneDrive/Desktop/CNPJ/.claude/hook-test.log','a').write(str(data)+'\\n')\" 2>&1; echo hook_ran"
           }
         ]
       }
