@@ -84,9 +84,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CNPJ Intel API", version="3.0", lifespan=lifespan)
 
+_DEFAULT_ORIGINS = [
+    "https://cnpjintel.netlify.app",
+    "https://web-production-aaeed.up.railway.app",
+]
 ALLOWED_ORIGINS = [
     o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()
-] or ["*"]
+] or _DEFAULT_ORIGINS
 
 app.add_middleware(
     CORSMiddleware,
@@ -766,15 +770,24 @@ def billing_portal(info: dict = Depends(get_token_info_soft)):
 
 # ─── Stats públicos (sem auth — para landing page) ────────────────────────────
 
+_public_stats_cache = {"data": None, "ts": 0}
+_PUBLIC_STATS_TTL = 60  # segundos — evita 5 full-scans por requisição de bot
+
 @app.get("/api/public-stats")
 def public_stats():
-    """Estatísticas públicas para a landing page — sem autenticação."""
+    """Estatísticas públicas para a landing page — sem autenticação, cache 60s."""
+    agora = _time.time()
+    if _public_stats_cache["data"] and (agora - _public_stats_cache["ts"]) < _PUBLIC_STATS_TTL:
+        return _public_stats_cache["data"]
     stats = db.estatisticas()
-    return {
+    data = {
         "total_empresas":     stats.get("total", 0),
         "total_com_telefone": stats.get("com_telefone", 0),
         "total_com_email":    stats.get("com_email", 0),
     }
+    _public_stats_cache["data"] = data
+    _public_stats_cache["ts"] = agora
+    return data
 
 
 app.mount("/app", StaticFiles(directory="app"), name="app_static")
