@@ -39,6 +39,7 @@ def _run_db_fast():
     db.criar_tabela_tokens()
     db.criar_tabela_listas()
     db.criar_tabela_stats_snapshots()
+    db.criar_tabela_webhook_events()
     # Ensure ADMIN_TOKEN exists in tokens table so FK on listas works
     if ADMIN_TOKEN:
         db.criar_token(ADMIN_TOKEN, "admin")
@@ -713,10 +714,10 @@ async def webhook_kiwify(request: Request, token: str = ""):
 
     Token validado via query param: /api/webhook/kiwify?token=xxx
     Eventos: order_approved → ativa plano | refund_created / subscription_canceled → free
+    Idempotente: order_id duplicado é ignorado silenciosamente.
     """
     import json
 
-    # Token vem como query param na URL do webhook configurada no Kiwify
     if KIWIFY_WEBHOOK_TOKEN and token != KIWIFY_WEBHOOK_TOKEN:
         raise HTTPException(401, "Token inválido")
 
@@ -726,28 +727,29 @@ async def webhook_kiwify(request: Request, token: str = ""):
     except Exception:
         raise HTTPException(400, "Payload inválido")
 
-    event = payload.get("webhook_event_type", "")
-
-    # Email em Product.Customer.email
+    event    = payload.get("webhook_event_type", "")
     customer = payload.get("Product", {}).get("Customer", {})
     email    = customer.get("email", "").lower().strip()
-
-    if not email:
-        return {"status": "ignored", "reason": "no email"}
-
-    # Preço em centavos em Product.Commissions.product_base_price
-    amount_cents = int(payload.get("Product", {}).get("Commissions", {}).get("product_base_price", 0) or 0)
-    amount = amount_cents / 100
-    plano  = "pro" if amount >= 90 else "basico"
-
     order_id = payload.get("order_id", "")
 
+    if not email or not order_id:
+        return {"status": "ignored", "reason": "missing email or order_id"}
+
+    # Idempotency: skip if this order_id was already processed
+    if not db.registrar_webhook_event(order_id, event, email, ""):
+        _log_api.info(f"webhook duplicate order_id={order_id} skipped")
+        return {"status": "duplicate", "order_id": order_id}
+
     if event == "order_approved":
+        amount_cents = int(payload.get("Product", {}).get("Commissions", {}).get("product_base_price", 0) or 0)
+        plano = "pro" if amount_cents / 100 >= 90 else "basico"
         db.atualizar_plano_pagarme(email, plano, order_id, "active", "")
+        _log_api.info(f"webhook order_approved email={email} plano={plano} order={order_id}")
         _stats_cache["data"] = None
 
     elif event in ("refund_created", "subscription_canceled", "subscription_chargeback"):
         db.atualizar_plano_pagarme(email, "free", order_id, "canceled", "")
+        _log_api.info(f"webhook {event} email={email} order={order_id}")
         _stats_cache["data"] = None
 
     return {"status": "ok", "event": event, "email": email}

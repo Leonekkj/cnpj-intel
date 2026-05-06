@@ -1896,6 +1896,49 @@ class Database:
         return [{"data": d, "coletadas": rows.get(d, (0, 0))[0],
                  "enriquecidas": rows.get(d, (0, 0))[1]} for d in dates]
 
+    def criar_tabela_webhook_events(self):
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS webhook_events (
+                        order_id     TEXT PRIMARY KEY,
+                        event_type   TEXT,
+                        email        TEXT,
+                        plano        TEXT,
+                        processed_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+            else:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS webhook_events (
+                        order_id     TEXT PRIMARY KEY,
+                        event_type   TEXT,
+                        email        TEXT,
+                        plano        TEXT,
+                        processed_at TEXT DEFAULT (datetime('now'))
+                    )
+                """)
+            conn.commit()
+
+    def registrar_webhook_event(self, order_id: str, event_type: str, email: str, plano: str) -> bool:
+        """Insert webhook event. Returns True if new, False if duplicate order_id."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("""
+                    INSERT INTO webhook_events (order_id, event_type, email, plano)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (order_id) DO NOTHING
+                """, (order_id, event_type, email, plano))
+            else:
+                cur.execute("""
+                    INSERT OR IGNORE INTO webhook_events (order_id, event_type, email, plano)
+                    VALUES (?, ?, ?, ?)
+                """, (order_id, event_type, email, plano))
+            conn.commit()
+            return cur.rowcount > 0
+
     def criar_tabela_stats_snapshots(self):
         with _conn() as conn:
             cur = conn.cursor()
