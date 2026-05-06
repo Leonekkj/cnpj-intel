@@ -14,3 +14,7 @@ package.json
 
 .worktrees/
 .capsule/
+cnpjs_seed*.txt
+.superpowers/
+.claude/hook-test.log
+.claude/skills/

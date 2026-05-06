@@ -8,6 +8,18 @@ B2B SaaS brasileiro para busca e enriquecimento de dados de empresas via CNPJ.
 Permite pesquisar empresas por filtros (UF, porte, CNAE, data de abertura) e
 exportar listas com contatos (telefone, e-mail, Instagram, site).
 
+## Verification Before Reporting Done
+- Never claim a fix is complete without verifying it actually works (run the code, check logs, or have user confirm)
+- For UI fixes: confirm visually or via Playwright that the change rendered correctly
+- For data fixes: query the actual data after the fix to confirm expected values
+
+## Plan-First for Multi-File Changes
+- For changes touching 3+ files or refactors, present a plan and wait for approval before editing.
+- For audit/priority work, group changes by P0/P1/P2/P3 and commit each group separately for review.
+
+## Repo Discipline
+- Always confirm `git remote -v` and current branch before merging or pushing. This monorepo workspace has multiple sibling repos (CNPJ Intel, Capsule, FoodFlow) — never merge cross-repo.
+
 ## Rate Limiting & Async Patterns
 - When adding delays/sleeps in concurrent code, ALWAYS place them INSIDE the semaphore block to prevent thundering herd effects
 - For external APIs with rate limits (BrasilAPI, etc.), use exponential backoff and verify with actual logs before declaring fixes complete
@@ -226,3 +238,8 @@ Empresas/Socios são carregados em memória por `cnpj_basico` (~400MB+200MB RAM 
 1. Push para `main` — Railway detecta `Procfile` e executa `python start.py`
 2. `DATABASE_URL` e `ADMIN_TOKEN` configurados nas variáveis do serviço
 3. Restart automático em falha (até 10 tentativas — `railway.json`)
+
+## Deployment & Environment Notes
+- This project deploys to Railway with Nixpacks (Python). A stray `package.json` can cause Nixpacks to detect Node.js — keep the project root clean.
+- Pin `bcrypt<4.0` in requirements (passlib's internal startup check breaks with bcrypt>=4.0).
+- Postgres on Railway has disk limits — monitor before large extractions.
