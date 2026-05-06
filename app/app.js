@@ -2176,6 +2176,22 @@ function logout() {
   location.reload();
 }
 
+async function deletarConta() {
+  confirmModal(
+    "Tem certeza? Esta ação é <strong>permanente</strong> — sua conta, listas e histórico serão apagados e não poderão ser recuperados.",
+    async () => {
+      const r = await apiFetch("/api/conta", { method: "DELETE" });
+      if (r && r.status === "deleted") {
+        localStorage.removeItem("cnpj_token");
+        toast("Conta excluída com sucesso.", "success");
+        setTimeout(() => { location.href = "/"; }, 1500);
+      } else {
+        toast("Erro ao excluir conta. Tente novamente.", "error");
+      }
+    }
+  );
+}
+
 // ─── Init ────────────────────────────────────────────────────────
 async function init() {
   // No token — show login screen instead of loading dashboard
