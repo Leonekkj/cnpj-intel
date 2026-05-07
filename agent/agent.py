@@ -1022,9 +1022,21 @@ def _encontrar_seed() -> str:
 
 
 def _abrir_seed(caminho: str):
-    """Abre o seed (.gz ou texto) em modo texto com encoding tolerante."""
-    opener = gzip.open if caminho.endswith(".gz") else open
-    return opener(caminho, "rt", encoding="utf-8", errors="ignore")
+    """Abre o seed (.gz ou texto) em modo texto com encoding tolerante.
+
+    Levanta FileNotFoundError se o arquivo for um ponteiro Git LFS
+    (começa com 'version https://git-lfs') — tratado como ausente.
+    """
+    if caminho.endswith(".gz"):
+        with open(caminho, "rb") as probe:
+            magic = probe.read(2)
+        if magic != b"\x1f\x8b":
+            raise FileNotFoundError(
+                f"Seed '{caminho}' não é um gzip válido (bytes iniciais: {magic!r}). "
+                "Provável ponteiro Git LFS — arquivo real não foi baixado."
+            )
+        return gzip.open(caminho, "rt", encoding="utf-8", errors="ignore")
+    return open(caminho, "rt", encoding="utf-8", errors="ignore")
 
 
 def _parse_linha_seed(linha: str) -> dict | None:
@@ -1067,10 +1079,14 @@ def _contar_linhas_seed() -> tuple[int, str]:
     if not caminho:
         return 0, ""
     total = 0
-    with _abrir_seed(caminho) as f:
-        for linha in f:
-            if linha.strip():
-                total += 1
+    try:
+        with _abrir_seed(caminho) as f:
+            for linha in f:
+                if linha.strip():
+                    total += 1
+    except (FileNotFoundError, gzip.BadGzipFile, OSError) as e:
+        log.error(f"Seed inválido ou corrompido em '{caminho}': {e}")
+        return 0, ""
     return total, caminho
 
 
