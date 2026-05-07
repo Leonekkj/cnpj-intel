@@ -756,10 +756,11 @@ async def webhook_kiwify(request: Request, token: str = ""):
     except Exception:
         raise HTTPException(400, "Payload inválido")
 
-    event    = payload.get("webhook_event_type", "")
-    customer = payload.get("Product", {}).get("Customer", {})
+    order    = payload.get("order", {})
+    event    = order.get("webhook_event_type", "")
+    customer = order.get("Customer", {})
     email    = customer.get("email", "").lower().strip()
-    order_id = payload.get("order_id", "")
+    order_id = order.get("order_id", "")
 
     if not email or not order_id:
         return {"status": "ignored", "reason": "missing email or order_id"}
@@ -770,7 +771,7 @@ async def webhook_kiwify(request: Request, token: str = ""):
         return {"status": "duplicate", "order_id": order_id}
 
     if event == "order_approved":
-        amount_cents = int(payload.get("Product", {}).get("Commissions", {}).get("product_base_price", 0) or 0)
+        amount_cents = int(order.get("Commissions", {}).get("product_base_price", 0) or 0)
         plano = "pro" if amount_cents / 100 >= 90 else "basico"
         db.atualizar_plano_pagarme(email, plano, order_id, "active", "")
         _log_api.info(f"webhook order_approved email={email} plano={plano} order={order_id}")

@@ -4,6 +4,20 @@
 
 ---
 
+## Estado Atual
+**Última atualização: 2026-05-08**
+
+| Área | Status |
+|------|--------|
+| Instagram @cnpjintel | ✅ Criado |
+| LinkedIn (perfil + conteúdo do post) | ✅ Pronto — publicar post |
+| Facebook (página @cnpjintel) | ✅ Criado |
+| Vídeo demo | 🟡 Roteiro pronto — gravar |
+| Grupo WhatsApp early adopters | 🟡 Template pronto — criar grupo |
+| Conteúdo gerado | `docs/launch/qui-08-05-conteudo.md` |
+
+---
+
 ## Semana 1 — Produto pronto para vender
 
 ### Ter 06/05 (hoje)
@@ -18,10 +32,11 @@
 - [ ] Se webhook falhar: debugar e corrigir `api.py` antes de qualquer marketing
 
 ### Qui 08/05 — Conteúdo base
-- [ ] Gravar 1 vídeo de demonstração curto (2-3 min): filtrar → exportar → abrir no WhatsApp
-- [ ] Criar conta no Instagram @cnpjintel (se não tiver)
-- [ ] Criar conta no LinkedIn e publicar primeiro post: "O que é o CNPJ Intel em 1 imagem"
-- [ ] Criar grupo WhatsApp de early adopters (amigos vendedores)
+- [ ] Gravar 1 vídeo de demonstração curto (2-3 min): filtrar → exportar → abrir no WhatsApp ← roteiro pronto em `docs/launch/qui-08-05-conteudo.md` (OBS + ElevenLabs + CapCut)
+- [X] Criar conta no Instagram @cnpjintel
+- [X] Criar página no Facebook @cnpjintel
+- [X] Criar conta no LinkedIn e configurar perfil — conteúdo do primeiro post pronto em `docs/launch/qui-08-05-conteudo.md` (publicar ainda)
+- [X] Criar grupo WhatsApp de early adopters — template pronto em `docs/launch/qui-08-05-conteudo.md`
 
 ### Sex 09/05 — Prospecção manual
 - [ ] Listar 20 grupos de vendedores no WhatsApp/Telegram onde pode postar
