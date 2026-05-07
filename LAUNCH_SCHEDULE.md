@@ -7,9 +7,9 @@
 ## Semana 1 — Produto pronto para vender
 
 ### Ter 06/05 (hoje)
-- [ ] Deploy da nova landing page no Netlify (upload LP1/index.html)
-- [ ] Testar fluxo completo: acesso → dashboard → filtro → exportação CSV
-- [ ] Confirmar que `/api/public-stats` retorna dados reais na landing page
+- [X] Deploy da nova landing page no Netlify (upload LP1/index.html)
+- [X] Testar fluxo completo: acesso → dashboard → filtro → exportação CSV
+- [X] Confirmar que `/api/public-stats` retorna dados reais na landing page
 
 ### Qua 07/05 — Pagamento real
 - [ ] Fazer uma compra de teste real no Kiwify (Básico R$50) com cartão próprio

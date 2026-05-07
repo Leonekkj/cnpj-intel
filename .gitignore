@@ -18,3 +18,9 @@ cnpjs_seed*.txt
 .superpowers/
 .claude/hook-test.log
 .claude/skills/
+scripts/audit/qa_report.json
+scripts/audit/qa_screenshots/
+scripts/qa_audit_local.js
+scripts/verify_fixes.js
+scripts/verify_fixes2.js
+git

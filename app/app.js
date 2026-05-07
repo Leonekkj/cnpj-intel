@@ -707,6 +707,7 @@ function viewDashboard() {
       ${metric("Total de CNPJs",  fmt(stats.total),         dTotal.val, dTotal.up, sparkline(sparks.coletadas, "oklch(0.72 0.14 160)"), "building", "ac", "mv-total")}
       ${metric("Com telefone",    fmt(stats.com_telefone),  dTel.val,   dTel.up,   sparkline(sparks.contatos,  "oklch(0.74 0.13 240)"), "phone",    "in", "mv-tel")}
       ${metric("Com e-mail",      fmt(stats.com_email),     dEmail.val, dEmail.up, sparkline(sparks.emails,    "oklch(0.80 0.14 75)"),  "mail",     "wa", "mv-email")}
+      ${metric("Exports no mês",  "—",                      "—",        true,      sparkline(sparks.export,    "oklch(0.72 0.14 295)"), "download", "pu")}
     </div>`;
 
   // Activity chart

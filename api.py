@@ -210,7 +210,11 @@ def require_admin(credentials: HTTPAuthorizationCredentials = Depends(security))
 def index():
     path = Path("app/index.html")
     if path.exists():
-        return FileResponse(str(path))
+        content = path.read_text(encoding="utf-8")
+        js_path = Path("app/app.js")
+        v = int(js_path.stat().st_mtime) if js_path.exists() else 0
+        content = content.replace('"/app/app.js"', f'"/app/app.js?v={v}"')
+        return HTMLResponse(content)
     return HTMLResponse("<h2>CNPJ Intel API ✓</h2>")
 
 
