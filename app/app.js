@@ -248,9 +248,12 @@ async function loadStats() {
   }
 }
 
-async function loadAtividade() {
+async function loadAtividade(retry = true) {
   const data = await apiFetch("/api/atividade");
-  if (!data || data._err) return;
+  if (!data || data._err) {
+    if (retry) setTimeout(() => loadAtividade(false), 5000);
+    return;
+  }
   state.atividadeData = data;
   if (state.tab === "dashboard") render();
 }
@@ -304,13 +307,18 @@ function detailCacheSet(cnpj, data) {
   try { localStorage.setItem(detailCacheKey(cnpj), JSON.stringify({ data, ts: Date.now() })); } catch {}
 }
 
+function revealAdd(cnpj) {
+  state.revealed.add(cnpj);
+  localStorage.setItem("cnpj_revealed", JSON.stringify([...state.revealed]));
+}
+
 async function loadDetail(cnpj) {
   if (state.expandedData[cnpj] === "LOADING" || (state.expandedData[cnpj] && !state.expandedData[cnpj]._notfound && !state.expandedData[cnpj]._limitReached)) return;
 
   const cached = detailCacheGet(cnpj);
   if (cached) {
     state.expandedData[cnpj] = cached;
-    state.revealed.add(cnpj);
+    revealAdd(cnpj);
     render();
     return;
   }
@@ -327,7 +335,7 @@ async function loadDetail(cnpj) {
   }
   if (data && !data._err) {
     state.expandedData[cnpj] = data;
-    state.revealed.add(cnpj);
+    revealAdd(cnpj);
     detailCacheSet(cnpj, data);
   } else {
     state.expandedData[cnpj] = { _notfound: true };
@@ -385,7 +393,7 @@ async function exportCSV() {
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(objUrl); a.remove(); }, 1000);
-  } catch (e) { toast("Erro ao exportar CSV.", "error"); }
+  } catch (e) { console.error("[exportCSV]", e); toast("Erro ao exportar CSV.", "error"); }
 }
 
 async function loadTokens() {
@@ -596,7 +604,50 @@ function sparkline(data, color = "var(--accent)") {
 function viewDashboard() {
   const stats = state.statsData || { total: 0, com_telefone: 0, com_email: 0 };
   const activity = state.atividadeData || DASH_MOCK.activity;
-  const { insights } = DASH_MOCK;
+  const usingMock = !state.atividadeData;
+  const insights = (() => {
+    const total = stats.total || 0;
+    const out = [];
+    // Agent status
+    const agActive = stats.progresso_agente > 0;
+    out.push({ tone: agActive ? "ac" : "in", ico: "bolt",
+      title: agActive ? "Agente de coleta ativo" : "Agente pausado",
+      sub: agActive ? `Enriquecendo CNPJs — posição ${fmt(stats.progresso_agente)}` : "Nenhum ciclo em andamento",
+      time: "agora" });
+    // Phone coverage
+    if (total > 0) {
+      const pct = Math.round(stats.com_telefone / total * 100);
+      out.push({ tone: "wa", ico: "phone",
+        title: `${pct}% com telefone`,
+        sub: `${fmt(stats.com_telefone)} de ${fmt(total)} empresas com telefone confirmado`,
+        time: "total" });
+    }
+    // Email coverage
+    if (total > 0 && stats.com_email > 0) {
+      const pct = Math.round(stats.com_email / total * 100);
+      out.push({ tone: "pu", ico: "mail",
+        title: `${pct}% com e-mail`,
+        sub: `${fmt(stats.com_email)} empresas com e-mail indexado`,
+        time: "total" });
+    }
+    // Top UF
+    const topUF = stats.por_uf?.[0];
+    if (topUF) out.push({ tone: "ac", ico: "building",
+      title: `${topUF.uf} lidera a base`,
+      sub: `${fmt(topUF.n)} empresas indexadas em ${topUF.uf}`,
+      time: "total" });
+    // Latest activity
+    const recentActive = activity.filter(d => d.coletadas > 0);
+    if (recentActive.length > 0) {
+      const last = recentActive[recentActive.length - 1];
+      const dl = last.data ? last.data.slice(8,10) + "/" + last.data.slice(5,7) : "recente";
+      out.push({ tone: "in", ico: "trend",
+        title: "Base crescendo",
+        sub: `${fmt(last.coletadas)} empresas coletadas em ${dl}`,
+        time: dl });
+    }
+    return out.slice(0, 4);
+  })();
   const hist     = stats.historico || [];
   const ontem    = stats.ontem    || {};
   const spark14  = activity.slice(-14);
@@ -656,7 +707,6 @@ function viewDashboard() {
       ${metric("Total de CNPJs",  fmt(stats.total),         dTotal.val, dTotal.up, sparkline(sparks.coletadas, "oklch(0.72 0.14 160)"), "building", "ac", "mv-total")}
       ${metric("Com telefone",    fmt(stats.com_telefone),  dTel.val,   dTel.up,   sparkline(sparks.contatos,  "oklch(0.74 0.13 240)"), "phone",    "in", "mv-tel")}
       ${metric("Com e-mail",      fmt(stats.com_email),     dEmail.val, dEmail.up, sparkline(sparks.emails,    "oklch(0.80 0.14 75)"),  "mail",     "wa", "mv-email")}
-      ${metric("Exports no mês",  "—",                      "—",      true,  sparkline(sparks.export,       "oklch(0.72 0.14 295)"), "download", "pu")}
     </div>`;
 
   // Activity chart
@@ -696,6 +746,7 @@ function viewDashboard() {
           <div class="panel-sub">Coletas e enriquecimentos diários</div>
         </div>
         <div class="chart-legend">
+          ${usingMock ? `<span style="font-size:10px;color:var(--text-dim);opacity:.6">Dados indisponíveis</span>` : ""}
           <span><span class="leg-sw leg-ac"></span>Coletadas</span>
           <span><span class="leg-sw leg-in"></span>Enriquecidas</span>
         </div>
@@ -848,6 +899,7 @@ function viewBusca() {
       <span class="bulk-count"><strong>${state.selected.size}</strong> selecionadas</span>
       <button class="btn btn-ghost" style="font-size:12px" onclick="clearSelection()">Limpar seleção</button>
       <div class="bulk-actions">
+        <button class="btn" onclick="promptBulkSalvarEmLista()">${ICONS.bookmark}Salvar em lista</button>
         <button class="btn btn-accent" onclick="exportCSV()">${ICONS.download}Exportar</button>
       </div>
     </div>
@@ -1216,7 +1268,7 @@ async function viewListas() {
           <div class="panel" style="padding:18px;cursor:pointer" onclick="navigateToLista(${l.id})">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
               <div class="insight-ico ac">${ICONS.bookmark}</div>
-              <button class="row-btn" title="Remover lista" onclick="event.stopPropagation();(async()=>{if(!confirm('Deletar lista &quot;${esc(l.nome)}&quot;?'))return;try{await deletarLista(${l.id});toast('Lista &quot;${esc(l.nome)}&quot; removida','info');render();}catch(e){toast('Erro ao deletar lista','error');}})()">${ICONS.trash}</button>
+              <button class="row-btn" title="Remover lista" onclick="event.stopPropagation();deletarListaConfirm(${l.id},'${esc(l.nome)}')">${ICONS.trash}</button>
             </div>
             <div style="font-weight:600;margin-bottom:4px">${esc(l.nome)}</div>
             <div style="font-size:11.5px;color:var(--text-dim)">${l.total} empresa${l.total !== 1 ? "s" : ""}</div>
@@ -1247,7 +1299,7 @@ async function viewListaDetalhe(listaId) {
       ? `<div style="text-align:center;color:var(--text-muted);padding:40px 0"><p>Nenhuma empresa nesta lista ainda.</p></div>`
       : `<div class="panel" style="padding:0"><div class="table-wrap"><table class="data">
           <thead><tr>
-            <th>Empresa</th><th>Município / UF</th><th>Telefone</th><th>Email</th><th></th>
+            <th>Empresa</th><th>Município / UF</th><th>Telefone</th><th>Email</th><th>Sócio principal</th><th>CNAE</th><th></th>
           </tr></thead>
           <tbody>
             ${itens.map(e => `
@@ -1259,6 +1311,8 @@ async function viewListaDetalhe(listaId) {
                 <td>${esc(e.municipio || '—')} / ${esc(e.uf || '—')}</td>
                 <td>${esc(e.telefone || '—')}</td>
                 <td>${esc(e.email || '—')}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${esc(e.socio_principal || '—')}</td>
+                <td style="font-size:12px;color:var(--text-muted);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.cnae || '')}">${esc(e.cnae ? e.cnae.split(' ').slice(0,4).join(' ') : '—')}</td>
                 <td>
                   <button class="btn btn-ghost btn-sm"
                     data-lista-id="${lista.id}" data-cnpj="${e.cnpj}"
@@ -1378,7 +1432,7 @@ async function promptAdicionarNaLista(listaId) {
       });
       overlay.remove();
       toast(`${res.adicionados} empresa${res.adicionados !== 1 ? 's' : ''} adicionada${res.adicionados !== 1 ? 's' : ''} à lista`, 'success');
-      const main = document.getElementById('main');
+      const main = document.getElementById('content');
       main.innerHTML = await viewListaDetalhe(listaId);
     } catch {
       toast('Erro ao adicionar empresas', 'error');
@@ -1399,16 +1453,42 @@ async function navigateToLista(listaId) {
 }
 
 async function promptRenomearLista(listaId, nomeAtual) {
-  const novoNome = prompt('Novo nome da lista:', nomeAtual);
-  if (!novoNome || !novoNome.trim() || novoNome.trim() === nomeAtual) return;
-  try {
-    await renomearLista(listaId, novoNome.trim());
-    toast(`Lista renomeada para "${novoNome.trim()}"`, 'success');
-    const main = document.getElementById('content');
-    main.innerHTML = await viewListaDetalhe(listaId);
-  } catch(e) {
-    toast('Erro ao renomear lista (nome já existe?)', 'error');
-  }
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal-box" style="width:min(380px,90vw)">
+      <div class="modal-header"><h3>Renomear lista</h3><button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button></div>
+      <div class="modal-body" style="padding:16px 20px">
+        <input id="rename-lista-input" class="filter-input" style="width:100%;box-sizing:border-box" value="${esc(nomeAtual)}" placeholder="Nome da lista" maxlength="80">
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
+        <button class="btn btn-accent" id="rename-lista-ok">Renomear</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector('#rename-lista-input');
+    input.focus(); input.select();
+    const doRename = async () => {
+      const novoNome = input.value.trim();
+      if (!novoNome || novoNome === nomeAtual) { overlay.remove(); resolve(); return; }
+      try {
+        await renomearLista(listaId, novoNome);
+        overlay.remove();
+        toast(`Lista renomeada para "${novoNome}"`, 'success');
+        document.getElementById('content').innerHTML = await viewListaDetalhe(listaId);
+      } catch(e) {
+        toast('Erro ao renomear lista (nome já existe?)', 'error');
+      }
+      resolve();
+    };
+    overlay.querySelector('#rename-lista-ok').onclick = doRename;
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') doRename();
+      if (e.key === 'Escape') { overlay.remove(); resolve(); }
+    });
+    overlay.addEventListener('click', e => { if (e.target === overlay) { overlay.remove(); resolve(); } });
+  });
 }
 
 async function migrarListasLocais() {
@@ -1465,6 +1545,18 @@ async function promptRenomearListaFromBtn(btn) {
   await promptRenomearLista(listaId, nomeAtual);
 }
 
+function deletarListaConfirm(listaId, nome) {
+  confirmModal(`Deletar lista "<strong>${esc(nome)}</strong>"? Esta ação não pode ser desfeita.`, async () => {
+    try {
+      await deletarLista(listaId);
+      toast(`Lista "${nome}" removida`, 'info');
+      render();
+    } catch(e) {
+      toast('Erro ao deletar lista', 'error');
+    }
+  });
+}
+
 async function promptBulkSalvarEmLista() {
   const cnpjs = [...state.selected];
   if (cnpjs.length === 0) return;
@@ -1515,19 +1607,31 @@ async function promptBulkSalvarEmLista() {
     };
   });
 
-  overlay.querySelector('#bulk-nova-lista-btn').onclick = async () => {
-    const nome = prompt('Nome da nova lista:');
-    if (!nome || !nome.trim()) return;
-    try {
-      const nova = await criarLista(nome.trim());
-      const res = await apiListas(`/${nova.id}/itens`, {
-        method: 'POST', body: JSON.stringify({ cnpjs })
-      });
-      overlay.remove();
-      toast(`${res.adicionados} empresa${res.adicionados !== 1 ? 's' : ''} salva${res.adicionados !== 1 ? 's' : ''} em "${nome.trim()}"!`, 'success');
-    } catch(e) {
-      toast('Erro ao criar lista', 'error');
-    }
+  overlay.querySelector('#bulk-nova-lista-btn').onclick = () => {
+    const footer = overlay.querySelector('.modal-footer');
+    footer.innerHTML = `
+      <input id="bulk-nova-lista-input" class="filter-input" style="flex:1;min-width:0"
+        placeholder="Nome da nova lista" maxlength="80" autofocus>
+      <button class="btn btn-accent" id="bulk-nova-lista-ok">Criar e salvar</button>
+      <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>`;
+    const inp = footer.querySelector('#bulk-nova-lista-input');
+    inp.focus();
+    const doCreate = async () => {
+      const nome = inp.value.trim();
+      if (!nome) { inp.style.borderColor = 'var(--danger)'; return; }
+      try {
+        const nova = await criarLista(nome);
+        const res = await apiListas(`/${nova.id}/itens`, {
+          method: 'POST', body: JSON.stringify({ cnpjs })
+        });
+        overlay.remove();
+        toast(`${res.adicionados} empresa${res.adicionados !== 1 ? 's' : ''} salva${res.adicionados !== 1 ? 's' : ''} em "${nome}"!`, 'success');
+      } catch(e) {
+        toast('Erro ao criar lista', 'error');
+      }
+    };
+    footer.querySelector('#bulk-nova-lista-ok').onclick = doCreate;
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') doCreate(); });
   };
 }
 
@@ -1812,7 +1916,7 @@ function wireContent() {
         const sx = (cx / 720) * sbox.width;
         const sy = (cy / 220) * sbox.height;
         tip.style.left = Math.min(sbox.width - 160, sx - 70) + "px";
-        tip.style.top  = sy + "px";
+        tip.style.top  = (sy > sbox.height / 2 ? sy - 72 : sy + 8) + "px";
         tip.innerHTML = `<div class="tip-lbl">${dateLabel}</div>
           <div class="tip-row"><span style="color:var(--accent)">● Coletadas</span><span>${fmt(+el.dataset.col)}</span></div>
           <div class="tip-row"><span style="color:var(--info)">● Enriquecidas</span><span>${fmt(+el.dataset.enr)}</span></div>`;
@@ -2054,6 +2158,7 @@ function showAuthOverlay(msg = "") {
     <div id="auth-form-token" style="display:none">
       <div class="auth-field" style="margin-top:12px"><label>Token de acesso</label><input id="token-input" class="auth-input" type="text" placeholder="Cole seu token" autocomplete="off"></div>
       <button class="auth-btn" onclick="submitToken()">Entrar com token</button>
+      <div class="auth-token-link" onclick="authSwitchTab('login')" style="margin-top:8px">← Usar e-mail</div>
     </div>
   </div>
 </div>`;
@@ -2226,8 +2331,9 @@ async function init() {
   if (hamburger) hamburger.onclick = () => document.querySelector(".app")?.classList.toggle("sidebar-open");
   if (overlay)   overlay.onclick   = () => document.querySelector(".app")?.classList.remove("sidebar-open");
 
-  state.density = localStorage.getItem("cnpj_density") || "normal";
-  state.radius  = localStorage.getItem("cnpj_radius")  || "soft";
+  state.density  = localStorage.getItem("cnpj_density")  || "normal";
+  state.radius   = localStorage.getItem("cnpj_radius")   || "soft";
+  state.revealed = new Set(JSON.parse(localStorage.getItem("cnpj_revealed") || "[]"));
   applyTweaks();
   initTweaksUI();
 
