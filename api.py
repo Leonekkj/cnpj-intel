@@ -642,6 +642,16 @@ def upgrade_email(
     return {"status": "ok", "email": email, "plano": plano, "result": result}
 
 
+@app.post("/api/admin/test-email")
+async def test_email(
+    email: str = Query(..., description="E-mail de destino do teste"),
+    _: str = Depends(require_admin),
+):
+    """Envia welcome email de teste — valida config Resend sem precisar comprar no Kiwify."""
+    await send_welcome_email(email, "basico", "test-order-1234abcd")
+    return {"status": "sent", "email": email, "configured": bool(RESEND_API_KEY)}
+
+
 @app.post("/api/admin/reset-database")
 def reset_database(_: str = Depends(require_admin)):
     """Apaga todos os dados de empresas e zera o progresso do agente."""
@@ -746,6 +756,74 @@ _KIWIFY_CHECKOUT_MAP = {
 }
 
 
+# ─── Email transacional (Resend) ───────────────────────────────────────────────
+# Env vars opcionais; sem RESEND_API_KEY o sistema funciona normal mas não envia email.
+RESEND_API_KEY    = os.environ.get("RESEND_API_KEY", "")
+RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "CNPJ Intel <onboarding@resend.dev>")
+APP_URL           = os.environ.get("APP_URL", "https://web-production-aaeed.up.railway.app").rstrip("/")
+
+
+async def send_welcome_email(email: str, plano: str, order_id: str) -> None:
+    """Envia e-mail de boas-vindas via Resend. Fire-and-forget — nunca lança exception."""
+    if not RESEND_API_KEY or not email:
+        _log_api.info(f"welcome_email skipped (no key or email) email={email}")
+        return
+    import aiohttp
+    plano_label = {"basico": "Básico", "pro": "Pro"}.get(plano, plano.capitalize())
+    link = f"{APP_URL}/obrigado?email={email}"
+    short = (order_id or "")[:8]
+    html = (
+        '<!DOCTYPE html><html><body style="font-family:-apple-system,Segoe UI,sans-serif;'
+        'background:#0b0d10;color:#e8eaed;margin:0;padding:24px">'
+        '<div style="max-width:520px;margin:0 auto;background:#14171c;border:1px solid #23272f;'
+        'border-radius:16px;padding:32px">'
+        '<h1 style="font-size:22px;margin:0 0 16px;color:#4ade80">Pagamento confirmado!</h1>'
+        '<p>Olá! Sua assinatura do <strong>CNPJ Intel</strong> está ativa.</p>'
+        f'<p style="color:#9aa0a6;font-size:14px">Plano: <strong style="color:#e8eaed">{plano_label}</strong></p>'
+        '<p>Para acessar, clique no botão abaixo e entre com Google usando o e-mail desta compra.</p>'
+        f'<p style="text-align:center;margin:32px 0"><a href="{link}" '
+        'style="background:#4ade80;color:#0b0d10;padding:14px 28px;border-radius:8px;'
+        'text-decoration:none;font-weight:600;display:inline-block">Acessar minha conta</a></p>'
+        '<p style="font-size:13px;color:#9aa0a6">Problemas? Responda este e-mail.</p>'
+        '</div>'
+        f'<p style="text-align:center;color:#6c7480;font-size:12px;margin-top:24px">Pedido #{short}</p>'
+        '</body></html>'
+    )
+    text = (
+        f"Pagamento confirmado!\n\n"
+        f"Olá! Sua assinatura do CNPJ Intel está ativa.\n"
+        f"Plano: {plano_label}\n\n"
+        f"Acesse: {link}\n\n"
+        f"Problemas? Responda este e-mail.\n"
+        f"Pedido #{short}"
+    )
+    payload = {
+        "from": RESEND_FROM_EMAIL,
+        "to": [email],
+        "subject": "Pagamento confirmado — sua conta CNPJ Intel está pronta",
+        "html": html,
+        "text": text,
+    }
+    try:
+        timeout = aiohttp.ClientTimeout(total=8)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            ) as r:
+                body = await r.text()
+                if r.status >= 400:
+                    _log_api.warning(f"welcome_email failed status={r.status} email={email} body={body[:200]}")
+                else:
+                    _log_api.info(f"welcome_email sent email={email} plano={plano}")
+    except Exception as e:
+        _log_api.warning(f"welcome_email exception email={email} err={type(e).__name__}: {e}")
+
+
 @app.get("/api/checkout-url")
 def checkout_url(plano: str = Query(..., pattern="^(basico|pro)$"),
                  info: dict = Depends(get_token_info_soft)):
@@ -799,6 +877,7 @@ async def webhook_kiwify(request: Request, token: str = ""):
         plano = "pro" if amount_cents / 100 >= 90 else "basico"
         result = db.atualizar_plano_pagarme(email, plano, order_id, "active", "")
         _log_api.info(f"webhook order_approved {result} email={email} plano={plano} order={order_id}")
+        asyncio.create_task(send_welcome_email(email, plano, order_id))
         _stats_cache["data"] = None
 
     elif event in ("refund_created", "subscription_canceled", "subscription_chargeback"):

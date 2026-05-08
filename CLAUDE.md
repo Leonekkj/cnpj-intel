@@ -141,6 +141,13 @@ TOKENS                  — tokens legados separados por vírgula (migrados como
 PORT                    — porta HTTP (padrão: 8000)
 GOOGLE_API_KEY          — Google Places API para o agente (melhora qualidade)
 REENRICH_SEM_CONTATO    — "1" para rodar agente em modo re-enrich
+KIWIFY_WEBHOOK_TOKEN    — token validado em /api/webhook/kiwify (query ?token=)
+KIWIFY_CHECKOUT_BASICO  — URL do checkout Kiwify para o plano Básico
+KIWIFY_CHECKOUT_PRO     — URL do checkout Kiwify para o plano Pro
+GOOGLE_CLIENT_ID        — Client ID do OAuth 2.0 (Google Cloud Console)
+RESEND_API_KEY          — chave Resend; sem ela, welcome email é skipped silencioso
+RESEND_FROM_EMAIL       — remetente (default: "CNPJ Intel <onboarding@resend.dev>" sandbox)
+APP_URL                 — base URL para links em e-mails (default: railway URL)
 ```
 
 ## Endpoints da API

@@ -15,6 +15,7 @@
 | Vídeo demo | 🟡 Roteiro pronto — gravar |
 | Grupo WhatsApp early adopters | 🟡 Template pronto — criar grupo |
 | Webhook Kiwify | ✅ Testado, upsert + página `/obrigado` |
+| Welcome email (Resend) | 🟡 Código pronto — falta configurar `RESEND_API_KEY` no Railway |
 | Conteúdo gerado | `docs/launch/qui-08-05-conteudo.md` |
 
 ---
