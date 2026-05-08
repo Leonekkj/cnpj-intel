@@ -627,6 +627,21 @@ def excluir_token(token: str, _: str = Depends(require_admin)):
     return {"status": "excluido", "token": token}
 
 
+@app.post("/api/admin/upgrade-email")
+def upgrade_email(
+    email: str = Query(..., description="E-mail do usuário"),
+    plano: str = Query("basico", description="free | basico | pro"),
+    _: str = Depends(require_admin),
+):
+    """Upgrade manual de plano por e-mail. Cria conta se não existir.
+    Usado para reprocessar pagamentos cujo webhook não vinculou conta."""
+    if plano not in ("free", "basico", "pro"):
+        raise HTTPException(400, "Plano inválido")
+    result = db.atualizar_plano_pagarme(email, plano, "manual-admin", "active", "")
+    _log_api.info(f"ADMIN upgrade_email email={email} plano={plano} {result}")
+    return {"status": "ok", "email": email, "plano": plano, "result": result}
+
+
 @app.post("/api/admin/reset-database")
 def reset_database(_: str = Depends(require_admin)):
     """Apaga todos os dados de empresas e zera o progresso do agente."""
