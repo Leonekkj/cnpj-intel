@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pagamento confirmado — CNPJ Intel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --surface: #14171c;
+    --border: #23272f;
+    --text: #e8eaed;
+    --text-dim: #9aa0a6;
+    --accent: #4ade80;
+    --accent-dim: #16a34a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: 'Geist', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    width: 100%;
+    max-width: 440px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px 32px;
+    text-align: center;
+  }
+  .check {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 24px;
+    border-radius: 50%;
+    background: rgba(74, 222, 128, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .check svg { color: var(--accent); }
+  h1 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    color: var(--text-dim);
+    font-size: 15px;
+    line-height: 1.5;
+    margin: 0 0 24px;
+  }
+  .email-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 24px;
+    font-size: 14px;
+    word-break: break-all;
+  }
+  .email-box .label {
+    color: var(--text-dim);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .email-box .value {
+    color: var(--text);
+    font-weight: 500;
+  }
+  .step {
+    text-align: left;
+    background: rgba(74, 222, 128, 0.06);
+    border: 1px solid rgba(74, 222, 128, 0.2);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #cdd2d8;
+  }
+  .step strong { color: var(--accent); font-weight: 600; }
+  #google-signin-btn {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+  .err {
+    color: #f87171;
+    font-size: 13px;
+    min-height: 18px;
+    margin-bottom: 8px;
+  }
+  .footer {
+    margin-top: 24px;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+  .footer a { color: var(--text-dim); text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="check">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    </div>
+    <h1>Pagamento confirmado!</h1>
+    <p class="sub">Sua assinatura está ativa. Falta só um passo para acessar o CNPJ Intel.</p>
+
+    <div class="email-box" id="email-box" style="display:none">
+      <div class="label">E-mail da compra</div>
+      <div class="value" id="email-value"></div>
+    </div>
+
+    <div class="step">
+      <strong>Próximo passo:</strong> entre com Google usando o <strong>mesmo e-mail</strong> da compra. Sua conta já está pronta com o plano ativo.
+    </div>
+
+    <div id="google-signin-btn"></div>
+    <div class="err" id="err"></div>
+
+    <div class="footer">
+      Problemas? Fale com a gente em <a href="mailto:contato@cnpjintel.com">contato@cnpjintel.com</a>.
+    </div>
+  </div>
+
+<script>
+  const _GCI = "404333091844-0g0ioa5lqi3nesvsud520lrhdph8eg7c.apps.googleusercontent.com";
+
+  function getQuery(name) {
+    const m = new URLSearchParams(window.location.search).get(name);
+    return m ? m.trim() : "";
+  }
+
+  const emailFromKiwify = getQuery("email");
+  if (emailFromKiwify) {
+    document.getElementById("email-value").textContent = emailFromKiwify;
+    document.getElementById("email-box").style.display = "";
+  }
+
+  function setErr(msg) {
+    document.getElementById("err").textContent = msg || "";
+  }
+
+  function initGoogle() {
+    if (!window.google?.accounts?.id) {
+      setTimeout(initGoogle, 400);
+      return;
+    }
+    google.accounts.id.initialize({
+      client_id: _GCI,
+      callback: handleCredential,
+      auto_select: false,
+    });
+    google.accounts.id.renderButton(document.getElementById("google-signin-btn"), {
+      theme: "outline",
+      size: "large",
+      text: "continue_with",
+      locale: "pt-BR",
+      width: 328,
+    });
+  }
+
+  async function handleCredential(response) {
+    setErr("");
+    try {
+      const res = await fetch("/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: response.credential }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem("cnpj_token", data.token);
+        localStorage.removeItem("cnpj_onboarded");
+        window.location.href = "/";
+      } else {
+        setErr(data.detail || "Erro ao entrar com Google.");
+      }
+    } catch {
+      setErr("Erro de conexão. Tente novamente.");
+    }
+  }
+
+  initGoogle();
+</script>
+</body>
+</html>

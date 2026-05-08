@@ -746,17 +746,43 @@ class Database:
             conn.commit()
         return token
 
-    def atualizar_plano_pagarme(self, email: str, plano: str, customer_id: str, status: str, period_end: str):
-        """Atualiza plano e dados de assinatura Pagar.me pelo email do usuário."""
+    def atualizar_plano_pagarme(self, email: str, plano: str, customer_id: str, status: str, period_end: str) -> str:
+        """Atualiza plano OR cria conta nova com plano. Retorna 'updated'|'created'."""
+        email = email.strip().lower()
         with _conn() as conn:
             cur = conn.cursor()
-            cur.execute(
-                f"""UPDATE tokens SET plano = {PH}, pagarme_customer_id = {PH},
-                    subscription_status = {PH}, subscription_period_end = {PH}
-                    WHERE email = {PH}""",
-                (plano, customer_id, status, period_end, email.strip().lower())
-            )
+            cur.execute(f"SELECT token FROM tokens WHERE email = {PH}", (email,))
+            row = cur.fetchone()
+            if row:
+                cur.execute(
+                    f"""UPDATE tokens SET plano = {PH}, pagarme_customer_id = {PH},
+                        subscription_status = {PH}, subscription_period_end = {PH}
+                        WHERE email = {PH}""",
+                    (plano, customer_id, status, period_end, email)
+                )
+                conn.commit()
+                return "updated"
+            token = secrets.token_urlsafe(32)
+            agora = datetime.utcnow().isoformat()
+            hoje  = str(date_type.today())
+            if USE_POSTGRES:
+                cur.execute(
+                    """INSERT INTO tokens (token, plano, cnpjs_hoje, data_reset, ativo,
+                       criado_em, email, pagarme_customer_id, subscription_status,
+                       subscription_period_end)
+                       VALUES (%s, %s, 0, %s, TRUE, %s, %s, %s, %s, %s)""",
+                    (token, plano, hoje, agora, email, customer_id, status, period_end)
+                )
+            else:
+                cur.execute(
+                    """INSERT INTO tokens (token, plano, cnpjs_hoje, data_reset, ativo,
+                       criado_em, email, pagarme_customer_id, subscription_status,
+                       subscription_period_end)
+                       VALUES (?, ?, 0, ?, 1, ?, ?, ?, ?, ?)""",
+                    (token, plano, hoje, agora, email, customer_id, status, period_end)
+                )
             conn.commit()
+            return "created"
 
     def criar_conta_email(self, email: str, password: str, nome: str) -> str:
         from passlib.hash import bcrypt as _bcrypt

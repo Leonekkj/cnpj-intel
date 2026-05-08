@@ -223,6 +223,14 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/obrigado")
+def obrigado():
+    path = Path("app/obrigado.html")
+    if path.exists():
+        return HTMLResponse(path.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Obrigado pela compra!</h1><p>Entre em <a href='/'>cnpjintel</a> com Google.</p>")
+
+
 # ─── Auth público (signup / login por e-mail) ──────────────────────────────────
 
 class SignupBody(BaseModel):
@@ -774,13 +782,13 @@ async def webhook_kiwify(request: Request, token: str = ""):
     if event == "order_approved":
         amount_cents = int(order.get("Commissions", {}).get("product_base_price", 0) or 0)
         plano = "pro" if amount_cents / 100 >= 90 else "basico"
-        db.atualizar_plano_pagarme(email, plano, order_id, "active", "")
-        _log_api.info(f"webhook order_approved email={email} plano={plano} order={order_id}")
+        result = db.atualizar_plano_pagarme(email, plano, order_id, "active", "")
+        _log_api.info(f"webhook order_approved {result} email={email} plano={plano} order={order_id}")
         _stats_cache["data"] = None
 
     elif event in ("refund_created", "subscription_canceled", "subscription_chargeback"):
-        db.atualizar_plano_pagarme(email, "free", order_id, "canceled", "")
-        _log_api.info(f"webhook {event} email={email} order={order_id}")
+        result = db.atualizar_plano_pagarme(email, "free", order_id, "canceled", "")
+        _log_api.info(f"webhook {event} {result} email={email} order={order_id}")
         _stats_cache["data"] = None
 
     return {"status": "ok", "event": event, "email": email}
