@@ -766,7 +766,8 @@ async def webhook_kiwify(request: Request, token: str = ""):
     _log_api.info(f"webhook parsed: event={event!r} email={email!r} order_id={order_id!r}")
 
     if not email or not order_id:
-        return {"status": "ignored", "reason": "missing email or order_id"}
+        return {"status": "ignored", "reason": "missing email or order_id",
+                "debug": {"payload_keys": list(payload.keys()), "order_keys": list(order.keys()), "email": email, "order_id": order_id}}
 
     # Idempotency: skip if this order_id was already processed
     if not db.registrar_webhook_event(order_id, event, email, ""):
