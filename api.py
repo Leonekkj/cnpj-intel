@@ -218,6 +218,12 @@ def index():
     return HTMLResponse("<h2>CNPJ Intel API ✓</h2>")
 
 
+@app.get("/sitemap.xml")
+def sitemap():
+    path = Path("app/sitemap.xml")
+    return Response(content=path.read_text(encoding="utf-8"), media_type="application/xml")
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
