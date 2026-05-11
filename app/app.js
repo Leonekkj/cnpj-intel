@@ -68,7 +68,7 @@ const state = {
   departamentos: [],
   tokens: [],
   tokensLoading: false,
-  filters: { q: "", uf: "", porte: "", categoria: "", departamento: "", tel: false, email: false, site: false, socio: false, abertura_de: "", abertura_ate: "" },
+  filters: { q: "", uf: "", porte: "", categoria: "", departamento: "", tel: false, email: false, site: false, socio: false, abertura_de: "", abertura_ate: "", score_min: 0 },
   sort: { key: null, dir: "asc" },
   page: 1,
   perPage: 15,
@@ -148,6 +148,12 @@ function porteBadge(p) {
   if (p.includes("MICRO"))      return '<span class="badge me">ME</span>';
   if (p.includes("PEQUENO"))    return '<span class="badge epp">EPP</span>';
   return '<span class="badge de">MÉDIO+</span>';
+}
+
+function scoreBadge(score) {
+  if (score == null) return "";
+  const bg = score >= 71 ? "var(--accent-hi)" : score >= 41 ? "#f59e0b" : "var(--danger)";
+  return `<span style="background:${bg};color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;margin-left:5px;vertical-align:middle">${score}</span>`;
 }
 
 function planoBadge(plano, nomePlano) {
@@ -276,6 +282,7 @@ async function loadEmpresas() {
   if (f.socio)      params.set("com_socio", "true");
   if (f.abertura_de)  params.set("abertura_de", f.abertura_de);
   if (f.abertura_ate) params.set("abertura_ate", f.abertura_ate);
+  if (f.score_min)    params.set("score_min", f.score_min);
   if (state.sort.key) { params.set("sort_by", state.sort.key); params.set("sort_dir", state.sort.dir); }
   const data = await apiFetch(`/api/empresas?${params}`);
   if (data && !data._err) {
@@ -381,6 +388,7 @@ async function exportCSV() {
   if (f.socio)      params.set("com_socio", "true");
   if (f.abertura_de)  params.set("abertura_de", f.abertura_de);
   if (f.abertura_ate) params.set("abertura_ate", f.abertura_ate);
+  if (f.score_min)    params.set("score_min", f.score_min);
   const url = `${API_BASE}/api/export?${params}`;
   const a = document.createElement("a");
   a.href = url;
@@ -879,7 +887,7 @@ function viewEmpresas() {
       <button class="btn btn-ghost" style="font-size:12px" onclick="clearSelection()">Limpar seleção</button>
       <div class="bulk-actions">
         <button class="btn" onclick="promptBulkSalvarEmLista()">${ICONS.bookmark}Salvar em lista</button>
-        <button class="btn" onclick="toast('Em breve — funcionalidade em desenvolvimento','info')">${ICONS.mail}Campanha</button>
+        <button class="btn" onclick="promptCampanha()">${ICONS.mail}Campanha</button>
         <button class="btn btn-accent" onclick="exportCSV()">${ICONS.download}Exportar</button>
       </div>
     </div>
@@ -964,6 +972,14 @@ function filterBar(showDates = false) {
       <button class="chip ${f.email?"on in":""}" onclick="toggleF('email')">${ICONS.mail}Com e-mail</button>
       <button class="chip ${f.site?"on pu":""}"  onclick="toggleF('site')">${ICONS.globe}Com site</button>
       <button class="chip ${f.socio?"on wa":""}" onclick="toggleF('socio')">${ICONS.users}Com sócio</button>
+      <div class="chip select">
+        <select onchange="updateFilter('score_min', +this.value)">
+          <option value="0"  ${f.score_min===0 ?"selected":""}>Score: Qualquer</option>
+          <option value="40" ${f.score_min===40?"selected":""}>Score 40+</option>
+          <option value="60" ${f.score_min===60?"selected":""}>Score 60+</option>
+          <option value="80" ${f.score_min===80?"selected":""}>Score 80+</option>
+        </select>
+      </div>
       ${showDates ? `
       <div class="chip-sep"></div>
       <div class="chip select" style="gap:6px">
@@ -1074,7 +1090,7 @@ function row(d) {
         <div class="co-cell">
           <div class="co-avatar">${initials(displayName)}</div>
           <div class="co-main">
-            <div class="co-name">${displayName}</div>
+            <div class="co-name">${displayName}${scoreBadge(d.score)}</div>
             <div class="co-cnae">${d.cnae || ""}</div>
           </div>
         </div>
@@ -1140,6 +1156,8 @@ function detailRow(cnpj, baseData) {
             <span class="kv">Situação <strong style="color:var(--accent-hi)">${d.situacao || "—"}</strong></span>
             <span class="sep"></span>
             <span class="kv">Atualizado <strong>${timeAgo(d.atualizado_em)}</strong></span>
+            <span class="sep"></span>
+            <span class="kv">Score ${scoreBadge(d.score)}</span>
           </div>
           <div class="detail-field"><div class="k">CNAE principal</div><div class="v">${d.cnae || "—"}</div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -1638,6 +1656,82 @@ async function promptBulkSalvarEmLista() {
   };
 }
 
+async function promptCampanha() {
+  const cnpjs = [...state.selected];
+  if (cnpjs.length === 0) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box" style="min-width:420px;max-width:560px">
+      <div class="modal-header">
+        <h3>${ICONS.mail} Enviar campanha de email</h3>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:13px;color:var(--text-muted)">
+          <strong style="color:var(--text)">${cnpjs.length}</strong> empresa${cnpjs.length !== 1 ? 's' : ''} selecionada${cnpjs.length !== 1 ? 's' : ''} — apenas as que têm email cadastrado receberão a mensagem.
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Assunto</label>
+          <input id="campanha-assunto" class="token-input" placeholder="Ex: Proposta comercial exclusiva" style="width:100%;box-sizing:border-box" maxlength="200">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Mensagem</label>
+          <textarea id="campanha-corpo" class="token-input" placeholder="Escreva sua mensagem aqui..." rows="6"
+            style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:flex-end;gap:8px">
+        <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
+        <button class="btn btn-accent" id="campanha-enviar-btn">${ICONS.mail} Enviar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const assuntoEl = overlay.querySelector('#campanha-assunto');
+  const corpoEl   = overlay.querySelector('#campanha-corpo');
+  const enviarBtn = overlay.querySelector('#campanha-enviar-btn');
+  assuntoEl.focus();
+
+  enviarBtn.onclick = async () => {
+    const assunto = assuntoEl.value.trim();
+    const corpo   = corpoEl.value.trim();
+    if (!assunto) { assuntoEl.style.borderColor = 'var(--danger)'; assuntoEl.focus(); return; }
+    if (!corpo)   { corpoEl.style.borderColor = 'var(--danger)';   corpoEl.focus();   return; }
+
+    enviarBtn.disabled = true;
+    enviarBtn.textContent = 'Enviando…';
+
+    try {
+      const r = await fetch('/api/campanha/enviar', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpjs, assunto, corpo }),
+      });
+      if (!r.ok) {
+        let msg = 'Erro ao enviar campanha';
+        try { const j = await r.json(); msg = j.detail || msg; } catch {}
+        throw new Error(msg);
+      }
+      const res = await r.json();
+      overlay.remove();
+      const parts = [];
+      if (res.enviados > 0)  parts.push(`${res.enviados} email${res.enviados !== 1 ? 's' : ''} enviado${res.enviados !== 1 ? 's' : ''}`);
+      if (res.sem_email > 0) parts.push(`${res.sem_email} sem email`);
+      if (res.falhas > 0)    parts.push(`${res.falhas} falha${res.falhas !== 1 ? 's' : ''}`);
+      const tipo = res.enviados > 0 ? 'success' : 'info';
+      toast(parts.join(' · ') || 'Nenhum email enviado', tipo);
+    } catch (e) {
+      enviarBtn.disabled = false;
+      enviarBtn.innerHTML = `${ICONS.mail} Enviar`;
+      const msg = e?.message || 'Erro ao enviar campanha';
+      toast(msg, 'error');
+    }
+  };
+}
+
 function viewExport() {
   const canExport = state.planInfo && state.planInfo.export;
   return `
@@ -1776,7 +1870,7 @@ function toggleF(k) {
   loadEmpresas();
 }
 function clearFilters() {
-  state.filters = { q:"", uf:"", porte:"", categoria:"", departamento:"", tel:false, email:false, site:false, socio:false, abertura_de:"", abertura_ate:"" };
+  state.filters = { q:"", uf:"", porte:"", categoria:"", departamento:"", tel:false, email:false, site:false, socio:false, abertura_de:"", abertura_ate:"", score_min: 0 };
   state.page = 1;
   loadEmpresas();
 }

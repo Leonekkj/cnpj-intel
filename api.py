@@ -332,6 +332,16 @@ def deletar_conta(info: dict = Depends(get_token_info_soft)):
 
 # ─── Dados ─────────────────────────────────────────────────────────────────────
 
+def _calcular_score(e: dict) -> int:
+    score = 0
+    if e.get("telefone"): score += 25
+    if e.get("email"):    score += 25
+    if e.get("site"):     score += 20
+    if e.get("instagram"): score += 15
+    if float(e.get("rating_google") or 0) > 0: score += 15
+    return score
+
+
 @app.get("/api/empresas")
 def listar_empresas(
     q:             str  = Query(""),
@@ -347,9 +357,10 @@ def listar_empresas(
     com_telefone:  bool = Query(False),
     com_site:      bool = Query(False),
     com_contato:   bool = Query(False, description="Padrão: retorna todos os CNPJs"),
+    score_min:     int  = Query(0, ge=0, le=100, description="Score mínimo de qualidade (0=todos)"),
     pagina:        int  = Query(1, ge=1),
     por_pagina:    int  = Query(50, le=200),
-    sort_by:       str  = Query("completeness", description="Campo para ordenar"),
+    sort_by:       str  = Query("score", description="Campo para ordenar"),
     sort_dir:      str  = Query("desc", description="asc ou desc"),
     info:          dict = Depends(get_token_info_soft),
 ):
@@ -361,9 +372,13 @@ def listar_empresas(
         com_email=com_email, com_socio=com_socio,
         com_telefone=com_telefone, com_site=com_site,
         com_contato=com_contato,
+        score_min=score_min,
         pagina=pagina, por_pagina=por_pagina,
         sort_by=sort_by, sort_dir=sort_dir,
     )
+
+    for empresa in resultado["dados"]:
+        empresa["score"] = _calcular_score(empresa)
 
     resultado["plano"]    = info["nome_plano"]
     resultado["restante"] = info.get("restante")
@@ -440,6 +455,7 @@ def detalhe_empresa(cnpj: str, info: dict = Depends(get_token_info)):
                                 detail=f"Limite diário do plano {info['nome_plano']} atingido "
                                        f"({info['limite_dia']} CNPJs/dia). Renova amanhã ou faça upgrade.")
 
+    result["score"] = _calcular_score(result)
     return result
 
 
@@ -601,6 +617,71 @@ def export_lista(lista_id: int, token_info=Depends(get_token_info_soft)):
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="lista_{nome_safe}.csv"'}
     )
+
+
+# ─── Campanhas ─────────────────────────────────────────────────────────────────
+
+class CampanhaBody(BaseModel):
+    cnpjs:   list
+    assunto: str
+    corpo:   str
+
+
+@app.post("/api/campanha/enviar")
+async def enviar_campanha(body: CampanhaBody, token_info=Depends(get_token_info)):
+    plano = token_info.get("plano", "free")
+    if plano == "free":
+        raise HTTPException(403, "Plano gratuito não suporta campanhas. Faça upgrade para Básico ou Pro.")
+    if not RESEND_API_KEY:
+        raise HTTPException(503, "Envio de email não configurado (RESEND_API_KEY ausente).")
+    if not body.assunto.strip() or not body.corpo.strip():
+        raise HTTPException(400, "Assunto e corpo são obrigatórios.")
+    if not body.cnpjs:
+        raise HTTPException(400, "Nenhum CNPJ fornecido.")
+    if len(body.cnpjs) > 500:
+        raise HTTPException(400, "Máximo de 500 empresas por campanha.")
+
+    empresas = db.buscar_emails_por_cnpjs(body.cnpjs)
+    sem_email = len(body.cnpjs) - len(empresas)
+    if not empresas:
+        return {"enviados": 0, "sem_email": sem_email, "falhas": 0}
+
+    import aiohttp as _aiohttp
+    enviados = 0
+    falhas = 0
+
+    async def _send(session, empresa):
+        nonlocal enviados, falhas
+        payload = {
+            "from": RESEND_FROM_EMAIL,
+            "to": [empresa["email"]],
+            "subject": body.assunto,
+            "html": body.corpo.replace("\n", "<br>"),
+            "text": body.corpo,
+        }
+        try:
+            async with session.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                json=payload,
+            ) as r:
+                if r.status < 400:
+                    enviados += 1
+                else:
+                    falhas += 1
+        except Exception:
+            falhas += 1
+
+    timeout = _aiohttp.ClientTimeout(total=30)
+    async with _aiohttp.ClientSession(timeout=timeout) as session:
+        for i in range(0, len(empresas), 10):
+            batch = empresas[i:i + 10]
+            await asyncio.gather(*[_send(session, e) for e in batch])
+            if i + 10 < len(empresas):
+                await asyncio.sleep(0.5)
+
+    _log_api.info(f"campanha token={str(token_info.get('token',''))[:8]} total={len(body.cnpjs)} enviados={enviados} falhas={falhas}")
+    return {"enviados": enviados, "sem_email": sem_email, "falhas": falhas}
 
 
 # ─── Admin ─────────────────────────────────────────────────────────────────────

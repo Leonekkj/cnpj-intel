@@ -1091,6 +1091,20 @@ class Database:
             conn.commit()
         return {"id": lista_id, "nome": nome, "criada_em": agora, "total": 0}
 
+    def buscar_emails_por_cnpjs(self, cnpjs: list) -> list:
+        if not cnpjs:
+            return []
+        placeholders = ",".join([PH] * len(cnpjs))
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT cnpj, razao_social, nome_fantasia, email "
+                f"FROM empresas WHERE cnpj IN ({placeholders}) AND email IS NOT NULL AND email != ''",
+                cnpjs,
+            )
+            rows = cur.fetchall()
+        return [{"cnpj": r[0], "razao_social": r[1], "nome_fantasia": r[2], "email": r[3]} for r in rows]
+
     def listar_listas(self, token: str) -> list:
         with _conn() as conn:
             cur = conn.cursor()
@@ -1450,8 +1464,9 @@ class Database:
                         com_email=False, com_socio=False,
                         com_telefone=False, com_site=False,
                         com_contato=False,
+                        score_min=0,
                         pagina=1, por_pagina=50,
-                        sort_by="completeness", sort_dir="desc") -> dict:
+                        sort_by="score", sort_dir="desc") -> dict:
         filtros = ["1=1"]
         params = []
 
@@ -1500,26 +1515,27 @@ class Database:
             # Critério mínimo: telefone válido obrigatório.
             filtros.append(_tel_valido_sql)
 
+        _score_sql = (
+            f"CASE WHEN {_tel_valido_sql} THEN 25 ELSE 0 END"
+            " + CASE WHEN email IS NOT NULL AND email != '' THEN 25 ELSE 0 END"
+            " + CASE WHEN site IS NOT NULL AND site != '' THEN 20 ELSE 0 END"
+            " + CASE WHEN instagram IS NOT NULL AND instagram != '' THEN 15 ELSE 0 END"
+            " + CASE WHEN rating_google IS NOT NULL AND rating_google > 0 THEN 15 ELSE 0 END"
+        )
+
+        if score_min > 0:
+            filtros.append(f"({_score_sql}) >= {int(score_min)}")
+
         where = " AND ".join(filtros)
         offset = (pagina - 1) * por_pagina
 
-        _ALLOWED_SORT = {"razao_social", "cnpj", "porte", "municipio", "abertura", "atualizado_em", "completeness"}
+        _ALLOWED_SORT = {"razao_social", "cnpj", "porte", "municipio", "abertura", "atualizado_em", "completeness", "score"}
         if sort_by not in _ALLOWED_SORT:
-            sort_by = "completeness"
+            sort_by = "score"
         direction = "ASC" if sort_dir.lower() != "desc" else "DESC"
 
-        if sort_by == "completeness":
-            _tel_score = (
-                "CASE WHEN telefone IS NOT NULL AND TRIM(telefone) != '' "
-                "AND LOWER(telefone) NOT IN ('n/a','none','null','nan','-') THEN 1 ELSE 0 END"
-            )
-            order_clause = (
-                f"(CASE WHEN razao_social IS NOT NULL AND razao_social != '' THEN 1 ELSE 0 END"
-                f" + {_tel_score}"
-                f" + CASE WHEN email IS NOT NULL AND email != '' THEN 1 ELSE 0 END"
-                f" + CASE WHEN socio_principal IS NOT NULL AND socio_principal != '' THEN 1 ELSE 0 END"
-                f") DESC, razao_social ASC"
-            )
+        if sort_by in ("completeness", "score"):
+            order_clause = f"({_score_sql}) {direction}, razao_social ASC"
         else:
             order_clause = f"{sort_by} {direction}"
 
