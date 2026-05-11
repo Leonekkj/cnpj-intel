@@ -1520,7 +1520,7 @@ class Database:
             " + CASE WHEN email IS NOT NULL AND email != '' THEN 25 ELSE 0 END"
             " + CASE WHEN site IS NOT NULL AND site != '' THEN 20 ELSE 0 END"
             " + CASE WHEN instagram IS NOT NULL AND instagram != '' THEN 15 ELSE 0 END"
-            " + CASE WHEN rating_google IS NOT NULL AND rating_google > 0 THEN 15 ELSE 0 END"
+            " + CASE WHEN rating_google IS NOT NULL AND rating_google NOT IN ('', '0', '0.0') THEN 15 ELSE 0 END"
         )
 
         if score_min > 0:

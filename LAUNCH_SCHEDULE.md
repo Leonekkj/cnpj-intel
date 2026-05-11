@@ -32,8 +32,8 @@
 - [X] Verificar se webhook dispara e plano sobe automaticamente no Railway
 - [X] Testar fluxo de login Google OAuth com conta nova (nunca usou)
 - [X] Se webhook falhar: debugar e corrigir `api.py` antes de qualquer marketing
-- [ ] **Configurar URL de Obrigado no painel Kiwify**: `https://web-production-aaeed.up.railway.app/obrigado?email={email_do_comprador}`
-- [ ] Rotacionar `ADMIN_TOKEN` (foi exposto durante debug)
+- [ X] **Configurar URL de Obrigado no painel Kiwify**: `https://web-production-aaeed.up.railway.app/obrigado?email={email_do_comprador}`
+- [X ] Rotacionar `ADMIN_TOKEN` (foi exposto durante debug)
 
 ### Qui 08/05 — Conteúdo base
 - [ ] Gravar 1 vídeo de demonstração curto (2-3 min): filtrar → exportar → abrir no WhatsApp ← roteiro pronto em `docs/launch/qui-08-05-conteudo.md` (OBS + ElevenLabs + CapCut)

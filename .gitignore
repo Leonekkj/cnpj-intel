@@ -24,3 +24,5 @@ scripts/qa_audit_local.js
 scripts/verify_fixes.js
 scripts/verify_fixes2.js
 git
+playwright_audit/auth.json
+recordings/
