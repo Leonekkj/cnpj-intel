@@ -34,6 +34,7 @@ const ICONS = {
   mail:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>',
   globe:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>',
   insta:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.4a4 4 0 1 1-8 1.1 4 4 0 0 1 8-1.1z"/><line x1="17.5" y1="6.5" x2="17.5" y2="6.5"/></svg>',
+  whatsapp: '<svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px"><path d="M17.5 14.4c-.3-.1-1.7-.8-1.9-.9-.3-.1-.5-.1-.7.1-.2.2-.7.9-.9 1.1-.2.2-.3.2-.6.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.4.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5-.2-.5-.8-1.9-1.1-2.5-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.7.3C6.4 7.3 5.6 8 5.6 9.6c0 1.6 1.1 3.1 1.3 3.3.2.2 2.2 3.4 5.4 4.7.8.3 1.4.5 1.8.6.8.2 1.5.2 2 .1.6-.1 1.9-.8 2.1-1.5.2-.7.2-1.3.1-1.5-.1 0-.3-.1-.6-.3zm-5.4 7.4h-.1C9.9 21.8 8 21.2 6.4 20L3 21l1-3.3C2.6 16.1 2 14.1 2 12 2 6.5 6.5 2 12 2s10 4.5 10 10-4.5 9.8-9.9 9.8zm0-18C7.6 3.8 3.8 7.6 3.8 12c0 1.9.6 3.8 1.8 5.3l-1.2 3.5 3.6-1.2c1.5 1 3.2 1.6 5 1.6 4.4 0 8.2-3.8 8.2-8.2S16.4 3.8 12.1 3.8z"/></svg>',
   building: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 12h.01M9 15h.01M15 9h.01M15 12h.01M15 15h.01"/></svg>',
   dollar:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
@@ -68,7 +69,7 @@ const state = {
   departamentos: [],
   tokens: [],
   tokensLoading: false,
-  filters: { q: "", uf: "", porte: "", categoria: "", departamento: "", tel: false, email: false, site: false, socio: false, abertura_de: "", abertura_ate: "", score_min: 0 },
+  filters: { q: "", uf: "", porte: "", categoria: "", departamento: "", tel: false, email: false, site: false, socio: false, abertura_de: "", abertura_ate: "" },
   sort: { key: null, dir: "asc" },
   page: 1,
   perPage: 15,
@@ -150,11 +151,6 @@ function porteBadge(p) {
   return '<span class="badge de">MÉDIO+</span>';
 }
 
-function scoreBadge(score) {
-  if (score == null) return "";
-  const bg = score >= 71 ? "var(--accent-hi)" : score >= 41 ? "#f59e0b" : "var(--danger)";
-  return `<span style="background:${bg};color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;margin-left:5px;vertical-align:middle">${score}</span>`;
-}
 
 function planoBadge(plano, nomePlano) {
   const label = nomePlano || plano || "—";
@@ -282,7 +278,6 @@ async function loadEmpresas() {
   if (f.socio)      params.set("com_socio", "true");
   if (f.abertura_de)  params.set("abertura_de", f.abertura_de);
   if (f.abertura_ate) params.set("abertura_ate", f.abertura_ate);
-  if (f.score_min)    params.set("score_min", f.score_min);
   if (state.sort.key) { params.set("sort_by", state.sort.key); params.set("sort_dir", state.sort.dir); }
   const data = await apiFetch(`/api/empresas?${params}`);
   if (data && !data._err) {
@@ -388,7 +383,6 @@ async function exportCSV() {
   if (f.socio)      params.set("com_socio", "true");
   if (f.abertura_de)  params.set("abertura_de", f.abertura_de);
   if (f.abertura_ate) params.set("abertura_ate", f.abertura_ate);
-  if (f.score_min)    params.set("score_min", f.score_min);
   const url = `${API_BASE}/api/export?${params}`;
   const a = document.createElement("a");
   a.href = url;
@@ -972,14 +966,6 @@ function filterBar(showDates = false) {
       <button class="chip ${f.email?"on in":""}" onclick="toggleF('email')">${ICONS.mail}Com e-mail</button>
       <button class="chip ${f.site?"on pu":""}"  onclick="toggleF('site')">${ICONS.globe}Com site</button>
       <button class="chip ${f.socio?"on wa":""}" onclick="toggleF('socio')">${ICONS.users}Com sócio</button>
-      <div class="chip select">
-        <select onchange="updateFilter('score_min', +this.value)">
-          <option value="0"  ${f.score_min===0 ?"selected":""}>Score: Qualquer</option>
-          <option value="40" ${f.score_min===40?"selected":""}>Score 40+</option>
-          <option value="60" ${f.score_min===60?"selected":""}>Score 60+</option>
-          <option value="80" ${f.score_min===80?"selected":""}>Score 80+</option>
-        </select>
-      </div>
       ${showDates ? `
       <div class="chip-sep"></div>
       <div class="chip select" style="gap:6px">
@@ -1083,6 +1069,9 @@ function row(d) {
   const emCel = d.email
     ? `<span class="contact-pill in${shouldBlur ? " masked" : ""}">${ICONS.mail}${d.email.length > 22 ? d.email.slice(0,22)+"…" : d.email}</span>`
     : "";
+  const waCel = d.whatsapp
+    ? `<span class="contact-pill wa${shouldBlur ? " masked" : ""}" style="background:rgba(37,211,102,.12);color:#25d366">${ICONS.whatsapp}${d.whatsapp}</span>`
+    : "";
   return `
     <tr class="${selected ? "selected" : ""} ${expanded ? "expanded" : ""}">
       <td style="padding-left:16px"><input type="checkbox" class="checkbox" ${selected?"checked":""} onchange="toggleSelect('${d.cnpj}')"></td>
@@ -1090,7 +1079,7 @@ function row(d) {
         <div class="co-cell">
           <div class="co-avatar">${initials(displayName)}</div>
           <div class="co-main">
-            <div class="co-name">${displayName}${scoreBadge(d.score)}</div>
+            <div class="co-name">${displayName}</div>
             <div class="co-cnae">${d.cnae || ""}</div>
           </div>
         </div>
@@ -1099,7 +1088,7 @@ function row(d) {
       <td>${porteBadge(d.porte)}</td>
       <td class="city-cell"><span class="c-name">${d.municipio || "—"}</span><span class="c-uf">${d.uf || ""}</span></td>
       <td class="mono-cell">${fmtDate(d.abertura)}</td>
-      <td><div style="display:flex;gap:4px;flex-wrap:wrap">${telCel}${emCel}</div></td>
+      <td><div style="display:flex;gap:4px;flex-wrap:wrap">${telCel}${emCel}${waCel}</div></td>
       <td style="color:var(--text-soft);font-size:12px">${d.socio_principal ? `<span class="${shouldBlur ? "masked" : ""}" style="color:var(--text-soft)">${d.socio_principal}</span>` : "—"}</td>
       <td style="text-align:right;padding-right:16px">
         <div class="row-actions" style="position:relative">
@@ -1136,13 +1125,15 @@ function detailRow(cnpj, baseData) {
 
   const d = { ...baseData, ...det };
   const isFree = state.plan === "free" || state.plan === "basico";
-  const telLink = d.telefone ? `https://wa.me/55${d.telefone.replace(/\D/g,"")}` : null;
+  const waNum   = d.whatsapp ? d.whatsapp.replace(/\D/g,"") : (d.telefone ? d.telefone.replace(/\D/g,"") : null);
+  const telLink = waNum ? `https://wa.me/55${waNum}` : null;
   const siteUrl = d.site ? (d.site.startsWith("http") ? d.site : "https://" + d.site) : null;
 
   const telVal   = d.telefone  ? `<span style="color:var(--accent-hi)">${d.telefone}</span>`   : `<span class="contact-em">Não encontrado</span>`;
   const emailVal = d.email     ? `<span style="color:var(--info)">${d.email}</span>`             : `<span class="contact-em">Não encontrado</span>`;
   const siteVal  = d.site      ? `<span style="color:var(--purple)">${d.site}</span>`            : `<span class="contact-em">—</span>`;
   const instaVal = d.instagram ? `<span style="color:var(--pink)">${d.instagram}</span>`         : `<span class="contact-em">—</span>`;
+  const waVal    = d.whatsapp  ? `<span style="color:#25d366">${d.whatsapp}</span>`              : `<span class="contact-em">—</span>`;
 
   return `
   <tr class="detail-row">
@@ -1156,8 +1147,6 @@ function detailRow(cnpj, baseData) {
             <span class="kv">Situação <strong style="color:var(--accent-hi)">${d.situacao || "—"}</strong></span>
             <span class="sep"></span>
             <span class="kv">Atualizado <strong>${timeAgo(d.atualizado_em)}</strong></span>
-            <span class="sep"></span>
-            <span class="kv">Score ${scoreBadge(d.score)}</span>
           </div>
           <div class="detail-field"><div class="k">CNAE principal</div><div class="v">${d.cnae || "—"}</div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -1168,6 +1157,7 @@ function detailRow(cnpj, baseData) {
         <div class="detail-col">
           <h4>Contatos</h4>
           <div class="detail-field"><div class="k">Telefone</div><div class="v">${telVal}</div></div>
+          <div class="detail-field"><div class="k">WhatsApp</div><div class="v">${waVal}</div></div>
           <div class="detail-field"><div class="k">E-mail</div><div class="v" style="word-break:break-all">${emailVal}</div></div>
           <div class="detail-field"><div class="k">Site</div><div class="v">${siteVal}</div></div>
           <div class="detail-field"><div class="k">Instagram</div><div class="v">${instaVal}</div></div>
@@ -1870,7 +1860,7 @@ function toggleF(k) {
   loadEmpresas();
 }
 function clearFilters() {
-  state.filters = { q:"", uf:"", porte:"", categoria:"", departamento:"", tel:false, email:false, site:false, socio:false, abertura_de:"", abertura_ate:"", score_min: 0 };
+  state.filters = { q:"", uf:"", porte:"", categoria:"", departamento:"", tel:false, email:false, site:false, socio:false, abertura_de:"", abertura_ate:"" };
   state.page = 1;
   loadEmpresas();
 }

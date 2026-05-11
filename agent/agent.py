@@ -412,6 +412,30 @@ def _desofuscar_email(html: str) -> list:
     return encontrados
 
 
+_RE_WA_LINK = re.compile(r'wa\.me/(?:55)?(\d{10,11})', re.IGNORECASE)
+_RE_WA_API  = re.compile(r'api\.whatsapp\.com/send[^"\']*[?&]phone=(?:55)?(\d{10,11})', re.IGNORECASE)
+
+
+def _extrair_whatsapp(html: str) -> str:
+    """Extrai número WhatsApp do HTML e retorna no formato (XX) XXXXX-XXXX."""
+    m = _RE_WA_LINK.search(html) or _RE_WA_API.search(html)
+    if m:
+        digits = re.sub(r'\D', '', m.group(1))
+    else:
+        for wa_m in re.finditer(r'whatsapp', html, re.IGNORECASE):
+            janela = html[max(0, wa_m.start() - 50): wa_m.end() + 200]
+            tel_m = _RE_TELEFONE_SITE.search(janela)
+            if tel_m:
+                ddd, p1, p2 = tel_m.group(1), tel_m.group(2), tel_m.group(3)
+                return f"({ddd}) {p1}-{p2}"
+        return ""
+    if len(digits) == 10:
+        digits = digits[:2] + '9' + digits[2:]
+    if len(digits) != 11:
+        return ""
+    return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
+
+
 def _extrair_emails(html: str) -> list:
     """Extrai e-mails do HTML, incluindo formatos ofuscados."""
     # mailto: links (maior prioridade)
@@ -436,8 +460,8 @@ _RE_TELEFONE_SITE = re.compile(
 )
 
 
-async def _scrape_pagina(session, url: str) -> tuple[str, str, str]:
-    """Scrapa uma página e retorna (email, instagram, telefone) encontrados."""
+async def _scrape_pagina(session, url: str) -> tuple[str, str, str, str]:
+    """Scrapa uma página e retorna (email, instagram, telefone, whatsapp) encontrados."""
     try:
         async with session.get(
             url, headers=HEADERS_BROWSER,
@@ -449,6 +473,7 @@ async def _scrape_pagina(session, url: str) -> tuple[str, str, str]:
                 emails = _extrair_emails(html)
                 email = emails[0] if emails else ""
                 instagram = _extrair_instagram_do_html(html)
+                whatsapp = _extrair_whatsapp(html)
                 telefone = ""
                 tel_match = _RE_TELEFONE_SITE.search(html)
                 if tel_match:
@@ -456,10 +481,10 @@ async def _scrape_pagina(session, url: str) -> tuple[str, str, str]:
                     tel_digits = ddd + parte1 + parte2
                     if len(tel_digits) in (10, 11):
                         telefone = f"({ddd}) {parte1}-{parte2}"
-                return email, instagram, telefone
+                return email, instagram, telefone, whatsapp
     except Exception:
         pass
-    return "", "", ""
+    return "", "", "", ""
 
 
 async def extrair_contatos_do_site(session, site_url: str) -> dict:
@@ -468,7 +493,7 @@ async def extrair_contatos_do_site(session, site_url: str) -> dict:
     Usa asyncio.gather — todas as páginas são buscadas simultaneamente,
     e pega o primeiro resultado não-vazio de cada campo (prioridade = ordem das páginas).
     """
-    resultado = {"email_site": "", "instagram_site": "", "telefone_site": ""}
+    resultado = {"email_site": "", "instagram_site": "", "telefone_site": "", "whatsapp_site": ""}
     if not site_url:
         return resultado
 
@@ -490,14 +515,16 @@ async def extrair_contatos_do_site(session, site_url: str) -> dict:
     for r in resultados:
         if isinstance(r, Exception):
             continue
-        email, instagram, telefone = r
+        email, instagram, telefone, whatsapp = r
         if email and not resultado["email_site"]:
             resultado["email_site"] = email
         if instagram and not resultado["instagram_site"]:
             resultado["instagram_site"] = instagram
         if telefone and not resultado["telefone_site"]:
             resultado["telefone_site"] = telefone
-        if resultado["email_site"] and resultado["instagram_site"] and resultado["telefone_site"]:
+        if whatsapp and not resultado["whatsapp_site"]:
+            resultado["whatsapp_site"] = whatsapp
+        if resultado["email_site"] and resultado["instagram_site"] and resultado["telefone_site"] and resultado["whatsapp_site"]:
             break
 
     return resultado
@@ -585,6 +612,7 @@ async def _processar_rapido(session, seed_data, db):
                                ),
             "email":           email_seed or email_api or "",
             "instagram":       "",
+            "whatsapp":        "",
             "site":            "",
             "rating_google":   "",
             "avaliacoes":      "",
@@ -706,6 +734,7 @@ async def _processar_lento(session, seed_data, db, forcar=False):
             "telefone":        tel_final,
             "email":           email_escolhido,
             "instagram":       contatos.get("instagram_site", ""),
+            "whatsapp":        contatos.get("whatsapp_site", ""),
             "site":            site,
             "rating_google":   "",
             "avaliacoes":      "",

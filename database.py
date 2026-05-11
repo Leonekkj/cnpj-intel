@@ -982,6 +982,7 @@ class Database:
                     telefone         TEXT,
                     email            TEXT,
                     instagram        TEXT,
+                    whatsapp         TEXT,
                     site             TEXT,
                     rating_google    TEXT,
                     avaliacoes       TEXT,
@@ -996,6 +997,7 @@ class Database:
                 cur.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS categoria_padrao TEXT")
                 cur.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS qualidade_contato TEXT DEFAULT 'media'")
                 cur.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS departamento TEXT")
+                cur.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS whatsapp TEXT")
             else:
                 try:
                     cur.execute("ALTER TABLE empresas ADD COLUMN categoria_padrao TEXT")
@@ -1007,6 +1009,10 @@ class Database:
                     conn.rollback()
                 try:
                     cur.execute("ALTER TABLE empresas ADD COLUMN departamento TEXT")
+                except Exception:
+                    conn.rollback()
+                try:
+                    cur.execute("ALTER TABLE empresas ADD COLUMN whatsapp TEXT")
                 except Exception:
                     conn.rollback()
 
@@ -1281,7 +1287,7 @@ class Database:
         _coalesce_pg = "CASE WHEN EXCLUDED.{f} != '' THEN EXCLUDED.{f} ELSE empresas.{f} END"
         _coalesce_sq = "CASE WHEN excluded.{f} != '' THEN excluded.{f} ELSE empresas.{f} END"
 
-        contatos = ("telefone", "email", "instagram", "site", "rating_google", "avaliacoes", "socio_principal")
+        contatos = ("telefone", "email", "instagram", "whatsapp", "site", "rating_google", "avaliacoes", "socio_principal")
 
         def _sets_pg():
             fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
@@ -1312,18 +1318,18 @@ class Database:
             INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
-             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
+             instagram, whatsapp, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
              qualidade_contato, departamento)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (cnpj) DO UPDATE SET {_sets_pg()}
         """
         sql_sq = f"""
             INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
-             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
+             instagram, whatsapp, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
              qualidade_contato, departamento)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(cnpj) DO UPDATE SET {_sets_sq()}
         """
         valores = (
@@ -1331,8 +1337,9 @@ class Database:
             perfil.get("porte"), perfil.get("cnae"), perfil.get("situacao"),
             perfil.get("abertura"), perfil.get("municipio"), perfil.get("uf"),
             perfil.get("socio_principal"), perfil.get("telefone",""), perfil.get("email",""),
-            perfil.get("instagram",""), perfil.get("site",""), perfil.get("rating_google",""),
-            perfil.get("avaliacoes",""), perfil.get("atualizado_em"), cat, qualidade, depto,
+            perfil.get("instagram",""), perfil.get("whatsapp",""), perfil.get("site",""),
+            perfil.get("rating_google",""), perfil.get("avaliacoes",""),
+            perfil.get("atualizado_em"), cat, qualidade, depto,
         )
         with _conn() as conn:
             cur = conn.cursor()
@@ -1349,7 +1356,7 @@ class Database:
 
         _coalesce_pg = "CASE WHEN EXCLUDED.{f} != '' THEN EXCLUDED.{f} ELSE empresas.{f} END"
         _coalesce_sq = "CASE WHEN excluded.{f} != '' THEN excluded.{f} ELSE empresas.{f} END"
-        contatos = ("telefone", "email", "instagram", "site", "rating_google", "avaliacoes", "socio_principal")
+        contatos = ("telefone", "email", "instagram", "whatsapp", "site", "rating_google", "avaliacoes", "socio_principal")
         fixos = ["razao_social","nome_fantasia","porte","cnae","situacao",
                  "municipio","uf","atualizado_em","categoria_padrao",
                  "qualidade_contato","departamento"]
@@ -1367,18 +1374,18 @@ class Database:
             INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
-             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
+             instagram, whatsapp, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
              qualidade_contato, departamento)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (cnpj) DO UPDATE SET {sets_pg}
         """
         sql_sq = f"""
             INSERT INTO empresas
             (cnpj, razao_social, nome_fantasia, porte, cnae, situacao,
              abertura, municipio, uf, socio_principal, telefone, email,
-             instagram, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
+             instagram, whatsapp, site, rating_google, avaliacoes, atualizado_em, categoria_padrao,
              qualidade_contato, departamento)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(cnpj) DO UPDATE SET {sets_sq}
         """
 
@@ -1396,8 +1403,9 @@ class Database:
                 perfil.get("porte"), perfil.get("cnae"), perfil.get("situacao"),
                 perfil.get("abertura"), perfil.get("municipio"), perfil.get("uf"),
                 perfil.get("socio_principal"), perfil.get("telefone", ""), perfil.get("email", ""),
-                perfil.get("instagram", ""), perfil.get("site", ""), perfil.get("rating_google", ""),
-                perfil.get("avaliacoes", ""), perfil.get("atualizado_em"), cat, qualidade, depto,
+                perfil.get("instagram", ""), perfil.get("whatsapp", ""), perfil.get("site", ""),
+                perfil.get("rating_google", ""), perfil.get("avaliacoes", ""),
+                perfil.get("atualizado_em"), cat, qualidade, depto,
             ))
 
         sql = sql_pg if USE_POSTGRES else sql_sq
@@ -1464,9 +1472,8 @@ class Database:
                         com_email=False, com_socio=False,
                         com_telefone=False, com_site=False,
                         com_contato=False,
-                        score_min=0,
                         pagina=1, por_pagina=50,
-                        sort_by="score", sort_dir="desc") -> dict:
+                        sort_by="atualizado_em", sort_dir="desc") -> dict:
         filtros = ["1=1"]
         params = []
 
@@ -1515,29 +1522,15 @@ class Database:
             # Critério mínimo: telefone válido obrigatório.
             filtros.append(_tel_valido_sql)
 
-        _score_sql = (
-            f"CASE WHEN {_tel_valido_sql} THEN 25 ELSE 0 END"
-            " + CASE WHEN email IS NOT NULL AND email != '' THEN 25 ELSE 0 END"
-            " + CASE WHEN site IS NOT NULL AND site != '' THEN 20 ELSE 0 END"
-            " + CASE WHEN instagram IS NOT NULL AND instagram != '' THEN 15 ELSE 0 END"
-            " + CASE WHEN rating_google IS NOT NULL AND rating_google NOT IN ('', '0', '0.0') THEN 15 ELSE 0 END"
-        )
-
-        if score_min > 0:
-            filtros.append(f"({_score_sql}) >= {int(score_min)}")
-
         where = " AND ".join(filtros)
         offset = (pagina - 1) * por_pagina
 
-        _ALLOWED_SORT = {"razao_social", "cnpj", "porte", "municipio", "abertura", "atualizado_em", "completeness", "score"}
+        _ALLOWED_SORT = {"razao_social", "cnpj", "porte", "municipio", "abertura", "atualizado_em"}
         if sort_by not in _ALLOWED_SORT:
-            sort_by = "score"
+            sort_by = "atualizado_em"
         direction = "ASC" if sort_dir.lower() != "desc" else "DESC"
 
-        if sort_by in ("completeness", "score"):
-            order_clause = f"({_score_sql}) {direction}, razao_social ASC"
-        else:
-            order_clause = f"{sort_by} {direction}"
+        order_clause = f"{sort_by} {direction}"
 
         with _conn() as conn:
             cur = conn.cursor()

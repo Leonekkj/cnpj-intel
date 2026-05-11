@@ -332,15 +332,6 @@ def deletar_conta(info: dict = Depends(get_token_info_soft)):
 
 # ─── Dados ─────────────────────────────────────────────────────────────────────
 
-def _calcular_score(e: dict) -> int:
-    score = 0
-    if e.get("telefone"): score += 25
-    if e.get("email"):    score += 25
-    if e.get("site"):     score += 20
-    if e.get("instagram"): score += 15
-    if float(e.get("rating_google") or 0) > 0: score += 15
-    return score
-
 
 @app.get("/api/empresas")
 def listar_empresas(
@@ -357,10 +348,9 @@ def listar_empresas(
     com_telefone:  bool = Query(False),
     com_site:      bool = Query(False),
     com_contato:   bool = Query(False, description="Padrão: retorna todos os CNPJs"),
-    score_min:     int  = Query(0, ge=0, le=100, description="Score mínimo de qualidade (0=todos)"),
     pagina:        int  = Query(1, ge=1),
     por_pagina:    int  = Query(50, le=200),
-    sort_by:       str  = Query("score", description="Campo para ordenar"),
+    sort_by:       str  = Query("atualizado_em", description="Campo para ordenar"),
     sort_dir:      str  = Query("desc", description="asc ou desc"),
     info:          dict = Depends(get_token_info_soft),
 ):
@@ -372,13 +362,9 @@ def listar_empresas(
         com_email=com_email, com_socio=com_socio,
         com_telefone=com_telefone, com_site=com_site,
         com_contato=com_contato,
-        score_min=score_min,
         pagina=pagina, por_pagina=por_pagina,
         sort_by=sort_by, sort_dir=sort_dir,
     )
-
-    for empresa in resultado["dados"]:
-        empresa["score"] = _calcular_score(empresa)
 
     resultado["plano"]    = info["nome_plano"]
     resultado["restante"] = info.get("restante")
@@ -455,7 +441,6 @@ def detalhe_empresa(cnpj: str, info: dict = Depends(get_token_info)):
                                 detail=f"Limite diário do plano {info['nome_plano']} atingido "
                                        f"({info['limite_dia']} CNPJs/dia). Renova amanhã ou faça upgrade.")
 
-    result["score"] = _calcular_score(result)
     return result
 
 
