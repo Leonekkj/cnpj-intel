@@ -769,6 +769,11 @@ RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "CNPJ Intel <onboarding@
 APP_URL           = os.environ.get("APP_URL", "https://web-production-aaeed.up.railway.app").rstrip("/")
 
 
+@app.get("/api/config")
+def get_config():
+    return {"app_url": APP_URL}
+
+
 async def send_welcome_email(email: str, plano: str, order_id: str) -> None:
     """Envia e-mail de boas-vindas via Resend. Fire-and-forget — nunca lança exception."""
     if not RESEND_API_KEY or not email:

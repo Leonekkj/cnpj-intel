@@ -1,6 +1,8 @@
 // ─── CNPJ Intel Dashboard ───────────────────────────────────────
 
 const API_BASE = location.hostname === "localhost" ? "http://localhost:8000" : "";
+let appUrl = location.origin;
+fetch(API_BASE + "/api/config").then(r => r.json()).then(d => { if (d.app_url) appUrl = d.app_url; }).catch(() => {});
 const _urlToken = new URLSearchParams(location.search).get("token");
 if (_urlToken) {
   localStorage.setItem("cnpj_token", _urlToken);
@@ -1708,7 +1710,7 @@ function viewClientes() {
             </span>
           </div>
           <div>
-            <button class="btn" style="font-size:11px;padding:5px 10px" onclick="navigator.clipboard.writeText('${location.origin}?token=${t.token}').then(() => toast('Link copiado!', 'success'))">${ICONS.copy}Copiar link</button>
+            <button class="btn" style="font-size:11px;padding:5px 10px" onclick="navigator.clipboard.writeText('${appUrl}?token=${t.token}').then(() => toast('Link copiado!', 'success'))">${ICONS.copy}Copiar link</button>
           </div>
           <div>
             <button class="row-btn" title="Remover" onclick="deletarToken('${t.token}')">${ICONS.trash}</button>
@@ -1885,7 +1887,7 @@ async function handleCriarToken() {
   }
   const result = await criarToken(tokenVal, plano);
   if (result) {
-    const link = `${location.origin}?token=${result.token}`;
+    const link = `${appUrl}?token=${result.token}`;
     const el = $("#token-result");
     if (el) {
       el.style.display = "block";
