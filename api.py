@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Query, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -78,6 +78,11 @@ async def lifespan(app: FastAPI):
         _db_ready.set()
         _log_api.info("DB pronto — API totalmente operacional")
         asyncio.create_task(asyncio.to_thread(_run_db_migrations))
+        # Start Gmail reply poller
+        if os.environ.get("DISABLE_GMAIL_POLLER") != "1":
+            import gmail_service as _gs
+            asyncio.create_task(_gs.poll_gmail_replies(db))
+            _log_api.info("Gmail reply poller iniciado (intervalo: 1h)")
 
     asyncio.create_task(_init_db())
     yield
@@ -293,6 +298,44 @@ def auth_google(body: GoogleAuthBody):
 def google_config():
     """Retorna o GOOGLE_CLIENT_ID público para o frontend."""
     return {"client_id": GOOGLE_CLIENT_ID}
+
+
+@app.get("/api/gmail/status")
+def gmail_status(token_info=Depends(get_token_info)):
+    """Check if the current user has Gmail connected."""
+    creds = db.buscar_gmail_tokens(token_info["token"])
+    if creds:
+        return {"connected": True, "email": creds.get("gmail_email")}
+    return {"connected": False, "email": None}
+
+
+@app.get("/api/auth/google/gmail/url")
+def gmail_auth_url(token_info=Depends(get_token_info)):
+    """Return the Google OAuth URL for Gmail access. State encodes the user token."""
+    if not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(503, "GOOGLE_CLIENT_SECRET não configurado.")
+    import gmail_service as _gs
+    url = _gs.get_gmail_auth_url(state=token_info["token"])
+    return {"url": url}
+
+
+@app.get("/api/auth/google/gmail/callback")
+def gmail_auth_callback(code: str = "", state: str = "", error: str = ""):
+    """OAuth callback — exchanges code for tokens and redirects to frontend."""
+    frontend_url = APP_URL + "/?gmail_connected="
+    if error or not code or not state:
+        _log_api.warning(f"Gmail OAuth error: {error}")
+        return RedirectResponse(frontend_url + "error")
+    try:
+        import gmail_service as _gs
+        data = _gs.exchange_code_for_tokens(code)
+        # state is the user's platform token
+        db.salvar_gmail_tokens(state, data["access_token"], data["refresh_token"], data["expiry"])
+        _log_api.info(f"Gmail connected for token={state[:8]} email={data['email']}")
+        return RedirectResponse(frontend_url + "success")
+    except Exception as e:
+        _log_api.error(f"Gmail OAuth callback error: {e}")
+        return RedirectResponse(frontend_url + "error")
 
 
 # ─── Plano do usuário ──────────────────────────────────────────────────────────
@@ -608,66 +651,146 @@ def export_lista(lista_id: int, token_info=Depends(get_token_info_soft)):
 # ─── Campanhas ─────────────────────────────────────────────────────────────────
 
 class CampanhaBody(BaseModel):
-    cnpjs:   list
-    assunto: str
-    corpo:   str
+    cnpjs:     list
+    assunto:   str
+    corpo:     str
+    remetente: str = "platform"  # "gmail" or "platform"
 
 
 @app.post("/api/campanha/enviar")
 async def enviar_campanha(body: CampanhaBody, token_info=Depends(get_token_info)):
     plano = token_info.get("plano", "free")
     if plano == "free":
-        raise HTTPException(403, "Plano gratuito não suporta campanhas. Faça upgrade para Básico ou Pro.")
-    if not RESEND_API_KEY:
-        raise HTTPException(503, "Envio de email não configurado (RESEND_API_KEY ausente).")
+        raise HTTPException(403, "Plano gratuito não suporta campanhas.")
+    if body.remetente not in ("gmail", "platform"):
+        raise HTTPException(400, "remetente deve ser 'gmail' ou 'platform'.")
     if not body.assunto.strip() or not body.corpo.strip():
         raise HTTPException(400, "Assunto e corpo são obrigatórios.")
     if not body.cnpjs:
         raise HTTPException(400, "Nenhum CNPJ fornecido.")
-    if len(body.cnpjs) > 500:
-        raise HTTPException(400, "Máximo de 500 empresas por campanha.")
+    if len(body.cnpjs) > 100:
+        raise HTTPException(400, "Máximo de 100 empresas por campanha.")
+
+    # Validate Gmail credentials if needed
+    gmail_service_instance = None
+    gmail_conta = None
+    current_access_token = None
+    current_expiry = None
+    if body.remetente == "gmail":
+        creds = db.buscar_gmail_tokens(token_info["token"])
+        if not creds:
+            raise HTTPException(400, "Gmail não conectado. Conecte seu Gmail antes de usar esta opção.")
+        try:
+            import gmail_service as _gs
+            gmail_service_instance, current_access_token, current_expiry = _gs.build_gmail_service(
+                creds["access_token"], creds["refresh_token"], creds["expiry"]
+            )
+            gmail_conta = creds.get("gmail_email")
+            # Save refreshed token if changed
+            if current_access_token != creds["access_token"]:
+                db.salvar_gmail_tokens(token_info["token"], current_access_token, creds["refresh_token"], current_expiry)
+        except Exception as e:
+            _log_api.error(f"Gmail auth error: {e}")
+            raise HTTPException(400, "Falha ao autenticar com Gmail. Reconecte sua conta.")
+    elif not RESEND_API_KEY:
+        raise HTTPException(503, "Envio de email não configurado (RESEND_API_KEY ausente).")
 
     empresas = db.buscar_emails_por_cnpjs(body.cnpjs)
     sem_email = len(body.cnpjs) - len(empresas)
     if not empresas:
-        return {"enviados": 0, "sem_email": sem_email, "falhas": 0}
+        camp_id = db.salvar_campanha(token_info["token"], body.assunto, body.corpo,
+                                     body.remetente, gmail_conta, 0, 0, sem_email)
+        return {"enviados": 0, "sem_email": sem_email, "falhas": 0, "campanha_id": camp_id}
 
-    import aiohttp as _aiohttp
     enviados = 0
     falhas = 0
+    destinatarios = []
 
-    async def _send(session, empresa):
-        nonlocal enviados, falhas
-        payload = {
-            "from": RESEND_FROM_EMAIL,
-            "to": [empresa["email"]],
-            "subject": body.assunto,
-            "html": body.corpo.replace("\n", "<br>"),
-            "text": body.corpo,
-        }
-        try:
-            async with session.post(
-                "https://api.resend.com/emails",
-                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-                json=payload,
-            ) as r:
-                if r.status < 400:
-                    enviados += 1
-                else:
-                    falhas += 1
-        except Exception:
-            falhas += 1
+    if body.remetente == "gmail":
+        import gmail_service as _gs
+        for empresa in empresas:
+            try:
+                thread_id = await asyncio.to_thread(
+                    _gs.send_email_gmail, gmail_service_instance,
+                    empresa["email"], body.assunto, body.corpo
+                )
+                enviados += 1
+                destinatarios.append({
+                    "cnpj": empresa["cnpj"], "razao_social": empresa.get("razao_social"),
+                    "email": empresa["email"], "status": "enviado", "gmail_thread_id": thread_id
+                })
+            except Exception as e:
+                _log_api.warning(f"Gmail send failed to {empresa['email']}: {e}")
+                falhas += 1
+                destinatarios.append({
+                    "cnpj": empresa["cnpj"], "razao_social": empresa.get("razao_social"),
+                    "email": empresa["email"], "status": "falhou", "gmail_thread_id": None
+                })
+            await asyncio.sleep(0.1)  # stay within Gmail quota
+    else:
+        import aiohttp as _aiohttp
 
-    timeout = _aiohttp.ClientTimeout(total=30)
-    async with _aiohttp.ClientSession(timeout=timeout) as session:
-        for i in range(0, len(empresas), 10):
-            batch = empresas[i:i + 10]
-            await asyncio.gather(*[_send(session, e) for e in batch])
-            if i + 10 < len(empresas):
-                await asyncio.sleep(0.5)
+        async def _send_resend(session, empresa):
+            nonlocal enviados, falhas
+            payload = {
+                "from": RESEND_FROM_EMAIL, "to": [empresa["email"]],
+                "subject": body.assunto,
+                "html": body.corpo.replace("\n", "<br>"), "text": body.corpo,
+            }
+            try:
+                async with session.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                    json=payload,
+                ) as r:
+                    status = "enviado" if r.status < 400 else "falhou"
+                    if status == "enviado":
+                        enviados += 1
+                    else:
+                        falhas += 1
+            except Exception:
+                status = "falhou"
+                falhas += 1
+            destinatarios.append({
+                "cnpj": empresa["cnpj"], "razao_social": empresa.get("razao_social"),
+                "email": empresa["email"], "status": status, "gmail_thread_id": None
+            })
 
-    _log_api.info(f"campanha token={str(token_info.get('token',''))[:8]} total={len(body.cnpjs)} enviados={enviados} falhas={falhas}")
-    return {"enviados": enviados, "sem_email": sem_email, "falhas": falhas}
+        timeout = _aiohttp.ClientTimeout(total=30)
+        async with _aiohttp.ClientSession(timeout=timeout) as session:
+            for i in range(0, len(empresas), 10):
+                batch = empresas[i:i + 10]
+                await asyncio.gather(*[_send_resend(session, e) for e in batch])
+                if i + 10 < len(empresas):
+                    await asyncio.sleep(0.5)
+
+    camp_id = db.salvar_campanha(token_info["token"], body.assunto, body.corpo,
+                                  body.remetente, gmail_conta, enviados, falhas, sem_email)
+    db.salvar_destinatarios(camp_id, destinatarios)
+
+    _log_api.info(f"campanha id={camp_id} remetente={body.remetente} enviados={enviados} falhas={falhas}")
+    return {"enviados": enviados, "sem_email": sem_email, "falhas": falhas, "campanha_id": camp_id}
+
+
+@app.get("/api/campanhas")
+def listar_campanhas(token_info=Depends(get_token_info)):
+    """List all campaigns for the current user."""
+    plano = token_info.get("plano", "free")
+    if plano == "free":
+        raise HTTPException(403, "Plano gratuito não tem acesso ao histórico de campanhas.")
+    return db.listar_campanhas(token_info["token"])
+
+
+@app.get("/api/campanhas/{campanha_id}")
+def detalhe_campanha(campanha_id: int, token_info=Depends(get_token_info)):
+    """Return campaign detail with all recipients."""
+    plano = token_info.get("plano", "free")
+    if plano == "free":
+        raise HTTPException(403, "Plano gratuito não tem acesso ao histórico de campanhas.")
+    camp = db.buscar_campanha_detalhe(campanha_id, token_info["token"])
+    if not camp:
+        raise HTTPException(404, "Campanha não encontrada.")
+    return camp
 
 
 # ─── Admin ─────────────────────────────────────────────────────────────────────
@@ -822,6 +945,7 @@ KIWIFY_CHECKOUT_BASICO  = os.environ.get("KIWIFY_CHECKOUT_BASICO", "")
 KIWIFY_CHECKOUT_PRO     = os.environ.get("KIWIFY_CHECKOUT_PRO", "")
 KIWIFY_WEBHOOK_TOKEN    = os.environ.get("KIWIFY_WEBHOOK_TOKEN", "")
 GOOGLE_CLIENT_ID        = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET    = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 
 _KIWIFY_CHECKOUT_MAP = {
     "basico": KIWIFY_CHECKOUT_BASICO,
