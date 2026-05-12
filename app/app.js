@@ -14,6 +14,16 @@ if (_urlToken) {
 const TOKEN = _urlToken || localStorage.getItem("cnpj_token") || "";
 const H = TOKEN ? { "Authorization": "Bearer " + TOKEN } : {};
 
+const _gmailParam = new URLSearchParams(location.search).get('gmail_connected');
+if (_gmailParam === 'success') {
+  // Toast will fire after DOM/init; defer to avoid toast not existing yet
+  window.__gmailConnectedResult = 'success';
+  history.replaceState({}, '', location.pathname);
+} else if (_gmailParam === 'error') {
+  window.__gmailConnectedResult = 'error';
+  history.replaceState({}, '', location.pathname);
+}
+
 async function apiFetch(path, opts = {}) {
   try {
     const r = await fetch(API_BASE + path, { headers: { ...H, ...(opts.headers || {}) }, ...opts });
@@ -517,6 +527,7 @@ const PAGE_TITLES = {
   empresas:  { t: "Empresas",      s: "Todas as empresas enriquecidas na sua base" },
   busca:     { t: "Busca avançada",s: "Filtros combinados para prospecção precisa" },
   listas:    { t: "Minhas listas", s: "Leads salvos e campanhas em andamento" },
+  campanhas: { t: "Campanhas" },
   exportar:  { t: "Exportar CSV",  s: "Baixe listas filtradas em formato planilha" },
   api:       { t: "API & Webhooks",s: "Integre CNPJ Intel com seu CRM" },
   clientes:  { t: "Clientes",      s: "Gerenciar tokens e planos" },
@@ -535,6 +546,9 @@ function showTab(t) {
   } else if (t === "clientes") {
     render();
     loadTokens();
+  } else if (t === "campanhas") {
+    render();
+    loadCampanhas();
   } else {
     render();
   }
@@ -562,6 +576,11 @@ function render() {
   const t = state.tab;
   if (t === "listas") {
     _renderListas(); // fire and forget — intentional
+    return;
+  }
+  if (t === "campanhas") {
+    c.innerHTML = limitBanner() + '<div id="campanhas-content"></div>';
+    wireContent();
     return;
   }
   let html = limitBanner();
@@ -1646,21 +1665,50 @@ async function promptBulkSalvarEmLista() {
   };
 }
 
+async function loadGmailStatus() {
+  try {
+    const r = await fetch('/api/gmail/status', { headers: { 'Authorization': `Bearer ${TOKEN}` } });
+    if (!r.ok) return { connected: false, email: null };
+    return await r.json();
+  } catch { return { connected: false, email: null }; }
+}
+
 async function promptCampanha() {
   const cnpjs = [...state.selected];
   if (cnpjs.length === 0) return;
+  if (cnpjs.length > 100) {
+    toast('Máximo de 100 empresas por campanha. Selecione menos empresas.', 'error');
+    return;
+  }
+
+  const gmailStatus = await loadGmailStatus();
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-box" style="min-width:420px;max-width:560px">
       <div class="modal-header">
-        <h3>${ICONS.mail} Enviar campanha de email</h3>
+        <h3>Enviar campanha de email</h3>
         <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
       </div>
       <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
         <div style="font-size:13px;color:var(--text-muted)">
-          <strong style="color:var(--text)">${cnpjs.length}</strong> empresa${cnpjs.length !== 1 ? 's' : ''} selecionada${cnpjs.length !== 1 ? 's' : ''} — apenas as que têm email cadastrado receberão a mensagem.
+          <strong style="color:var(--text)">${cnpjs.length}</strong> empresa${cnpjs.length !== 1 ? 's' : ''} selecionada${cnpjs.length !== 1 ? 's' : ''} (máx. 100)
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px">Remetente</label>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+              <input type="radio" name="remetente" value="platform" checked> Conta da plataforma
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px" id="gmail-radio-label">
+              <input type="radio" name="remetente" value="gmail" ${!gmailStatus.connected ? 'id="gmail-radio-not-connected"' : ''}>
+              ${gmailStatus.connected
+                ? `Meu Gmail <span style="color:var(--text-muted);font-size:11px">(${gmailStatus.email})</span>`
+                : `Meu Gmail <button id="connect-gmail-btn" class="btn btn-ghost" style="padding:2px 8px;font-size:11px;margin-left:4px">Conectar</button>`
+              }
+            </label>
+          </div>
         </div>
         <div>
           <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Assunto</label>
@@ -1674,11 +1722,27 @@ async function promptCampanha() {
       </div>
       <div class="modal-footer" style="justify-content:flex-end;gap:8px">
         <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
-        <button class="btn btn-accent" id="campanha-enviar-btn">${ICONS.mail} Enviar</button>
+        <button class="btn btn-accent" id="campanha-enviar-btn">Enviar</button>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
+
+  // Wire "Conectar Gmail" button
+  const connectBtn = overlay.querySelector('#connect-gmail-btn');
+  if (connectBtn) {
+    connectBtn.onclick = async (e) => {
+      e.preventDefault();
+      const r = await fetch('/api/auth/google/gmail/url', { headers: { 'Authorization': `Bearer ${TOKEN}` } });
+      if (!r.ok) { toast('Erro ao obter URL do Gmail', 'error'); return; }
+      const { url } = await r.json();
+      window.location.href = url;
+    };
+    // Prevent selecting the Gmail radio if not connected
+    overlay.querySelector('#gmail-radio-not-connected')?.addEventListener('change', function() {
+      if (this.checked) this.checked = false;
+    });
+  }
 
   const assuntoEl = overlay.querySelector('#campanha-assunto');
   const corpoEl   = overlay.querySelector('#campanha-corpo');
@@ -1686,10 +1750,11 @@ async function promptCampanha() {
   assuntoEl.focus();
 
   enviarBtn.onclick = async () => {
-    const assunto = assuntoEl.value.trim();
-    const corpo   = corpoEl.value.trim();
+    const assunto  = assuntoEl.value.trim();
+    const corpo    = corpoEl.value.trim();
+    const remetente = overlay.querySelector('input[name="remetente"]:checked')?.value || 'platform';
     if (!assunto) { assuntoEl.style.borderColor = 'var(--danger)'; assuntoEl.focus(); return; }
-    if (!corpo)   { corpoEl.style.borderColor = 'var(--danger)';   corpoEl.focus();   return; }
+    if (!corpo)   { corpoEl.style.borderColor   = 'var(--danger)'; corpoEl.focus();   return; }
 
     enviarBtn.disabled = true;
     enviarBtn.textContent = 'Enviando…';
@@ -1698,7 +1763,7 @@ async function promptCampanha() {
       const r = await fetch('/api/campanha/enviar', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cnpjs, assunto, corpo }),
+        body: JSON.stringify({ cnpjs, assunto, corpo, remetente }),
       });
       if (!r.ok) {
         let msg = 'Erro ao enviar campanha';
@@ -1711,15 +1776,159 @@ async function promptCampanha() {
       if (res.enviados > 0)  parts.push(`${res.enviados} email${res.enviados !== 1 ? 's' : ''} enviado${res.enviados !== 1 ? 's' : ''}`);
       if (res.sem_email > 0) parts.push(`${res.sem_email} sem email`);
       if (res.falhas > 0)    parts.push(`${res.falhas} falha${res.falhas !== 1 ? 's' : ''}`);
-      const tipo = res.enviados > 0 ? 'success' : 'info';
-      toast(parts.join(' · ') || 'Nenhum email enviado', tipo);
+      toast(parts.join(' · ') || 'Nenhum email enviado', res.enviados > 0 ? 'success' : 'info');
     } catch (e) {
       enviarBtn.disabled = false;
-      enviarBtn.innerHTML = `${ICONS.mail} Enviar`;
-      const msg = e?.message || 'Erro ao enviar campanha';
-      toast(msg, 'error');
+      enviarBtn.textContent = 'Enviar';
+      toast(e?.message || 'Erro ao enviar campanha', 'error');
     }
   };
+}
+
+// ─── Campanhas ──────────────────────────────────────────────────
+async function loadCampanhas() {
+  const el = document.getElementById('campanhas-content');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text-muted);padding:24px">Carregando...</div>';
+  try {
+    const r = await fetch('/api/campanhas', { headers: { 'Authorization': `Bearer ${TOKEN}` } });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      el.innerHTML = `<div style="color:var(--danger);padding:24px">${j.detail || 'Erro ao carregar campanhas'}</div>`;
+      return;
+    }
+    const campanhas = await r.json();
+    renderCampanhasList(el, campanhas);
+  } catch {
+    el.innerHTML = '<div style="color:var(--danger);padding:24px">Erro de conexão</div>';
+  }
+}
+
+function renderCampanhasList(el, campanhas) {
+  if (campanhas.length === 0) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:48px;color:var(--text-muted)">
+        <p style="font-size:32px;margin:0">📭</p>
+        <p style="margin-top:12px">Nenhuma campanha enviada ainda.</p>
+        <p style="font-size:13px">Selecione empresas em "Minhas Listas" e clique em "Enviar campanha".</p>
+      </div>`;
+    return;
+  }
+  const rows = campanhas.map(c => {
+    const data = c.criada_em ? new Date(c.criada_em).toLocaleDateString('pt-BR') : '—';
+    const remetenteBadge = c.remetente === 'gmail'
+      ? `<span style="font-size:11px;color:var(--text-muted)">via ${c.gmail_conta || 'Gmail'}</span>`
+      : `<span style="font-size:11px;color:var(--text-muted)">via plataforma</span>`;
+    const respostaBadge = c.total_respostas > 0
+      ? `<span style="background:rgba(124,106,247,.15);color:#a89cf7;padding:2px 8px;border-radius:12px;font-size:12px">${c.total_respostas} resposta${c.total_respostas !== 1 ? 's' : ''}</span>`
+      : `<span style="color:var(--text-muted);font-size:12px">—</span>`;
+    const falhasBadge = c.total_falhas > 0
+      ? `<span style="color:var(--danger);font-size:12px">${c.total_falhas} falha${c.total_falhas !== 1 ? 's' : ''}</span>`
+      : '';
+    return `
+      <tr style="cursor:pointer;border-bottom:1px solid var(--border)" onclick="loadCampanhaDetalhe(${c.id})">
+        <td style="padding:12px 8px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <strong>${c.assunto}</strong><br>${remetenteBadge}
+        </td>
+        <td style="padding:12px 8px;white-space:nowrap;color:var(--text-muted)">${data}</td>
+        <td style="padding:12px 8px">${c.total_enviados}</td>
+        <td style="padding:12px 8px">${respostaBadge}</td>
+        <td style="padding:12px 8px">${falhasBadge}</td>
+      </tr>`;
+  }).join('');
+  el.innerHTML = `
+    <div style="padding:24px 0">
+      <h2 style="margin:0 0 16px">Campanhas enviadas</h2>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border);color:var(--text-muted);font-size:12px;text-transform:uppercase">
+            <th style="padding:8px;text-align:left">Assunto</th>
+            <th style="padding:8px;text-align:left">Data</th>
+            <th style="padding:8px;text-align:left">Enviados</th>
+            <th style="padding:8px;text-align:left">Respostas</th>
+            <th style="padding:8px;text-align:left">Falhas</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+async function loadCampanhaDetalhe(id) {
+  const el = document.getElementById('campanhas-content');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text-muted);padding:24px">Carregando...</div>';
+  try {
+    const r = await fetch(`/api/campanhas/${id}`, { headers: { 'Authorization': `Bearer ${TOKEN}` } });
+    if (!r.ok) { el.innerHTML = '<div style="color:var(--danger);padding:24px">Campanha não encontrada.</div>'; return; }
+    const camp = await r.json();
+    renderCampanhaDetalhe(el, camp);
+  } catch {
+    el.innerHTML = '<div style="color:var(--danger);padding:24px">Erro de conexão</div>';
+  }
+}
+
+function renderCampanhaDetalhe(el, camp) {
+  const data = camp.criada_em ? new Date(camp.criada_em).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric' }) : '—';
+  const via = camp.remetente === 'gmail' ? `via ${camp.gmail_conta || 'Gmail'}` : 'via plataforma';
+
+  const respostas = camp.destinatarios.filter(d => d.respondeu);
+  const respostaCards = respostas.map(d => `
+    <div style="border-left:3px solid #7c6af7;padding:10px 14px;background:rgba(124,106,247,.08);border-radius:0 6px 6px 0;margin-bottom:8px">
+      <div style="font-weight:600;color:var(--text)">${d.razao_social || d.cnpj} respondeu</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px">"${d.resposta_preview || '...'}"</div>
+    </div>`).join('');
+
+  const destRows = camp.destinatarios.map(d => {
+    const statusEl = d.status === 'enviado'
+      ? `<span style="color:#4caf50">✓ Enviado</span>`
+      : d.status === 'falhou'
+        ? `<span style="color:var(--danger)">✗ Falhou</span>`
+        : `<span style="color:var(--text-muted)">Sem email</span>`;
+    const resp = d.respondeu ? `<span style="color:#a89cf7">✉ Sim</span>` : `<span style="color:var(--text-muted)">—</span>`;
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px">${d.razao_social || '—'}</td>
+      <td style="padding:8px;font-size:12px;color:var(--text-muted)">${d.email || '—'}</td>
+      <td style="padding:8px">${statusEl}</td>
+      <td style="padding:8px">${resp}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="padding:24px 0">
+      <button onclick="loadCampanhas()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;margin-bottom:16px">← Voltar</button>
+      <div style="margin-bottom:4px;font-size:13px;color:var(--text-muted)">${data} · ${via}</div>
+      <h2 style="margin:0 0 20px">${camp.assunto}</h2>
+
+      <div style="display:flex;gap:12px;margin-bottom:24px">
+        ${[
+          ['Enviados', camp.total_enviados, 'var(--text)'],
+          ['Respostas', camp.total_respostas, '#a89cf7'],
+          ['Falhas', camp.total_falhas, 'var(--danger)'],
+        ].map(([label, val, color]) => `
+          <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;text-align:center">
+            <div style="font-size:28px;font-weight:700;color:${color}">${val}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${label}</div>
+          </div>`).join('')}
+      </div>
+
+      ${respostas.length > 0 ? `<div style="margin-bottom:24px">${respostaCards}</div>` : ''}
+
+      <details>
+        <summary style="cursor:pointer;font-size:13px;color:var(--text-muted);margin-bottom:12px">
+          Todos os destinatários (${camp.destinatarios.length})
+        </summary>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="border-bottom:2px solid var(--border);color:var(--text-muted);font-size:11px;text-transform:uppercase">
+            <th style="padding:6px;text-align:left">Empresa</th>
+            <th style="padding:6px;text-align:left">Email</th>
+            <th style="padding:6px;text-align:left">Status</th>
+            <th style="padding:6px;text-align:left">Resposta</th>
+          </tr></thead>
+          <tbody>${destRows}</tbody>
+        </table>
+      </details>
+    </div>`;
 }
 
 function viewExport() {
@@ -2430,6 +2639,15 @@ async function init() {
   // Initial view
   render();
   showTab("dashboard");
+
+  // Handle Gmail OAuth redirect result
+  if (window.__gmailConnectedResult === 'success') {
+    toast('Gmail conectado com sucesso!', 'success');
+    delete window.__gmailConnectedResult;
+  } else if (window.__gmailConnectedResult === 'error') {
+    toast('Falha ao conectar Gmail. Tente novamente.', 'error');
+    delete window.__gmailConnectedResult;
+  }
 
   // Wire billing portal link — Kiwify customer portal (no API call needed)
   const billingLink = document.getElementById("billing-portal-link");
