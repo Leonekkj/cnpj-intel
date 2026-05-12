@@ -38,6 +38,7 @@ def _run_db_fast():
     db.criar_tabelas()
     db.criar_tabela_tokens()
     db.criar_tabela_listas()
+    db.criar_tabela_campanhas()
     db.criar_tabela_stats_snapshots()
     db.criar_tabela_webhook_events()
     # Ensure ADMIN_TOKEN exists in tokens table so FK on listas works
@@ -350,7 +351,7 @@ def listar_empresas(
     com_contato:   bool = Query(False, description="Padrão: retorna todos os CNPJs"),
     pagina:        int  = Query(1, ge=1),
     por_pagina:    int  = Query(50, le=200),
-    sort_by:       str  = Query("atualizado_em", description="Campo para ordenar"),
+    sort_by:       str  = Query("completude", description="Campo para ordenar"),
     sort_dir:      str  = Query("desc", description="asc ou desc"),
     info:          dict = Depends(get_token_info_soft),
 ):

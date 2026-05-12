@@ -651,6 +651,7 @@ class Database:
         self._migrar_colunas_auth()
         self._migrar_colunas_pagarme()
         self._migrar_colunas_google()
+        self._migrar_colunas_gmail()
 
     def _migrar_colunas_auth(self):
         with _conn() as conn:
@@ -700,6 +701,21 @@ class Database:
                 if "google_sub" not in existing:
                     cur.execute("ALTER TABLE tokens ADD COLUMN google_sub TEXT")
                 cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_google_sub ON tokens(google_sub) WHERE google_sub IS NOT NULL")
+            conn.commit()
+
+    def _migrar_colunas_gmail(self):
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS gmail_access_token TEXT")
+                cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS gmail_refresh_token TEXT")
+                cur.execute("ALTER TABLE tokens ADD COLUMN IF NOT EXISTS gmail_token_expiry TEXT")
+            else:
+                cur.execute("PRAGMA table_info(tokens)")
+                existing_cols = {row[1] for row in cur.fetchall()}
+                for col in ("gmail_access_token", "gmail_refresh_token", "gmail_token_expiry"):
+                    if col not in existing_cols:
+                        cur.execute(f"ALTER TABLE tokens ADD COLUMN {col} TEXT")
             conn.commit()
 
     def criar_conta_google(self, google_sub: str, email: str, nome: str) -> str:
@@ -1073,6 +1089,70 @@ class Database:
                 """)
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_listas_token ON listas(token)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_lista_itens_lista ON lista_itens(lista_id)")
+            conn.commit()
+
+    def criar_tabela_campanhas(self):
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS campanhas (
+                        id              SERIAL PRIMARY KEY,
+                        token           TEXT NOT NULL,
+                        assunto         TEXT NOT NULL,
+                        corpo           TEXT NOT NULL,
+                        remetente       TEXT NOT NULL DEFAULT 'platform',
+                        gmail_conta     TEXT,
+                        criada_em       TIMESTAMP DEFAULT NOW(),
+                        total_enviados  INTEGER DEFAULT 0,
+                        total_falhas    INTEGER DEFAULT 0,
+                        total_sem_email INTEGER DEFAULT 0
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS campanha_destinatarios (
+                        id               SERIAL PRIMARY KEY,
+                        campanha_id      INTEGER NOT NULL,
+                        cnpj             TEXT NOT NULL,
+                        razao_social     TEXT,
+                        email            TEXT,
+                        status           TEXT NOT NULL DEFAULT 'enviado',
+                        gmail_thread_id  TEXT,
+                        respondeu        BOOLEAN DEFAULT FALSE,
+                        resposta_preview TEXT,
+                        respondeu_em     TIMESTAMP
+                    )
+                """)
+            else:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS campanhas (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        token           TEXT NOT NULL,
+                        assunto         TEXT NOT NULL,
+                        corpo           TEXT NOT NULL,
+                        remetente       TEXT NOT NULL DEFAULT 'platform',
+                        gmail_conta     TEXT,
+                        criada_em       TEXT,
+                        total_enviados  INTEGER DEFAULT 0,
+                        total_falhas    INTEGER DEFAULT 0,
+                        total_sem_email INTEGER DEFAULT 0
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS campanha_destinatarios (
+                        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                        campanha_id      INTEGER NOT NULL,
+                        cnpj             TEXT NOT NULL,
+                        razao_social     TEXT,
+                        email            TEXT,
+                        status           TEXT NOT NULL DEFAULT 'enviado',
+                        gmail_thread_id  TEXT,
+                        respondeu        INTEGER DEFAULT 0,
+                        resposta_preview TEXT,
+                        respondeu_em     TEXT
+                    )
+                """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_camp_dest_campanha ON campanha_destinatarios(campanha_id)")
             conn.commit()
 
     def criar_lista(self, token: str, nome: str) -> dict:
@@ -1525,12 +1605,23 @@ class Database:
         where = " AND ".join(filtros)
         offset = (pagina - 1) * por_pagina
 
-        _ALLOWED_SORT = {"razao_social", "cnpj", "porte", "municipio", "abertura", "atualizado_em"}
+        _ALLOWED_SORT = {"razao_social", "cnpj", "porte", "municipio", "abertura", "atualizado_em", "completude"}
         if sort_by not in _ALLOWED_SORT:
-            sort_by = "atualizado_em"
+            sort_by = "completude"
         direction = "ASC" if sort_dir.lower() != "desc" else "DESC"
 
-        order_clause = f"{sort_by} {direction}"
+        if sort_by == "completude":
+            order_clause = (
+                "(CASE WHEN email IS NOT NULL AND email != '' THEN 3 ELSE 0 END"
+                " + CASE WHEN razao_social IS NOT NULL AND razao_social != '' THEN 2 ELSE 0 END"
+                " + CASE WHEN socio_principal IS NOT NULL AND socio_principal != '' THEN 2 ELSE 0 END"
+                " + CASE WHEN site IS NOT NULL AND site != '' THEN 1 ELSE 0 END"
+                " + CASE WHEN instagram IS NOT NULL AND instagram != '' THEN 1 ELSE 0 END"
+                " + CASE WHEN nome_fantasia IS NOT NULL AND nome_fantasia != '' THEN 1 ELSE 0 END"
+                f") {direction}"
+            )
+        else:
+            order_clause = f"{sort_by} {direction}"
 
         with _conn() as conn:
             cur = conn.cursor()
