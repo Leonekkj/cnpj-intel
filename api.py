@@ -758,11 +758,9 @@ async def enviar_campanha(body: CampanhaBody, token_info=Depends(get_token_info)
 
         timeout = _aiohttp.ClientTimeout(total=30)
         async with _aiohttp.ClientSession(timeout=timeout) as session:
-            for i in range(0, len(empresas), 10):
-                batch = empresas[i:i + 10]
-                await asyncio.gather(*[_send_resend(session, e) for e in batch])
-                if i + 10 < len(empresas):
-                    await asyncio.sleep(0.5)
+            for empresa in empresas:
+                await _send_resend(session, empresa)
+                await asyncio.sleep(0.6)  # stay within Resend free plan rate limit (2 req/s)
 
     camp_id = db.salvar_campanha(token_info["token"], body.assunto, body.corpo,
                                   body.remetente, gmail_conta, enviados, falhas, sem_email)
