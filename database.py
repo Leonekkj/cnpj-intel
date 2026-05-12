@@ -2228,3 +2228,171 @@ class Database:
     def limpar_sites_falsos(self) -> int:
         """Alias de limpar_sites_diretorio — mantido para compatibilidade."""
         return self.limpar_sites_diretorio()
+
+    # ─── Gmail Token CRUD ──────────────────────────────────────────────────────
+
+    def salvar_gmail_tokens(self, token: str, access_token: str, refresh_token: str, expiry: str):
+        """Save Gmail OAuth tokens for a user. expiry is ISO8601 string."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"UPDATE tokens SET gmail_access_token={PH}, gmail_refresh_token={PH}, gmail_token_expiry={PH} WHERE token={PH}",
+                (access_token, refresh_token, expiry, token)
+            )
+            conn.commit()
+
+    def buscar_gmail_tokens(self, token: str) -> dict | None:
+        """Return Gmail credentials dict or None if not connected."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT gmail_access_token, gmail_refresh_token, gmail_token_expiry, email FROM tokens WHERE token={PH}",
+                (token,)
+            )
+            row = cur.fetchone()
+        if not row or not row[0]:
+            return None
+        return {
+            "access_token": row[0],
+            "refresh_token": row[1],
+            "expiry": row[2],
+            "gmail_email": row[3],
+        }
+
+    def limpar_gmail_tokens(self, token: str):
+        """Disconnect Gmail — clears stored tokens."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"UPDATE tokens SET gmail_access_token=NULL, gmail_refresh_token=NULL, gmail_token_expiry=NULL WHERE token={PH}",
+                (token,)
+            )
+            conn.commit()
+
+    # ─── Campaign CRUD ─────────────────────────────────────────────────────────
+
+    def salvar_campanha(self, token: str, assunto: str, corpo: str, remetente: str,
+                        gmail_conta: str | None, enviados: int, falhas: int, sem_email: int) -> int:
+        """Insert a campaign record and return its ID."""
+        agora = datetime.utcnow().isoformat()
+        with _conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute(
+                    "INSERT INTO campanhas (token,assunto,corpo,remetente,gmail_conta,criada_em,total_enviados,total_falhas,total_sem_email) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                    (token, assunto, corpo, remetente, gmail_conta, agora, enviados, falhas, sem_email)
+                )
+                campanha_id = cur.fetchone()[0]
+            else:
+                cur.execute(
+                    "INSERT INTO campanhas (token,assunto,corpo,remetente,gmail_conta,criada_em,total_enviados,total_falhas,total_sem_email) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (token, assunto, corpo, remetente, gmail_conta, agora, enviados, falhas, sem_email)
+                )
+                campanha_id = cur.lastrowid
+            conn.commit()
+        return campanha_id
+
+    def salvar_destinatarios(self, campanha_id: int, destinatarios: list[dict]):
+        """Bulk-insert recipients for a campaign.
+        Each dict: {cnpj, razao_social, email, status, gmail_thread_id}
+        """
+        if not destinatarios:
+            return
+        with _conn() as conn:
+            cur = conn.cursor()
+            for d in destinatarios:
+                cur.execute(
+                    f"INSERT INTO campanha_destinatarios (campanha_id,cnpj,razao_social,email,status,gmail_thread_id) "
+                    f"VALUES ({PH},{PH},{PH},{PH},{PH},{PH})",
+                    (campanha_id, d["cnpj"], d.get("razao_social"), d.get("email"),
+                     d["status"], d.get("gmail_thread_id"))
+                )
+            conn.commit()
+
+    def listar_campanhas(self, token: str) -> list[dict]:
+        """List campaigns for a user, newest first."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT id,assunto,remetente,gmail_conta,criada_em,total_enviados,total_falhas,total_sem_email "
+                f"FROM campanhas WHERE token={PH} ORDER BY id DESC",
+                (token,)
+            )
+            rows = cur.fetchall()
+        campanhas = []
+        for r in rows:
+            with _conn() as conn2:
+                cur2 = conn2.cursor()
+                respondeu_val = "TRUE" if USE_POSTGRES else "1"
+                cur2.execute(
+                    f"SELECT COUNT(*) FROM campanha_destinatarios WHERE campanha_id={PH} AND respondeu={respondeu_val}",
+                    (r[0],)
+                )
+                total_respostas = cur2.fetchone()[0]
+            campanhas.append({
+                "id": r[0], "assunto": r[1], "remetente": r[2], "gmail_conta": r[3],
+                "criada_em": r[4], "total_enviados": r[5], "total_falhas": r[6],
+                "total_sem_email": r[7], "total_respostas": total_respostas,
+            })
+        return campanhas
+
+    def buscar_campanha_detalhe(self, campanha_id: int, token: str) -> dict | None:
+        """Return campaign + recipients. Returns None if not found or wrong owner."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT id,assunto,corpo,remetente,gmail_conta,criada_em,total_enviados,total_falhas,total_sem_email "
+                f"FROM campanhas WHERE id={PH} AND token={PH}",
+                (campanha_id, token)
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        camp = {
+            "id": row[0], "assunto": row[1], "corpo": row[2], "remetente": row[3],
+            "gmail_conta": row[4], "criada_em": row[5], "total_enviados": row[6],
+            "total_falhas": row[7], "total_sem_email": row[8],
+        }
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT cnpj,razao_social,email,status,respondeu,resposta_preview,respondeu_em "
+                f"FROM campanha_destinatarios WHERE campanha_id={PH} ORDER BY respondeu DESC, id ASC",
+                (campanha_id,)
+            )
+            rows = cur.fetchall()
+        camp["destinatarios"] = [
+            {"cnpj": r[0], "razao_social": r[1], "email": r[2], "status": r[3],
+             "respondeu": bool(r[4]), "resposta_preview": r[5], "respondeu_em": r[6]}
+            for r in rows
+        ]
+        camp["total_respostas"] = sum(1 for d in camp["destinatarios"] if d["respondeu"])
+        return camp
+
+    def buscar_destinatarios_para_poll(self) -> list[dict]:
+        """Return all sent recipients with gmail_thread_id not yet replied, grouped with user token."""
+        with _conn() as conn:
+            cur = conn.cursor()
+            respondeu_false = "respondeu=0" if not USE_POSTGRES else "respondeu=FALSE"
+            cur.execute(
+                f"SELECT cd.id, cd.gmail_thread_id, c.token "
+                f"FROM campanha_destinatarios cd "
+                f"JOIN campanhas c ON c.id=cd.campanha_id "
+                f"WHERE cd.status='enviado' AND cd.gmail_thread_id IS NOT NULL AND {respondeu_false}"
+            )
+            rows = cur.fetchall()
+        return [{"id": r[0], "gmail_thread_id": r[1], "token": r[2]} for r in rows]
+
+    def marcar_resposta(self, destinatario_id: int, preview: str):
+        """Mark a recipient as having replied."""
+        agora = datetime.utcnow().isoformat()
+        respondeu_true = "1" if not USE_POSTGRES else "TRUE"
+        with _conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"UPDATE campanha_destinatarios SET respondeu={respondeu_true}, resposta_preview={PH}, respondeu_em={PH} WHERE id={PH}",
+                (preview[:200], agora, destinatario_id)
+            )
+            conn.commit()
