@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Política de Privacidade — CNPJ Intel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0d0d0d;
+      color: #e0e0e0;
+      line-height: 1.7;
+    }
+    header {
+      background: #111;
+      border-bottom: 1px solid #222;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header a {
+      color: #a89cf7;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    header span { color: #444; }
+    .logo { font-weight: 700; color: #fff; font-size: 18px; }
+    main {
+      max-width: 760px;
+      margin: 48px auto;
+      padding: 0 24px 80px;
+    }
+    h1 { font-size: 28px; color: #fff; margin-bottom: 8px; }
+    .updated { font-size: 13px; color: #666; margin-bottom: 40px; }
+    h2 {
+      font-size: 17px;
+      color: #fff;
+      margin: 36px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #222;
+    }
+    p { margin-bottom: 14px; color: #bbb; }
+    ul { padding-left: 20px; margin-bottom: 14px; color: #bbb; }
+    li { margin-bottom: 6px; }
+    a { color: #a89cf7; }
+    .highlight {
+      background: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 20px 0;
+      font-size: 14px;
+    }
+    .highlight strong { color: #a89cf7; }
+    footer {
+      text-align: center;
+      padding: 32px;
+      color: #444;
+      font-size: 13px;
+      border-top: 1px solid #1a1a1a;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">CNPJ Intel</span>
+  <span>|</span>
+  <a href="/">← Voltar ao dashboard</a>
+</header>
+
+<main>
+  <h1>Política de Privacidade</h1>
+  <p class="updated">Última atualização: 12 de maio de 2026</p>
+
+  <p>
+    A CNPJ Intel ("nós", "nosso") opera a plataforma disponível em
+    <strong>cnpjintel.com.br</strong>. Esta Política de Privacidade descreve como
+    coletamos, usamos, armazenamos e protegemos suas informações, em conformidade com
+    a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018) e as políticas do Google.
+  </p>
+
+  <h2>1. Dados que coletamos</h2>
+  <p>Coletamos os seguintes tipos de dados ao usar nossa plataforma:</p>
+  <ul>
+    <li><strong>Dados de conta:</strong> nome, endereço de e-mail e identificador único ao cadastrar-se ou entrar com Google.</li>
+    <li><strong>Dados de uso:</strong> consultas realizadas, listas criadas, campanhas enviadas e filtros aplicados.</li>
+    <li><strong>Credenciais OAuth do Gmail:</strong> token de acesso e token de atualização fornecidos pelo Google ao conectar sua conta Gmail para envio de campanhas.</li>
+    <li><strong>Dados de campanhas:</strong> assunto, corpo da mensagem, empresas destinatárias e status de entrega e resposta.</li>
+    <li><strong>Dados técnicos:</strong> endereço IP, tipo de navegador e logs de acesso à API.</li>
+  </ul>
+
+  <h2>2. Como usamos seus dados</h2>
+  <p>Utilizamos seus dados exclusivamente para:</p>
+  <ul>
+    <li>Autenticar e identificar sua conta na plataforma.</li>
+    <li>Exibir resultados de busca de empresas por CNPJ.</li>
+    <li>Enviar campanhas de e-mail em seu nome, utilizando sua conta Gmail quando autorizado.</li>
+    <li>Detectar respostas às campanhas enviadas, consultando os encadeamentos (threads) do Gmail.</li>
+    <li>Registrar o histórico de campanhas enviadas para sua consulta.</li>
+    <li>Melhorar a qualidade e desempenho do serviço.</li>
+  </ul>
+
+  <div class="highlight">
+    <strong>Uso dos dados do Gmail:</strong> O acesso à sua conta Gmail é usado
+    exclusivamente para (1) enviar e-mails de campanha em seu nome e (2) verificar se
+    houve resposta nesses e-mails. Não lemos, armazenamos, indexamos nem compartilhamos
+    o conteúdo de nenhuma outra mensagem da sua caixa de entrada. Apenas o snippet
+    (prévia) da resposta à campanha é salvo em nossos servidores.
+  </div>
+
+  <h2>3. Compartilhamento de dados</h2>
+  <p>
+    Não vendemos, alugamos nem compartilhamos seus dados pessoais com terceiros, exceto:
+  </p>
+  <ul>
+    <li><strong>Resend:</strong> serviço de entrega de e-mail transacional usado quando você envia campanhas pela conta da plataforma.</li>
+    <li><strong>Google:</strong> ao conectar seu Gmail, os dados trafegam pela API do Google conforme os Termos de Serviço do Google.</li>
+    <li><strong>Railway:</strong> provedor de infraestrutura onde a plataforma é hospedada.</li>
+    <li><strong>Exigência legal:</strong> quando obrigados por lei ou ordem judicial.</li>
+  </ul>
+
+  <h2>4. Armazenamento e segurança</h2>
+  <p>
+    Seus dados são armazenados em servidores PostgreSQL hospedados no Railway (EUA).
+    Os tokens OAuth do Gmail são armazenados de forma criptografada e utilizados apenas
+    para as operações descritas nesta política. Adotamos práticas de segurança padrão
+    do setor para proteger suas informações contra acesso não autorizado.
+  </p>
+  <p>
+    Você pode revogar o acesso ao Gmail a qualquer momento em
+    <a href="https://myaccount.google.com/permissions" target="_blank">myaccount.google.com/permissions</a>.
+    Após a revogação, removeremos os tokens armazenados em nossos servidores.
+  </p>
+
+  <h2>5. Retenção de dados</h2>
+  <ul>
+    <li>Dados de conta: mantidos enquanto a conta estiver ativa.</li>
+    <li>Tokens Gmail: removidos imediatamente ao desconectar o Gmail ou revogar o acesso.</li>
+    <li>Histórico de campanhas: mantido por até 12 meses após o envio.</li>
+    <li>Logs técnicos: retidos por até 30 dias.</li>
+  </ul>
+
+  <h2>6. Seus direitos (LGPD)</h2>
+  <p>Como titular de dados, você tem direito a:</p>
+  <ul>
+    <li>Confirmar a existência de tratamento dos seus dados.</li>
+    <li>Acessar os dados que temos sobre você.</li>
+    <li>Corrigir dados incompletos, inexatos ou desatualizados.</li>
+    <li>Solicitar a exclusão dos seus dados pessoais.</li>
+    <li>Revogar o consentimento a qualquer momento.</li>
+    <li>Portabilidade dos dados a outro fornecedor de serviço.</li>
+  </ul>
+  <p>
+    Para exercer esses direitos, entre em contato pelo e-mail
+    <a href="mailto:ideiadolucao@gmail.com">ideiadolucao@gmail.com</a>.
+    Responderemos em até 15 dias úteis.
+  </p>
+
+  <h2>7. Cookies</h2>
+  <p>
+    Utilizamos o armazenamento local do navegador (localStorage) para manter sua
+    sessão ativa. Não utilizamos cookies de rastreamento ou publicidade.
+  </p>
+
+  <h2>8. Alterações nesta política</h2>
+  <p>
+    Podemos atualizar esta Política de Privacidade periodicamente. Quando houver
+    alterações relevantes, notificaremos por e-mail ou por aviso na plataforma.
+    O uso continuado do serviço após as alterações implica aceitação da nova política.
+  </p>
+
+  <h2>9. Contato</h2>
+  <p>
+    Para dúvidas, solicitações ou reclamações relacionadas à privacidade:
+  </p>
+  <ul>
+    <li><strong>E-mail:</strong> <a href="mailto:ideiadolucao@gmail.com">ideiadolucao@gmail.com</a></li>
+    <li><strong>Site:</strong> <a href="https://www.cnpjintel.com.br">cnpjintel.com.br</a></li>
+  </ul>
+</main>
+
+<footer>
+  © 2026 CNPJ Intel · <a href="/privacidade">Política de Privacidade</a>
+</footer>
+
+</body>
+</html>
