@@ -243,6 +243,14 @@ def obrigado():
     return HTMLResponse("<h1>Obrigado pela compra!</h1><p>Entre em <a href='/'>cnpjintel</a> com Google.</p>")
 
 
+@app.get("/privacidade")
+def privacidade():
+    path = Path("app/privacidade.html")
+    if path.exists():
+        return HTMLResponse(path.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Política de Privacidade</h1>")
+
+
 # ─── Auth público (signup / login por e-mail) ──────────────────────────────────
 
 class SignupBody(BaseModel):
