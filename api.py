@@ -251,6 +251,14 @@ def privacidade():
     return HTMLResponse("<h1>Política de Privacidade</h1>")
 
 
+@app.get("/sobre")
+def sobre():
+    path = Path("app/sobre.html")
+    if path.exists():
+        return HTMLResponse(path.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>CNPJ Intel</h1>")
+
+
 # ─── Auth público (signup / login por e-mail) ──────────────────────────────────
 
 class SignupBody(BaseModel):
